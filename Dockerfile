@@ -12,7 +12,8 @@ COPY crates/infrastructure/Cargo.toml crates/infrastructure/
 COPY crates/presentation/Cargo.toml crates/presentation/
 COPY crates/bin/Cargo.toml crates/bin/
 # Les autres membres du workspace (Android, bindgen, relais) ne sont pas
-# compilés ici, mais Cargo a besoin de leurs manifestes.
+# compilés ici, mais Cargo a besoin de leurs manifestes (et du test `render`
+# déclaré dans celui de presentation).
 COPY crates/android/Cargo.toml crates/android/
 COPY crates/uniffi-bindgen/Cargo.toml crates/uniffi-bindgen/
 COPY crates/relay/Cargo.toml crates/relay/
@@ -22,8 +23,9 @@ RUN for c in domain application infrastructure presentation android; do \
     && for c in bin uniffi-bindgen relay; do \
         mkdir -p crates/$c/src && echo "fn main() {}" > crates/$c/src/main.rs; \
     done \
+    && mkdir -p crates/presentation/tests && touch crates/presentation/tests/render.rs \
     && cargo build --release --locked -p fonderie-stellaire \
-    && rm -rf crates/*/src
+    && rm -rf crates/*/src crates/presentation/tests
 COPY crates crates
 # Autre relais de synchronisation (vide : relais officiel).
 ARG FONDERIE_SYNC_URL=""
