@@ -1,6 +1,13 @@
 package ajustor.fonderie
 
+import android.content.Context
+import android.content.SharedPreferences
+import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.util.Log
 import android.view.Choreographer
 import android.view.MotionEvent
@@ -37,6 +44,18 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
     private var running = false
     private var lastFrameNanos = 0L
     private var firstResume = true
+
+    private lateinit var prefs: SharedPreferences
+    private var vibrator: Vibrator? = null
+    private var lastVibration = 0L
+    private var savedVibrations = true
+    private var savedTips = 0u
+
+    // Mesure des temps de rendu (moyennes sur quelques secondes, dans logcat).
+    private var statFrames = 0
+    private var statRustNanos = 0L
+    private var statDrawNanos = 0L
+    private var statSince = 0L
 
     private val tabs = mutableStateOf<List<TabInfo>>(emptyList())
     private val barVisible = mutableStateOf(false)
@@ -86,6 +105,17 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         game = Game(filesDir.absolutePath)
+        prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        savedVibrations = prefs.getBoolean(PREF_VIBRATIONS, true)
+        savedTips = prefs.getInt(PREF_TIPS, 0).toUInt()
+        game.setVibrations(savedVibrations)
+        game.setTipsSeen(savedTips)
+        vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
         view = CellView(this)
         view.setOnTouchListener { _, e -> onTouch(e) }
         touchSlop = ViewConfiguration.get(this).scaledTouchSlop
@@ -140,9 +170,15 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
         if (view.surfaceReady) {
             val cols = if (game.wantsDense()) DENSE_COLS else GAME_COLS
             val (c, r) = view.layoutFor(cols)
+            val t0 = SystemClock.elapsedRealtimeNanos()
             view.grid.apply(game.frame(c.toUShort(), r.toUShort()))
+            val t1 = SystemClock.elapsedRealtimeNanos()
             view.render()
+            val t2 = SystemClock.elapsedRealtimeNanos()
+            recordTimings(t1 - t0, t2 - t1, c * r)
         }
+        vibrate(game.takeHaptic().toInt())
+        persistSettings()
         val visible = game.barVisible()
         if (visible != barVisible.value) barVisible.value = visible
         if (visible) {
@@ -150,6 +186,58 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
             if (t != tabs.value) tabs.value = t
         }
         if (game.shouldQuit()) finish()
+    }
+
+    /** Vibration courte : légère (récolte, achat) ou plus marquée (comète, succès). */
+    private fun vibrate(level: Int) {
+        val v = vibrator ?: return
+        if (level == 0 || !v.hasVibrator()) return
+        val now = SystemClock.elapsedRealtime()
+        // Récolte continue : pas plus d'une vibration légère toutes les 80 ms.
+        if (level == 1 && now - lastVibration < 80) return
+        lastVibration = now
+        val effect = if (level >= 2) {
+            VibrationEffect.createOneShot(35, 200)
+        } else {
+            VibrationEffect.createOneShot(12, 90)
+        }
+        v.vibrate(effect)
+    }
+
+    private fun persistSettings() {
+        val vib = game.vibrationsEnabled()
+        val tips = game.tipsSeen()
+        if (vib != savedVibrations || tips != savedTips) {
+            savedVibrations = vib
+            savedTips = tips
+            prefs.edit()
+                .putBoolean(PREF_VIBRATIONS, vib)
+                .putInt(PREF_TIPS, tips.toInt())
+                .apply()
+        }
+    }
+
+    private fun recordTimings(rust: Long, draw: Long, cells: Int) {
+        statFrames++
+        statRustNanos += rust
+        statDrawNanos += draw
+        val now = SystemClock.elapsedRealtime()
+        if (statSince == 0L) statSince = now
+        if (now - statSince >= STATS_EVERY_MS) {
+            Log.i(
+                TAG,
+                "rendu : %.1f images/s · Rust %.2f ms · dessin %.2f ms · %d cellules".format(
+                    statFrames * 1000f / (now - statSince),
+                    statRustNanos / 1e6f / statFrames,
+                    statDrawNanos / 1e6f / statFrames,
+                    cells,
+                ),
+            )
+            statFrames = 0
+            statRustNanos = 0
+            statDrawNanos = 0
+            statSince = now
+        }
     }
 
     private fun handleRequests() {
@@ -251,6 +339,10 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
 
     companion object {
         private const val TAG = "Fonderie"
+        private const val PREFS = "fonderie"
+        private const val PREF_VIBRATIONS = "vibrations"
+        private const val PREF_TIPS = "tips_seen"
+        private const val STATS_EVERY_MS = 5_000L
         /** Colonnes en portrait pour les écrans de jeu et pour les écrans denses. */
         private const val GAME_COLS = 44
         private const val DENSE_COLS = 88

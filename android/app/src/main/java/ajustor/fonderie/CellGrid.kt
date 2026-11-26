@@ -23,6 +23,12 @@ class CellGrid {
     var mods = ByteArray(0)
         private set
 
+    /** Lignes modifiées depuis le dernier dessin. */
+    var dirty = BooleanArray(0)
+        private set
+
+    fun markAll() = dirty.fill(true)
+
     fun apply(bytes: ByteArray) {
         val buf = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
         val c = buf.short.toInt() and 0xFFFF
@@ -31,6 +37,7 @@ class CellGrid {
         if (c != cols || r != rows) resize(c, r)
         repeat(sent) {
             val row = buf.short.toInt() and 0xFFFF
+            dirty[row] = true
             var i = row * cols
             repeat(cols) {
                 chars[i] = buf.int
@@ -50,6 +57,7 @@ class CellGrid {
         fg = IntArray(n)
         bg = IntArray(n)
         mods = ByteArray(n)
+        dirty = BooleanArray(r) { true }
     }
 
     companion object {

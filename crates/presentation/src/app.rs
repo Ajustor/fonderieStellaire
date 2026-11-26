@@ -1848,6 +1848,9 @@ impl App {
     fn react_domain(&mut self, ev: DomainEvent) {
         let now = self.now;
         let sky = inner(self.ui.layout.sky);
+        if let Some(m) = self.mobile.as_mut() {
+            m.note_haptic(&ev);
+        }
         match ev {
             DomainEvent::Harvested { amount } => {
                 let (x, y) = if let Some(p) = self.ui.harvest_at.take() {

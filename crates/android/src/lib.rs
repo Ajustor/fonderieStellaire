@@ -300,6 +300,28 @@ impl Game {
         })
     }
 
+    /// Vibration à jouer depuis la dernière image : 0 aucune, 1 légère, 2 forte.
+    pub fn take_haptic(&self) -> u8 {
+        self.lock().app.take_haptic()
+    }
+
+    pub fn vibrations_enabled(&self) -> bool {
+        self.lock().app.vibrations_enabled()
+    }
+
+    pub fn set_vibrations(&self, on: bool) {
+        self.lock().app.set_vibrations(on);
+    }
+
+    /// Bulles d'aide déjà vues, à garder dans les préférences de l'app.
+    pub fn tips_seen(&self) -> u32 {
+        self.lock().app.tips_seen()
+    }
+
+    pub fn set_tips_seen(&self, bits: u32) {
+        self.lock().app.set_tips_seen(bits);
+    }
+
     /// Message à afficher en toast (résultat d'un export…).
     pub fn notify(&self, title: String, body: String) {
         self.lock().app.notify(&title, &body);

@@ -97,6 +97,9 @@ pub enum Hit {
     EventChoice(usize),
     DailyToggle,
     CloseAbsence,
+    ToggleVibrations,
+    /// Ferme la bulle d'aide en cours.
+    DismissTip(Tip),
     /// Recherche du Labo, par position d'affichage.
     Lab(usize),
     /// Élément de la Cosmogonie, par index.
@@ -130,6 +133,65 @@ pub enum Detail {
     Constellation(usize),
     Relic(usize),
     Achievement(usize),
+}
+
+/// Bulles de première partie : elles montrent l'onglet où agir, une fois.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Tip {
+    FirstGenerator,
+    FirstUpgrade,
+    Supernova,
+    Atelier,
+    Cosmos,
+}
+
+impl Tip {
+    pub const ALL: [Tip; 5] = [
+        Tip::FirstGenerator,
+        Tip::FirstUpgrade,
+        Tip::Supernova,
+        Tip::Atelier,
+        Tip::Cosmos,
+    ];
+
+    pub fn bit(self) -> u32 {
+        1 << Tip::ALL.iter().position(|&t| t == self).unwrap_or(0)
+    }
+
+    /// Onglet vers lequel pointe la bulle.
+    pub fn tab(self) -> Tab {
+        match self {
+            Tip::FirstGenerator => Tab::Factories,
+            Tip::FirstUpgrade | Tip::Atelier => Tab::Upgrade,
+            Tip::Supernova => Tab::Foundry,
+            Tip::Cosmos => Tab::Cosmos,
+        }
+    }
+
+    pub fn text(self) -> &'static str {
+        match self {
+            Tip::FirstGenerator => "Ta première Sonde est à portée : achète-la dans Usines.",
+            Tip::FirstUpgrade => "Une amélioration est abordable : jette un œil à Améliorer.",
+            Tip::Supernova => "Supernova possible ! Le bouton est en bas de Fonderie.",
+            Tip::Atelier => "Tes fragments se dépensent dans Améliorer › Atelier.",
+            Tip::Cosmos => "Le Cosmos s'ouvre : Défis et bien plus t'attendent.",
+        }
+    }
+
+    /// La situation qui appelle la bulle.
+    pub fn applies(self, s: &application::GameSnapshot) -> bool {
+        match self {
+            Tip::FirstGenerator => {
+                s.generators.iter().any(|g| g.affordable) && s.owned.iter().all(|&n| n == 0)
+            }
+            Tip::FirstUpgrade => {
+                s.upgrades.iter().any(|u| u.affordable) && s.progress.upgrades_bought == 0
+            }
+            Tip::Supernova => s.fragments_available >= 1.0 && s.supernovas == 0,
+            Tip::Atelier => s.fragments_spendable >= 1.0 && s.perks.iter().all(|p| !p.owned),
+            Tip::Cosmos => input::cosmos_unlocked(s),
+        }
+    }
 }
 
 /// Écrans ouverts depuis le menu Cosmos.
@@ -245,6 +307,28 @@ pub struct MobileUi {
     pub mega_sel: usize,
     /// Rapport d'absence à montrer au retour dans l'app.
     pub absence: Vec<(char, String, crate::fx::Rgb)>,
+    /// Vibration demandée depuis la dernière image (0, 1 léger, 2 fort).
+    pub haptic: u8,
+    /// Vibrations désactivées dans les options.
+    pub no_vibrations: bool,
+    /// Bulles de première partie déjà vues (un bit par `Tip`).
+    pub tips_seen: u32,
+}
+
+impl MobileUi {
+    /// Retient la vibration qu'appelle un événement du jeu.
+    pub fn note_haptic(&mut self, ev: &domain::DomainEvent) {
+        use domain::DomainEvent as E;
+        let level = match ev {
+            E::Harvested { .. }
+            | E::Purchased { .. }
+            | E::UpgradePurchased { .. }
+            | E::PerkPurchased { .. } => 1,
+            E::CometCaught { .. } | E::AchievementUnlocked { .. } | E::Supernova { .. } => 2,
+            _ => 0,
+        };
+        self.haptic = self.haptic.max(level);
+    }
 }
 
 /// Version tactile d'un message qui cite des touches : « [Z] pour décider »

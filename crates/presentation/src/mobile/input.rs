@@ -95,6 +95,12 @@ impl App {
         let now = self.now;
         let unlocked = tab != Tab::Cosmos || cosmos_unlocked(&self.snap);
         if let Some(m) = self.mobile_mut() {
+            // Aller dans l'onglet montré par une bulle la referme.
+            for tip in super::Tip::ALL {
+                if tip.tab() == tab {
+                    m.tips_seen |= tip.bit();
+                }
+            }
             if unlocked && m.tab != tab {
                 m.tab = tab;
                 m.detail = None;
@@ -391,6 +397,40 @@ impl App {
         self.fire(Hit::OpenPage(page));
     }
 
+    /// Vibration à jouer depuis la dernière image : 0 aucune, 1 légère, 2 forte.
+    pub fn take_haptic(&mut self) -> u8 {
+        let Some(m) = self.mobile_mut() else {
+            return 0;
+        };
+        let h = std::mem::take(&mut m.haptic);
+        if m.no_vibrations {
+            0
+        } else {
+            h
+        }
+    }
+
+    pub fn vibrations_enabled(&self) -> bool {
+        self.mobile.as_ref().is_some_and(|m| !m.no_vibrations)
+    }
+
+    pub fn set_vibrations(&mut self, on: bool) {
+        if let Some(m) = self.mobile_mut() {
+            m.no_vibrations = !on;
+        }
+    }
+
+    /// Bulles d'aide déjà vues (à garder entre deux lancements).
+    pub fn tips_seen(&self) -> u32 {
+        self.mobile.as_ref().map_or(0, |m| m.tips_seen)
+    }
+
+    pub fn set_tips_seen(&mut self, bits: u32) {
+        if let Some(m) = self.mobile_mut() {
+            m.tips_seen = bits;
+        }
+    }
+
     /// Zones touchables de la dernière image (tests, outils).
     pub fn mobile_hits(&self) -> Vec<(ratatui::layout::Rect, Hit)> {
         self.mobile
@@ -473,6 +513,16 @@ impl App {
             }
             Hit::Key(intent) => self.on_intent(intent),
             Hit::Block | Hit::Slider | Hit::Map => {}
+            Hit::ToggleVibrations => {
+                if let Some(m) = self.mobile_mut() {
+                    m.no_vibrations = !m.no_vibrations;
+                }
+            }
+            Hit::DismissTip(tip) => {
+                if let Some(m) = self.mobile_mut() {
+                    m.tips_seen |= tip.bit();
+                }
+            }
             Hit::CloseAbsence => {
                 if let Some(m) = self.mobile_mut() {
                     m.absence.clear();

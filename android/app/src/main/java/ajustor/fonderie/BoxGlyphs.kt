@@ -5,6 +5,9 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 
+/** Bras d'un caractère de cadre : 0 absent, 1 fin, 2 épais/double. */
+internal class Arms(val up: Int, val down: Int, val left: Int, val right: Int, val double: Boolean = false)
+
 /**
  * Dessine les caractères de bloc et de cadre en primitives, pour qu'ils se
  * raccordent sans espace d'une cellule à l'autre (comme dans un bon émulateur
@@ -13,31 +16,6 @@ import android.graphics.RectF
 class BoxGlyphs {
     private val path = Path()
     private val rect = RectF()
-
-    /** Bras d'un caractère de cadre : 0 absent, 1 fin, 2 épais/double. */
-    private class Arms(val up: Int, val down: Int, val left: Int, val right: Int, val double: Boolean = false)
-
-    private val lines: Map<Int, Arms> = mapOf(
-        '─'.code to Arms(0, 0, 1, 1),
-        '│'.code to Arms(1, 1, 0, 0),
-        '┌'.code to Arms(0, 1, 0, 1),
-        '┐'.code to Arms(0, 1, 1, 0),
-        '└'.code to Arms(1, 0, 0, 1),
-        '┘'.code to Arms(1, 0, 1, 0),
-        '├'.code to Arms(1, 1, 0, 1),
-        '┤'.code to Arms(1, 1, 1, 0),
-        '┬'.code to Arms(0, 1, 1, 1),
-        '┴'.code to Arms(1, 0, 1, 1),
-        '┼'.code to Arms(1, 1, 1, 1),
-        '━'.code to Arms(0, 0, 2, 2),
-        '┃'.code to Arms(2, 2, 0, 0),
-        '═'.code to Arms(0, 0, 2, 2, true),
-        '║'.code to Arms(2, 2, 0, 0, true),
-        '╔'.code to Arms(0, 2, 0, 2, true),
-        '╗'.code to Arms(0, 2, 2, 0, true),
-        '╚'.code to Arms(2, 0, 0, 2, true),
-        '╝'.code to Arms(2, 0, 2, 0, true),
-    )
 
     fun draw(canvas: Canvas, ch: Int, x: Float, y: Float, w: Float, h: Float, paint: Paint): Boolean {
         when (ch) {
@@ -71,7 +49,7 @@ class BoxGlyphs {
             }
             '╭'.code, '╮'.code, '╰'.code, '╯'.code -> rounded(canvas, ch, x, y, w, h, paint)
             else -> {
-                val arms = lines[ch] ?: return false
+                val arms = LINES[ch] ?: return false
                 drawArms(canvas, arms, x, y, w, h, paint)
             }
         }
@@ -161,5 +139,38 @@ class BoxGlyphs {
         paint.strokeWidth = stroke(w, 1)
         canvas.drawPath(path, paint)
         paint.style = Paint.Style.FILL
+    }
+
+    companion object {
+
+        internal val LINES: Map<Int, Arms> = mapOf(
+            '─'.code to Arms(0, 0, 1, 1),
+            '│'.code to Arms(1, 1, 0, 0),
+            '┌'.code to Arms(0, 1, 0, 1),
+            '┐'.code to Arms(0, 1, 1, 0),
+            '└'.code to Arms(1, 0, 0, 1),
+            '┘'.code to Arms(1, 0, 1, 0),
+            '├'.code to Arms(1, 1, 0, 1),
+            '┤'.code to Arms(1, 1, 1, 0),
+            '┬'.code to Arms(0, 1, 1, 1),
+            '┴'.code to Arms(1, 0, 1, 1),
+            '┼'.code to Arms(1, 1, 1, 1),
+            '━'.code to Arms(0, 0, 2, 2),
+            '┃'.code to Arms(2, 2, 0, 0),
+            '═'.code to Arms(0, 0, 2, 2, true),
+            '║'.code to Arms(2, 2, 0, 0, true),
+            '╔'.code to Arms(0, 2, 0, 2, true),
+            '╗'.code to Arms(0, 2, 2, 0, true),
+            '╚'.code to Arms(2, 0, 0, 2, true),
+            '╝'.code to Arms(2, 0, 2, 0, true),
+        )
+
+
+        /** Caractères dessinés en primitives (pas par la police). */
+        val PRIMITIVES: Set<Int> = (
+            listOf('█', '▀', '▌', '▐', '░', '▒', '▓', '▚', '▞', '╭', '╮', '╰', '╯').map { it.code } +
+                (0x2581..0x2587) +
+                LINES.keys
+            ).toSet()
     }
 }

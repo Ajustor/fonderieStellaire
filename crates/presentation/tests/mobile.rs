@@ -381,5 +381,47 @@ fn absence_report_card_after_resume() {
     let ok = find(&app, |h| *h == Hit::CloseAbsence).expect("Récupérer");
     tap(&mut app, ok);
     settle(&mut app, 44, 43);
-    assert!(find(&app, |h| *h == Hit::CloseAbsence).is_none(), "carte fermée");
+    assert!(
+        find(&app, |h| *h == Hit::CloseAbsence).is_none(),
+        "carte fermée"
+    );
+}
+
+#[test]
+fn first_game_tips_point_to_the_right_tab_once() {
+    let fresh = SaveData {
+        version: application::SAVE_VERSION,
+        stardust: 20.0,
+        last_saved: 1_700_000_000,
+        ..SaveData::default()
+    };
+    let mut app = mobile_app(Some(fresh));
+    let screen = settle(&mut app, 44, 43);
+    assert!(screen.contains("première Sonde"), "{screen}");
+    assert!(screen.contains('▼'));
+    // Aller dans Usines referme la bulle pour toujours.
+    app.mobile_select_tab(Tab::Factories);
+    let screen = settle(&mut app, 44, 43);
+    assert!(
+        !screen.contains("première Sonde"),
+        "pas de bulle hors de Fonderie"
+    );
+    app.mobile_select_tab(Tab::Foundry);
+    let screen = settle(&mut app, 44, 43);
+    assert!(!screen.contains("première Sonde"));
+    assert_ne!(app.tips_seen(), 0);
+}
+
+#[test]
+fn harvest_and_purchase_ask_for_a_vibration() {
+    let mut app = mobile_app(Some(advanced_save()));
+    settle(&mut app, 44, 43);
+    assert_eq!(app.take_haptic(), 0);
+    let sky = find(&app, |h| *h == Hit::Harvest).expect("ciel");
+    tap(&mut app, sky);
+    assert_eq!(app.take_haptic(), 1, "récolte : vibration légère");
+    assert_eq!(app.take_haptic(), 0, "une seule fois");
+    app.set_vibrations(false);
+    tap(&mut app, sky);
+    assert_eq!(app.take_haptic(), 0, "désactivées dans les options");
 }

@@ -182,7 +182,58 @@ pub fn render(
     }
     if !m.absence.is_empty() {
         render_absence(buf, area, m);
+    } else if m.detail.is_none() && m.confirm.is_none() {
+        render_tip(buf, area, ctx, m);
     }
+}
+
+/// Bulle de première partie, au-dessus de l'onglet où agir.
+fn render_tip(buf: &mut Buffer, area: Rect, ctx: &Ctx, m: &mut MobileUi) {
+    let Some(tip) = super::Tip::ALL
+        .into_iter()
+        .find(|t| m.tips_seen & t.bit() == 0 && t.applies(ctx.snap))
+    else {
+        return;
+    };
+    // Les bulles vivent sur Fonderie, l'écran d'accueil, en haut du ciel.
+    if m.tab != Tab::Foundry || m.page.is_some() {
+        return;
+    }
+    // Position de l'onglet dans la barre native (onglets débloqués, même largeur).
+    let visible: Vec<Tab> = Tab::ALL
+        .into_iter()
+        .filter(|&t| t != Tab::Cosmos || super::input::cosmos_unlocked(ctx.snap))
+        .collect();
+    let i = visible.iter().position(|&t| t == tip.tab()).unwrap_or(0);
+    let ax = area.x + ((i as f64 + 0.5) / visible.len() as f64 * area.width as f64) as u16;
+    let w = area.width.saturating_sub(4) as usize;
+    let lines = draw::wrap(tip.text(), w.saturating_sub(2));
+    let h = lines.len() as u16 + 2;
+    // En haut de l'écran, sous l'en-tête : les boutons du bas restent libres.
+    let r = Rect::new(area.x + 1, area.y + HEADER_H, area.width - 2, h);
+    let pulse = 0.5 + 0.5 * (ctx.now * 3.0).sin();
+    let color = theme::GOLD.glow(0.25 * pulse);
+    draw::clear(buf, r);
+    draw::fill_bg(buf, r, theme::SELECT_BG);
+    draw::card(buf, r, r, color);
+    for (k, l) in lines.iter().enumerate() {
+        draw::text(
+            buf,
+            r.x + 2,
+            r.y + 1 + k as u16,
+            l,
+            theme::bold(theme::TEXT),
+            r.right() - 1,
+        );
+    }
+    draw::text_right(buf, r.right() - 2, r.y, " ✕ ", theme::fg(theme::MUTED), r.x);
+    // Flèche vers l'onglet (dans la barre en bas), sur la bordure de la bulle ;
+    // la bulle de la Supernova parle du bouton juste en dessous.
+    if tip.tab() != Tab::Foundry {
+        let tx = ax.clamp(r.x + 1, r.right() - 2);
+        draw::put(buf, area, tx as i32, r.bottom() as i32 - 1, '▼', color);
+    }
+    m.hits.add(r, Hit::DismissTip(tip));
 }
 
 /// « Pendant ton absence » : ce que la fonderie a fait, et un bouton pour reprendre.
@@ -1606,7 +1657,7 @@ fn option_row(
 
 fn render_options(buf: &mut Buffer, area: Rect, ctx: &Ctx, m: &mut MobileUi) {
     let snap = ctx.snap;
-    let rows: [(String, String, String, Rgb, Hit); 4] = [
+    let rows: [(String, String, String, Rgb, Hit); 6] = [
         (
             "Couleurs".into(),
             crate::fx::palette::mode_name(snap.color_mode).to_string(),
@@ -1635,6 +1686,28 @@ fn render_options(buf: &mut Buffer, area: Rect, ctx: &Ctx, m: &mut MobileUi) {
             },
             theme::FOCUS,
             Hit::ToggleReducedEffects,
+        ),
+        (
+            "Vibrations".into(),
+            if m.no_vibrations {
+                "désactivées".into()
+            } else {
+                "à la récolte, aux achats, aux comètes".into()
+            },
+            if m.no_vibrations {
+                "Activer".into()
+            } else {
+                "Désactiver".into()
+            },
+            theme::FOCUS,
+            Hit::ToggleVibrations,
+        ),
+        (
+            "Statistiques de rendu".into(),
+            "Images/s et temps de rendu, en haut à gauche".into(),
+            "Afficher".into(),
+            theme::GREY,
+            Hit::Key(Intent::ToggleDebug),
         ),
         (
             "Recommencer une partie".into(),
