@@ -48,7 +48,7 @@ pub fn rarity_color(r: u8) -> Rgb {
 }
 
 /// Lignes du détail de la relique sélectionnée.
-fn detail_lines(ctx: &Ctx, index: usize, width: usize) -> Vec<(String, Style)> {
+pub(crate) fn detail_lines(ctx: &Ctx, index: usize, width: usize) -> Vec<(String, Style)> {
     let snap = ctx.snap;
     let mut out = Vec::new();
     let (Some(def), Some(v)) = (ctx.catalog.relics.get(index), snap.relics.get(index)) else {

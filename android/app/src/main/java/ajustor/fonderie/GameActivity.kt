@@ -42,7 +42,8 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
     private val barVisible = mutableStateOf(false)
 
     // Geste en cours.
-    private enum class Gesture { NONE, PRESS, SCROLL, SWIPE }
+    /** CAPTURED : la zone touchée suit le doigt elle-même (curseur, carte). */
+    private enum class Gesture { NONE, PRESS, CAPTURED, SCROLL, SWIPE }
     private var gesture = Gesture.NONE
     private var downX = 0f
     private var downY = 0f
@@ -132,7 +133,7 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
         val dt = if (lastFrameNanos == 0L) 0f else (frameTimeNanos - lastFrameNanos) / 1e9f
         lastFrameNanos = frameTimeNanos
 
-        if (gesture == Gesture.PRESS) game.touchHold()
+        if (gesture == Gesture.PRESS || gesture == Gesture.CAPTURED) game.touchHold()
         applyFling(dt)
         handleRequests()
 
@@ -191,6 +192,13 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
             }
             MotionEvent.ACTION_MOVE -> {
                 velocity?.addMovement(e)
+                if (gesture == Gesture.PRESS || gesture == Gesture.CAPTURED) {
+                    val (col, row) = view.cellAt(e.x, e.y)
+                    if (game.touchMove(col.toUShort(), row.toUShort())) {
+                        gesture = Gesture.CAPTURED
+                        return true
+                    }
+                }
                 val dx = e.x - downX
                 val dy = e.y - downY
                 if (gesture == Gesture.PRESS && (abs(dx) > touchSlop || abs(dy) > touchSlop)) {
@@ -212,7 +220,7 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
             MotionEvent.ACTION_UP -> {
                 velocity?.addMovement(e)
                 when (gesture) {
-                    Gesture.PRESS -> {
+                    Gesture.PRESS, Gesture.CAPTURED -> {
                         val (col, row) = view.cellAt(e.x, e.y)
                         game.touchUp(col.toUShort(), row.toUShort())
                     }
@@ -232,7 +240,7 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
                 velocity = null
             }
             MotionEvent.ACTION_CANCEL -> {
-                if (gesture == Gesture.PRESS) game.touchCancel()
+                if (gesture == Gesture.PRESS || gesture == Gesture.CAPTURED) game.touchCancel()
                 gesture = Gesture.NONE
                 velocity?.recycle()
                 velocity = null

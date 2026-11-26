@@ -262,6 +262,11 @@ impl App {
         self.vis.cascade_start = self.now - 10.0;
     }
 
+    /// Horloge interne (secondes depuis le lancement).
+    pub fn time(&self) -> f64 {
+        self.now
+    }
+
     /// Avance l'horloge interne manuellement (tests).
     pub fn set_time(&mut self, now: f64) {
         self.now = now;
@@ -1223,7 +1228,7 @@ impl App {
     }
 
     /// Entrée dans la fenêtre des Défis : 1er appui = arme, 2e = lance ou abandonne.
-    fn challenge_action(&mut self) {
+    pub(crate) fn challenge_action(&mut self) {
         let Some(v) = self.snap.challenges.get(self.ui.challenges_sel).copied() else {
             return;
         };
@@ -1257,7 +1262,7 @@ impl App {
     }
 
     /// Entrée dans le Laboratoire : lance la recherche, ou met en pause / relance.
-    fn lab_action(&mut self) {
+    pub(crate) fn lab_action(&mut self) {
         let item = {
             let ctx = Ctx {
                 snap: &self.snap,
@@ -1300,7 +1305,7 @@ impl App {
     }
 
     /// Entrée dans la Cosmogonie : Big Bang (confirmé), forge, construction.
-    fn cosmos_action(&mut self) {
+    pub(crate) fn cosmos_action(&mut self) {
         let now = self.now;
         match self.cosmos_ctx_item().1 {
             Some(CosmosItem::BigBang) => {
@@ -1638,12 +1643,12 @@ impl App {
             .unwrap_or("?")
     }
 
-    fn start_crunch(&mut self) {
+    pub(crate) fn start_crunch(&mut self) {
         self.start_crunch_into(domain::UniverseId::ORIGIN);
     }
 
     /// Séquence du Big Crunch vers un univers ; validée au milieu de l'animation.
-    fn start_crunch_into(&mut self, universe: domain::UniverseId) {
+    pub(crate) fn start_crunch_into(&mut self, universe: domain::UniverseId) {
         let crunches = self.snap.crunches + 1;
         let before = self.snap.crunch_production;
         let after = 1.0 + domain::catalog::balance::CRUNCH_PRODUCTION * crunches as f64;
@@ -1661,7 +1666,7 @@ impl App {
         ));
     }
 
-    fn start_supernova(&mut self) {
+    pub(crate) fn start_supernova(&mut self) {
         let gained = self.snap.fragments_available;
         let old_bonus = self.snap.fragment_bonus;
         let new_bonus = fragment_multiplier(self.snap.fragments + gained) - 1.0;
@@ -2995,6 +3000,7 @@ impl App {
                             toasts,
                             spark_scratch,
                             version: &version,
+                            today,
                         },
                     );
                     if let Some(n) = vis.nova.as_ref() {

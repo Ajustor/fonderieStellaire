@@ -261,6 +261,12 @@ impl Game {
         self.lock().app.touch_hold();
     }
 
+    /// Doigt qui glisse : `true` si la zone touchée le suit elle-même (curseur
+    /// à faire glisser, carte stellaire) ; sinon la plateforme fait défiler.
+    pub fn touch_move(&self, col: u16, row: u16) -> bool {
+        self.lock().app.touch_move(col, row)
+    }
+
     /// Doigt levé sans avoir glissé.
     pub fn touch_up(&self, col: u16, row: u16) {
         self.lock().app.touch_up(col, row);

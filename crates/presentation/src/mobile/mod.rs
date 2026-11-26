@@ -6,6 +6,7 @@
 //! Chaque zone touchable est enregistrée pendant le rendu (`HitMap`) : le
 //! hit-test ne peut donc pas diverger de ce qui est affiché.
 
+mod cosmos;
 mod input;
 mod screens;
 
@@ -81,10 +82,32 @@ pub enum Hit {
     CycleColors,
     CycleFrameRate,
     ToggleReducedEffects,
-    NewGame,
     Request(Request),
     /// Intention clavier : ouvre un écran existant ou le pilote (popups).
     Key(Intent),
+    /// Zone qui absorbe le toucher (sous une fiche ou une confirmation).
+    Block,
+    OpenPage(Page),
+    ClosePage,
+    /// Ouvre la confirmation « glisser pour confirmer ».
+    Ask(Confirm),
+    /// Curseur à faire glisser de la confirmation.
+    Slider,
+    CancelConfirm,
+    EventChoice(usize),
+    DailyToggle,
+    /// Recherche du Labo, par position d'affichage.
+    Lab(usize),
+    /// Élément de la Cosmogonie, par index.
+    Cosmogony(usize),
+    ToggleRelic(usize),
+    /// Carte stellaire : glisser déplace la vue, toucher choisit un système.
+    Map,
+    SendFleet,
+    ToggleAutoFleets,
+    Convergence,
+    MegaCell(usize),
+    Build(domain::StructureKind),
 }
 
 impl Hit {
@@ -104,6 +127,41 @@ pub enum Detail {
     Upgrade(UpgradeId),
     Perk(usize),
     Constellation(usize),
+    Relic(usize),
+}
+
+/// Écrans ouverts depuis le menu Cosmos.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Page {
+    Event,
+    Daily,
+    Challenges,
+    Lab,
+    Cosmogony,
+    StarMap,
+    Relics,
+    Mega,
+}
+
+/// Actions lourdes, confirmées en faisant glisser un curseur.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Confirm {
+    Supernova,
+    Crunch,
+    /// Lancer ou abandonner le Défi n°.
+    Challenge(usize),
+    BigBang,
+    NewGame,
+    Demolish(usize),
+    Awakening,
+}
+
+/// Confirmation ouverte et position du curseur (0 → 1).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Confirming {
+    pub what: Confirm,
+    pub slide: f64,
+    pub opened_at: f64,
 }
 
 /// Zones touchables de la dernière image ; la dernière enregistrée est au-dessus.
@@ -146,10 +204,13 @@ pub struct Press {
     pub last_repeat: f64,
     /// Le maintien a déjà agi : le lever du doigt ne refait rien.
     pub consumed: bool,
+    /// Dernière cellule sous le doigt, et le doigt a glissé.
+    pub last: (u16, u16),
+    pub moved: bool,
 }
 
 /// Nombre d'écrans défilants (un défilement mémorisé par écran).
-pub const SCREENS: usize = 12;
+pub const SCREENS: usize = 20;
 
 /// État visuel du mode mobile.
 #[derive(Debug, Default)]
@@ -168,11 +229,18 @@ pub struct MobileUi {
     pub press: Option<Press>,
     /// Courbe de production dépliée (onglet Usines).
     pub production_open: bool,
-    /// « Recommencer » touché une fois : le second toucher confirme.
-    pub wipe_armed: bool,
     pub requests: Vec<Request>,
     /// Instant du dernier changement d'onglet (fondu d'entrée).
     pub tab_changed_at: f64,
+    /// Écran ouvert depuis le menu Cosmos.
+    pub page: Option<Page>,
+    pub confirm: Option<Confirming>,
+    /// Carte stellaire : décalage de la vue (colonnes, lignes) et système choisi.
+    pub map_pan: (i32, i32),
+    pub map_centered: bool,
+    pub map_sel: usize,
+    /// Mégastructures : case choisie.
+    pub mega_sel: usize,
 }
 
 /// Délai d'un appui long (fiche détail) puis cadence des achats en rafale.

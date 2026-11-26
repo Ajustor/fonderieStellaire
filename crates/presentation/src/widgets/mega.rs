@@ -66,7 +66,7 @@ fn strength_text(k: StructureKind, s: f64) -> String {
     }
 }
 
-fn detail_lines(ctx: &Ctx, sel: usize, width: usize) -> Vec<(String, Style)> {
+pub(crate) fn detail_lines(ctx: &Ctx, sel: usize, width: usize) -> Vec<(String, Style)> {
     let snap = ctx.snap;
     let mut out = Vec::new();
     let mut push = |t: String, s: Style| {

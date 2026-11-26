@@ -63,7 +63,7 @@ fn plural(n: u32) -> &'static str {
 }
 
 /// (symbole, nom, statut, couleur, fait) d'une ligne.
-fn describe(ctx: &Ctx, item: CosmosItem) -> (char, String, String, Rgb, bool) {
+pub(crate) fn describe(ctx: &Ctx, item: CosmosItem) -> (char, String, String, Rgb, bool) {
     let snap = ctx.snap;
     match item {
         CosmosItem::BigBang => {
@@ -131,7 +131,7 @@ fn describe(ctx: &Ctx, item: CosmosItem) -> (char, String, String, Rgb, bool) {
 }
 
 /// Explication et action de la ligne sélectionnée.
-fn detail(ctx: &Ctx, item: CosmosItem, armed: bool) -> Vec<(String, Rgb)> {
+pub(crate) fn detail(ctx: &Ctx, item: CosmosItem, armed: bool) -> Vec<(String, Rgb)> {
     let snap = ctx.snap;
     let mut out = Vec::new();
     match item {
@@ -281,7 +281,7 @@ fn wrapped(lines: &[(String, Rgb)], width: usize) -> Vec<(String, Rgb)> {
 }
 
 /// En-tête : particules, bonus, avancement du Grand Attracteur.
-fn head_lines(ctx: &Ctx, width: usize) -> Vec<(String, Rgb)> {
+pub(crate) fn head_lines(ctx: &Ctx, width: usize) -> Vec<(String, Rgb)> {
     let snap = ctx.snap;
     let mut lines = vec![(
         format!(

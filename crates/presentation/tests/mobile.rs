@@ -8,7 +8,7 @@ use std::rc::Rc;
 use application::{
     Clock, GameService, LoadOutcome, RandomSource, RepositoryError, SaveData, SaveRepository,
 };
-use presentation::mobile::{Hit, Tab};
+use presentation::mobile::{Confirm, Hit, Page, Tab};
 use presentation::App;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -106,7 +106,7 @@ fn settle(app: &mut App, w: u16, h: u16) -> String {
 }
 
 fn app_time(app: &App) -> f64 {
-    app.snapshot().play_time
+    app.time()
 }
 
 fn find(app: &App, pred: impl Fn(&Hit) -> bool) -> Option<Rect> {
@@ -237,27 +237,116 @@ fn back_goes_home_then_quits() {
 }
 
 #[test]
-fn supernova_opens_a_dense_dialog_with_touch_buttons() {
+fn supernova_is_confirmed_by_sliding() {
     let mut save = advanced_save();
     save.total_run = 1e15;
     let mut app = mobile_app(Some(save));
     settle(&mut app, 44, 43);
-    let nova = find(&app, |h| {
-        *h == Hit::Key(presentation::input::Intent::Supernova)
-    })
-    .expect("bouton Supernova");
+    let nova = find(&app, |h| *h == Hit::Ask(Confirm::Supernova)).expect("bouton Supernova");
     tap(&mut app, nova);
-    assert!(app.mobile_wants_dense());
-    let screen = settle(&mut app, 88, 86);
+    // La fiche monte du bas, puis le curseur apparaît.
+    let screen = settle(&mut app, 44, 43);
     println!("{screen}");
-    let yes = find(&app, |h| *h == Hit::Key(presentation::input::Intent::Yes)).expect("Oui");
-    let no = find(&app, |h| *h == Hit::Key(presentation::input::Intent::No)).expect("Non");
-    assert!(yes.height >= 3 && no.height >= 3);
-    tap(&mut app, no);
-    let t = app_time(&app) + 2.0;
-    app.set_time(t);
+    assert!(screen.contains("SUPERNOVA"));
+    let slider = find(&app, |h| *h == Hit::Slider).expect("curseur");
+    assert!(find(&app, |h| *h == Hit::CancelConfirm).is_some());
+
+    // Un glissement incomplet ne fait rien.
+    let y = slider.y + 1;
+    app.touch_down(slider.x + 2, y);
+    assert!(app.touch_move(slider.x + slider.width / 2, y));
+    app.touch_up(slider.x + slider.width / 2, y);
+    assert!(!app.in_sequence());
+
+    // Jusqu'au bout : la Supernova part.
+    app.touch_down(slider.x + 2, y);
+    assert!(app.touch_move(slider.right() - 1, y));
+    app.touch_up(slider.right() - 1, y);
+    assert!(app.in_sequence(), "séquence Supernova lancée");
+    assert!(app.mobile_wants_dense());
+}
+
+#[test]
+fn every_cosmos_page_renders() {
+    for (w, h) in [(44, 43), (40, 70), (48, 90)] {
+        let mut app = mobile_app(Some(advanced_save()));
+        for page in [
+            Page::Event,
+            Page::Daily,
+            Page::Challenges,
+            Page::Lab,
+            Page::Cosmogony,
+            Page::StarMap,
+            Page::Relics,
+            Page::Mega,
+        ] {
+            app.mobile_open(page);
+            let screen = settle(&mut app, w, h);
+            if w == 44 {
+                println!("=== {page:?} ===\n{screen}");
+            }
+            assert!(screen.contains("‹ Cosmos"), "{page:?}");
+            for (r, hit) in app.mobile_hits() {
+                assert!(r.right() <= w && r.bottom() <= h, "{page:?} {hit:?} {r:?}");
+            }
+            app.mobile_back();
+            settle(&mut app, w, h);
+            assert!(
+                find(&app, |h| *h == Hit::ClosePage).is_none(),
+                "retour ferme la page {page:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn challenges_launch_after_confirmation() {
+    let mut app = mobile_app(Some(advanced_save()));
+    app.mobile_open(Page::Challenges);
+    settle(&mut app, 44, 43);
+    let Some(ask) = find(&app, |h| matches!(h, Hit::Ask(Confirm::Challenge(_)))) else {
+        panic!("aucun Défi lançable");
+    };
+    tap(&mut app, ask);
+    settle(&mut app, 44, 43);
+    let slider = find(&app, |h| *h == Hit::Slider).expect("curseur");
+    let y = slider.y + 1;
+    app.touch_down(slider.x + 2, y);
+    app.touch_move(slider.right() - 1, y);
+    app.touch_up(slider.right() - 1, y);
     app.update(0.033);
-    assert!(!app.legacy_open(), "Non ferme la fenêtre");
+    assert!(app.snapshot().active_challenge.is_some(), "Défi lancé");
+}
+
+#[test]
+fn mega_and_map_pages_take_touches() {
+    let mut app = mobile_app(Some(advanced_save()));
+    app.mobile_open(Page::Mega);
+    settle(&mut app, 44, 43);
+    let cells: Vec<Rect> = app
+        .mobile_hits()
+        .into_iter()
+        .filter(|(_, h)| matches!(h, Hit::MegaCell(_)))
+        .map(|(r, _)| r)
+        .collect();
+    assert!(cells.len() >= 5 * 5, "grille pivotée : 5 colonnes");
+    assert!(
+        find(&app, |h| matches!(h, Hit::Build(_))).is_some(),
+        "palette"
+    );
+
+    app.mobile_open(Page::StarMap);
+    settle(&mut app, 44, 43);
+    let map = find(&app, |h| *h == Hit::Map).expect("vue de la carte");
+    let before = settle(&mut app, 44, 43);
+    app.touch_down(map.x + 10, map.y + 5);
+    assert!(
+        app.touch_move(map.x + 2, map.y + 5),
+        "la carte suit le doigt"
+    );
+    app.touch_up(map.x + 2, map.y + 5);
+    let after = settle(&mut app, 44, 43);
+    assert_ne!(before, after, "la vue a glissé");
 }
 
 #[test]

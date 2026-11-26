@@ -7,7 +7,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 
-use super::{Detail, Hit, HitMap, MobileUi, Press, Request, Tab};
+use super::{Confirm, Detail, Hit, HitMap, MobileUi, Page, Press, Request, Tab};
 use crate::bigfont;
 use crate::draw;
 use crate::fmt;
@@ -37,7 +37,7 @@ pub const FOUNDRY: usize = 9;
 /// Hauteur de l'en-tête commun (titre, compteur, ressources, progression).
 pub const HEADER_H: u16 = 6;
 /// Hauteur d'un bouton (bordure, libellé, bordure) : ≈ 48 dp en portrait.
-const BUTTON_H: u16 = 3;
+pub(super) const BUTTON_H: u16 = 3;
 /// Une carte : 3 lignes de texte + 1 ligne de séparation.
 const CARD_H: u16 = 4;
 /// Largeur du bouton d'achat à droite des cartes.
@@ -53,6 +53,8 @@ pub struct MobileView<'a> {
     pub toasts: &'a Toasts,
     pub spark_scratch: &'a mut Vec<u64>,
     pub version: &'a str,
+    /// Jour (depuis 1970), pour le Défi du jour.
+    pub today: u64,
 }
 
 /// Sous-onglets de l'onglet `tab`, selon les déblocages.
@@ -79,7 +81,9 @@ fn atelier_unlocked(snap: &GameSnapshot) -> bool {
 
 /// Les textes du jeu citent des touches : version tactile.
 pub fn touchify(s: &str) -> String {
-    s.replace("Maintenir [Espace]", "Maintenir le doigt")
+    s.replace("avec [1] à [6]", "dans la palette en bas")
+        .replace("[D] démolir", "Démolir")
+        .replace("Maintenir [Espace]", "Maintenir le doigt")
         .replace("maintenir [Espace]", "maintenir le doigt")
         .replace("[Espace]", "toucher le ciel")
 }
@@ -121,7 +125,13 @@ pub fn render(
     ui.gen_rows = [None; theme::GEN_SLOTS];
     ui.upg_rows.clear();
 
+    if m.tab != Tab::Cosmos {
+        m.page = None;
+    }
     let screen = match (m.tab, m.sub[t]) {
+        (Tab::Cosmos, _) if m.page.is_some() => {
+            super::cosmos::page_screen(m.page.unwrap_or(Page::Event))
+        }
         (Tab::Foundry, _) => FOUNDRY,
         (Tab::Factories, _) => FACTORIES,
         (Tab::Upgrade, 0) => UPGRADES,
@@ -141,6 +151,10 @@ pub fn render(
         ATELIER => render_atelier(buf, content, ctx, m),
         CONSTELLATIONS => render_constellations(buf, content, ctx, m),
         COSMOS => render_cosmos(buf, content, ctx, m),
+        _ if m.page.is_some() => {
+            let page = m.page.unwrap_or(Page::Event);
+            super::cosmos::render_page(buf, content, ctx, vis, m, page, view.today);
+        }
         JOURNAL => {
             journal::render(buf, content, view.journal, ctx.now, &mut ui.journal_scroll);
             retitle(buf, content, " Journal ", "glisser pour remonter ");
@@ -157,7 +171,10 @@ pub fn render(
     vis.particles.draw(buf, area);
     view.toasts.render(buf, area, content.y, ctx.now);
     if let Some(d) = m.detail {
-        render_detail(buf, area, ctx, d, &mut m.hits);
+        render_detail(buf, area, ctx, d, m);
+    }
+    if let Some(c) = m.confirm {
+        super::cosmos::render_confirm(buf, area, ctx, m, c);
     }
 }
 
@@ -167,7 +184,7 @@ pub fn render(
 
 /// Bouton bordé de `r.height` lignes, libellé centré, titre optionnel sur la bordure.
 #[allow(clippy::too_many_arguments)]
-fn button(
+pub(super) fn button(
     buf: &mut Buffer,
     hits: &mut HitMap,
     press: Option<Press>,
@@ -245,7 +262,7 @@ fn render_sub_tabs(
 
 /// Place une carte de hauteur `h` à l'ordonnée virtuelle `vy` d'une liste
 /// défilante ; `None` si elle n'est pas entièrement visible.
-fn place(area: Rect, scroll: u16, vy: u16, h: u16) -> Option<Rect> {
+pub(super) fn place(area: Rect, scroll: u16, vy: u16, h: u16) -> Option<Rect> {
     let y = vy.checked_sub(scroll)?;
     if y + h > area.height {
         return None;
@@ -259,13 +276,13 @@ fn place(area: Rect, scroll: u16, vy: u16, h: u16) -> Option<Rect> {
     ))
 }
 
-fn set_scroll_max(m: &mut MobileUi, screen: usize, total: u16, visible: u16) {
+pub(super) fn set_scroll_max(m: &mut MobileUi, screen: usize, total: u16, visible: u16) {
     m.scroll_max[screen] = total.saturating_sub(visible);
     m.scroll[screen] = m.scroll[screen].min(m.scroll_max[screen]);
 }
 
 /// Indicateur de défilement sur le bord droit.
-fn scrollbar(buf: &mut Buffer, area: Rect, scroll: u16, max: u16) {
+pub(super) fn scrollbar(buf: &mut Buffer, area: Rect, scroll: u16, max: u16) {
     if max == 0 || area.height < 3 {
         return;
     }
@@ -308,7 +325,7 @@ fn retitle(buf: &mut Buffer, r: Rect, title: &str, right: &str) {
     );
 }
 
-fn separator(buf: &mut Buffer, x: u16, y: u16, w: u16) {
+pub(super) fn separator(buf: &mut Buffer, x: u16, y: u16, w: u16) {
     for i in 0..w {
         draw::put(
             buf,
@@ -590,7 +607,7 @@ fn render_foundry(
             "",
             &label,
             theme::PINK.glow(0.25 * pulse),
-            Some(Hit::Key(Intent::Supernova)),
+            Some(Hit::Ask(Confirm::Supernova)),
         );
     } else {
         let hint = if snap.hold_harvest {
@@ -1196,19 +1213,19 @@ struct CosmosEntry {
     title: &'static str,
     status: String,
     color: Rgb,
-    intent: Intent,
+    hit: Hit,
 }
 
 fn cosmos_entries(ctx: &Ctx) -> Vec<CosmosEntry> {
     let s = ctx.snap;
     let mut v = Vec::new();
-    let mut add = |symbol, title, status: String, color, intent| {
+    let mut add = |symbol, title, status: String, color, hit| {
         v.push(CosmosEntry {
             symbol,
             title,
             status,
             color,
-            intent,
+            hit,
         })
     };
     if let Some((_, left)) = s.pending_event {
@@ -1217,7 +1234,7 @@ fn cosmos_entries(ctx: &Ctx) -> Vec<CosmosEntry> {
             "Événement cosmique",
             format!("à décider · {}", fmt::countdown(left)),
             theme::PINK,
-            Intent::Event,
+            Hit::OpenPage(Page::Event),
         );
     }
     if s.crunch_available {
@@ -1226,7 +1243,11 @@ fn cosmos_entries(ctx: &Ctx) -> Vec<CosmosEntry> {
             "Big Crunch",
             "prêt".to_string(),
             theme::PINK,
-            Intent::BigCrunch,
+            if s.universes_unlocked {
+                Hit::Key(Intent::BigCrunch)
+            } else {
+                Hit::Ask(Confirm::Crunch)
+            },
         );
     }
     if let Some(d) = s.daily {
@@ -1235,7 +1256,7 @@ fn cosmos_entries(ctx: &Ctx) -> Vec<CosmosEntry> {
             "Défi du jour",
             format!("en cours · {}", fmt::countdown(d.left)),
             theme::GOLD,
-            Intent::Daily,
+            Hit::OpenPage(Page::Daily),
         );
     } else if s.daily_unlocked {
         add(
@@ -1243,7 +1264,7 @@ fn cosmos_entries(ctx: &Ctx) -> Vec<CosmosEntry> {
             "Défi du jour",
             "disponible".to_string(),
             theme::GOLD,
-            Intent::Daily,
+            Hit::OpenPage(Page::Daily),
         );
     }
     if s.challenges.iter().any(|c| c.unlocked) {
@@ -1252,20 +1273,32 @@ fn cosmos_entries(ctx: &Ctx) -> Vec<CosmosEntry> {
             Some(a) => format!("en cours · {}", fmt::percent(a.progress)),
             None => format!("{done}/{} réussis", s.challenges.len()),
         };
-        add('◆', "Défis", status, theme::PINK, Intent::Challenges);
+        add(
+            '◆',
+            "Défis",
+            status,
+            theme::PINK,
+            Hit::OpenPage(Page::Challenges),
+        );
     }
     if s.lab_unlocked {
         let status = match s.research {
             Some(r) => format!("recherche · {}", fmt::duration(r.remaining)),
             None => format!("{} ✶ libres", s.dark_matter_spendable),
         };
-        add('✶', "Laboratoire", status, theme::CYAN, Intent::Lab);
+        add(
+            '✶',
+            "Laboratoire",
+            status,
+            theme::CYAN,
+            Hit::OpenPage(Page::Lab),
+        );
         add(
             '◎',
             "Cosmogonie",
             format!("{} Big Bang", s.big_bangs),
             theme::GOLD,
-            Intent::Cosmos,
+            Hit::OpenPage(Page::Cosmogony),
         );
     }
     if s.universes_unlocked {
@@ -1275,7 +1308,7 @@ fn cosmos_entries(ctx: &Ctx) -> Vec<CosmosEntry> {
             "Univers parallèles",
             format!("clés {keys}/{}", s.universes.len().saturating_sub(1)),
             theme::CYAN,
-            Intent::Universes,
+            Hit::Key(Intent::Universes),
         );
     }
     if s.starmap_unlocked {
@@ -1289,14 +1322,14 @@ fn cosmos_entries(ctx: &Ctx) -> Vec<CosmosEntry> {
                 s.fleets_max
             ),
             theme::CYAN,
-            Intent::StarMap,
+            Hit::OpenPage(Page::StarMap),
         );
         add(
             '◇',
             "Reliques",
             format!("{}/{} équipées", s.relics_equipped, s.relic_slots),
             theme::GOLD,
-            Intent::Relics,
+            Hit::OpenPage(Page::Relics),
         );
     }
     if s.megastructures_unlocked {
@@ -1305,7 +1338,7 @@ fn cosmos_entries(ctx: &Ctx) -> Vec<CosmosEntry> {
             "Mégastructures",
             format!("{} ◈", fmt::short(s.exotic)),
             theme::GOLD,
-            Intent::Megastructures,
+            Hit::OpenPage(Page::Mega),
         );
     }
     v
@@ -1363,7 +1396,7 @@ fn render_cosmos(buf: &mut Buffer, area: Rect, ctx: &Ctx, m: &mut MobileUi) {
             theme::bold(theme::TEXT),
             st_x.saturating_sub(1),
         );
-        m.hits.add(card, Hit::Key(e.intent));
+        m.hits.add(card, e.hit);
     }
     scrollbar(buf, area, scroll, m.scroll_max[COSMOS]);
 }
@@ -1471,22 +1504,10 @@ fn render_options(buf: &mut Buffer, area: Rect, ctx: &Ctx, m: &mut MobileUi) {
         ),
         (
             "Recommencer une partie".into(),
-            if m.wipe_armed {
-                "Tout sera effacé : touche encore".into()
-            } else {
-                "Efface la progression".into()
-            },
-            if m.wipe_armed {
-                "Confirmer".into()
-            } else {
-                "Recommencer".into()
-            },
-            if m.wipe_armed {
-                theme::RED
-            } else {
-                theme::GREY
-            },
-            Hit::NewGame,
+            "Efface la progression".into(),
+            "Recommencer".into(),
+            theme::GREY,
+            Hit::Ask(Confirm::NewGame),
         ),
     ];
     set_scroll_max(m, OPTIONS, rows.len() as u16 * CARD_H, area.height);
@@ -1552,6 +1573,18 @@ fn render_save(buf: &mut Buffer, area: Rect, m: &mut MobileUi, version: &str) {
 
 fn detail_lines(ctx: &Ctx, d: Detail, width: usize) -> (String, Vec<(String, Style)>) {
     match d {
+        Detail::Relic(i) => {
+            let name = ctx.catalog.relics.get(i).map(|r| r.name).unwrap_or("?");
+            let shown = if ctx.snap.relics.get(i).is_some_and(|v| v.rarity.is_some()) {
+                name
+            } else {
+                "Relique inconnue"
+            };
+            (
+                shown.to_string(),
+                super::cosmos::relic_sheet(ctx, i, width).0,
+            )
+        }
         Detail::Generator(id) => {
             let name = ctx.catalog.generator(id).map(|g| g.name).unwrap_or("?");
             let lines = ctx
@@ -1616,10 +1649,15 @@ fn wrap_pair(desc: &str, hint: &str, width: usize) -> Vec<(String, Style)> {
     out
 }
 
-fn render_detail(buf: &mut Buffer, area: Rect, ctx: &Ctx, d: Detail, hits: &mut HitMap) {
+fn render_detail(buf: &mut Buffer, area: Rect, ctx: &Ctx, d: Detail, m: &mut MobileUi) {
     let width = area.width.saturating_sub(4) as usize;
     let (title, lines) = detail_lines(ctx, d, width);
-    let h = (lines.len() as u16 + 4).min(area.height);
+    let action = match d {
+        Detail::Relic(i) => super::cosmos::relic_sheet(ctx, i, width).1,
+        _ => None,
+    };
+    let extra = if action.is_some() { BUTTON_H + 1 } else { 0 };
+    let h = (lines.len() as u16 + 4 + extra).min(area.height);
     let r = Rect::new(area.x, area.bottom() - h, area.width, h);
     draw::clear(buf, r);
     draw::fill_bg(buf, r, theme::SELECT_BG);
@@ -1635,7 +1673,7 @@ fn render_detail(buf: &mut Buffer, area: Rect, ctx: &Ctx, d: Detail, hits: &mut 
     );
     for (i, (l, style)) in lines.iter().enumerate() {
         let y = r.y + 1 + i as u16;
-        if y + 2 >= r.bottom() {
+        if y + 2 + extra >= r.bottom() {
             break;
         }
         draw::text(buf, r.x + 2, y, l, *style, r.right() - 1);
@@ -1649,8 +1687,17 @@ fn render_detail(buf: &mut Buffer, area: Rect, ctx: &Ctx, d: Detail, hits: &mut 
         theme::fg(theme::MUTED),
         r.x,
     );
-    // Fermer d'un toucher n'importe où.
-    hits.add(area, Hit::CloseDetail);
+    // Fermer d'un toucher n'importe où, sauf sur le bouton de la fiche.
+    m.hits.add(area, Hit::CloseDetail);
+    if let Some((label, color, hit)) = action {
+        let b = Rect::new(
+            r.x + 2,
+            r.bottom() - 1 - BUTTON_H,
+            r.width.saturating_sub(4),
+            BUTTON_H,
+        );
+        button(buf, &mut m.hits, m.press, b, "", &label, color, Some(hit));
+    }
 }
 
 // ----------------------------------------------------------------------
@@ -1671,7 +1718,16 @@ pub fn render_controls(buf: &mut Buffer, area: Rect, ui: &Ui, m: &mut MobileUi) 
         key("▼", Intent::Down, theme::BORDER),
         key("▶", Intent::NextPanel, theme::BORDER),
     ];
-    if ui.popup.is_some() {
+    if let Some(p) = ui.portal {
+        let mut r = vec![key("◀", Intent::PrevPanel, theme::BORDER)];
+        if p.crunch {
+            r.push(key("Choisir cet univers", Intent::Buy, theme::PINK));
+        } else {
+            r.push(key("Fermer", Intent::Escape, theme::GREY));
+        }
+        r.push(key("▶", Intent::NextPanel, theme::BORDER));
+        rows.push(r);
+    } else if ui.popup.is_some() {
         rows.push(vec![
             key("Non", Intent::No, theme::GREY),
             key("Oui", Intent::Yes, theme::PINK),
