@@ -1,0 +1,37 @@
+NOM DE L'APPLICATION (30 caractères max)
+Fonderie Stellaire
+
+DESCRIPTION COURTE (80 caractères max)
+Récolte la poussière d'étoile, bâtis ta fonderie, fais exploser des supernovas.
+
+DESCRIPTION COMPLÈTE (4000 caractères max)
+Une fonderie au bord d'un trou noir. Touche le ciel pour récolter la poussière d'étoile, achète des sondes, des drones, des sphères de Dyson… et regarde ta production grimper jusqu'aux billiards.
+
+Fonderie Stellaire est un idle game cosmique, entièrement animé en caractères : orbites, nébuleuses, comètes, aurores et explosions, tout est dessiné case par case, comme dans un terminal.
+
+✦ UNE PROGRESSION EN QUATRE ACTES
+• Récolte, achète des générateurs et des améliorations, atteins les paliers de production.
+• Déclenche une Supernova : tout repart de zéro, mais tes fragments rendent la suite plus rapide.
+• Replie l'univers en Big Crunch, explore des univers parallèles, fais renaître le cosmos par un Big Bang.
+• Envoie des flottes sur la Carte stellaire, collectionne des reliques, bâtis des mégastructures et éveille le Cosmos.
+
+✦ À TON RYTHME
+• Ta fonderie produit même jeu fermé : à ton retour, un résumé de ce qu'elle a fait t'attend.
+• Recherches du Laboratoire et expéditions avancent pendant ton absence.
+• Un Défi du jour, le même pour tous, en dix minutes.
+
+✦ PENSÉ POUR LE TOUCHER
+• Un onglet par partie du jeu, des cartes avec leur propre bouton d'achat.
+• Maintiens le doigt pour récolter en continu ou acheter en rafale.
+• Les actions irréversibles se confirment en faisant glisser un curseur.
+
+✦ SANS PUB, SANS ACHAT, SANS COMPTE
+Aucune publicité, aucun achat intégré, aucune connexion requise. Ta sauvegarde reste sur ton téléphone, et tu peux l'exporter pour la reprendre dans la version ordinateur (terminal).
+
+CATÉGORIE
+Jeux › Simulation (ou Jeux › Occasionnels)
+
+ÉLÉMENTS GRAPHIQUES (dans ce dossier)
+• icon-512.png : icône de l'application (512 × 512)
+• feature-graphic.png : bannière (1024 × 500)
+• screenshots/*.png : captures téléphone (1216 × 2400)

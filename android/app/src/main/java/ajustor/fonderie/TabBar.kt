@@ -1,14 +1,23 @@
 package ajustor.fonderie
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material3.Badge
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import uniffi.fonderie.Tab
 import uniffi.fonderie.TabInfo
@@ -49,7 +58,18 @@ fun TabBar(tabs: List<TabInfo>, font: FontFamily, onSelect: (Tab) -> Unit) {
                 onClick = { onSelect(info.tab) },
                 icon = {
                     BadgedBox(badge = { if (info.badge) Badge(containerColor = BadgeColor) }) {
-                        Text(icon(info.tab), fontFamily = font, fontSize = 22.sp)
+                        // Boîte de taille fixe : les symboles des polices de
+                        // repli sont plus hauts et décaleraient les libellés.
+                        Box(Modifier.size(30.dp), contentAlignment = Alignment.Center) {
+                            Text(
+                                icon(info.tab),
+                                fontFamily = font,
+                                fontSize = 20.sp,
+                                lineHeight = 30.sp,
+                                maxLines = 1,
+                                modifier = Modifier.wrapContentSize(unbounded = true),
+                            )
+                        }
                     }
                 },
                 label = {

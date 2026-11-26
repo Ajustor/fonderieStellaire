@@ -21,6 +21,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -121,7 +122,9 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
         touchSlop = ViewConfiguration.get(this).scaledTouchSlop
         val font = FontFamily(view.regular)
         setContent {
-            Column(Modifier.fillMaxSize().background(Color.Black)) {
+            // À partir d'Android 15, l'app s'affiche bord à bord : on garde le
+            // jeu et la barre d'onglets hors des barres système et de l'encoche.
+            Column(Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding()) {
                 AndroidView(factory = { view }, modifier = Modifier.weight(1f).fillMaxWidth())
                 if (barVisible.value) {
                     TabBar(tabs.value, font) { game.selectTab(it) }

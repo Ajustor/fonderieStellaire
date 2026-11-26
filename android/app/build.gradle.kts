@@ -14,20 +14,32 @@ val rustProfile = providers.gradleProperty("rustProfile").getOrElse("release")
 
 /** Signature de publication : fournie par la CI (secrets du dépôt) ou par l'environnement. */
 val keystorePath: String? = System.getenv("ANDROID_KEYSTORE_PATH")
-/** Numéro de build Play Store (croissant) et version affichée, injectés par la CI. */
-val ciVersionCode = System.getenv("ANDROID_VERSION_CODE")?.toIntOrNull() ?: 1
-val ciVersionName = System.getenv("FONDERIE_VERSION")?.trim()?.removePrefix("v")
-    ?.takeIf { it.isNotEmpty() } ?: "0.16.0"
+/**
+ * Numéro de build Play Store, toujours croissant, sans rien toucher au code :
+ * le numéro du run en CI, sinon le nombre de commits.
+ */
+val ciVersionCode: Int = System.getenv("ANDROID_VERSION_CODE")?.toIntOrNull()
+    ?: runCatching {
+        providers.exec { commandLine("git", "-C", cargoRoot.path, "rev-list", "--count", "HEAD") }
+            .standardOutput.asText.get().trim().toInt()
+    }.getOrDefault(1)
+
+/** Version affichée : le tag de la release, sinon celle du workspace Cargo. */
+val ciVersionName: String = System.getenv("FONDERIE_VERSION")?.trim()?.removePrefix("v")
+    ?.takeIf { it.isNotEmpty() }
+    ?: Regex("""(?m)^version\s*=\s*"([^"]+)"""")
+        .find(File(cargoRoot, "Cargo.toml").readText())?.groupValues?.get(1)
+    ?: "0.0.0"
 
 android {
     namespace = "ajustor.fonderie"
-    compileSdk = 34
+    compileSdk = 36
     ndkVersion = "29.0.14206865"
 
     defaultConfig {
         applicationId = "ajustor.fonderie"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 36
         versionCode = ciVersionCode
         versionName = ciVersionName
         ndk {
