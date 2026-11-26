@@ -1,6 +1,8 @@
 # Journal des versions
 
-## v0.12.1 — Barre d'aide contextuelle
+## v0.12.2 — Barre d'aide contextuelle
+
+> La v0.12.1 n'a pas été publiée (échec de la CI) : son contenu est ici.
 
 - La barre du bas **n'affiche plus que les actions possibles maintenant** :
   `[C] Comète !` quand une comète passe, `[Z] Événement !` quand un dilemme

@@ -1234,14 +1234,22 @@ fn help_bar_only_shows_what_is_possible_now() {
     let bar = text.lines().last().unwrap().to_string();
     println!("{bar}");
     assert!(bar.contains("[Espace] Récolter") && bar.contains("[R] Options"));
-    for absent in ["[P]", "[U]", "[E]", "[L]", "[X]", "[H]", "[V]", "[G]", "[S]", "[F]"] {
-        assert!(!bar.contains(absent), "{absent} n'a rien à faire là : {bar}");
+    for absent in [
+        "[P]", "[U]", "[E]", "[L]", "[X]", "[H]", "[V]", "[G]", "[S]", "[F]",
+    ] {
+        assert!(
+            !bar.contains(absent),
+            "{absent} n'a rien à faire là : {bar}"
+        );
     }
     // Partie avancée : la Supernova rapporte, l'Atelier est ouvert.
     let mut app = game_app();
     let text = render(&mut app, 120, 30);
     let bar = text.lines().last().unwrap().to_string();
     println!("{bar}");
-    assert!(bar.contains("[P] Nova") && bar.contains("[E] Atelier"), "{bar}");
+    assert!(
+        bar.contains("[P] Nova") && bar.contains("[E] Atelier"),
+        "{bar}"
+    );
     assert!(!bar.contains("[U]") && !bar.contains("[X]"));
 }
