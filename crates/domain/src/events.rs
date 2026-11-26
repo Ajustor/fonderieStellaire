@@ -25,6 +25,8 @@ pub enum PurchaseTarget {
     Forge(GeneratorId),
     /// Étape du Grand Attracteur.
     Attractor(usize),
+    /// Expédition vers un système.
+    Expedition(usize),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -154,6 +156,21 @@ pub enum DomainEvent {
     },
     /// La dernière étape est achevée : le Grand Attracteur s'éveille.
     AttractorAwakened,
+    /// Acte III : la Carte stellaire s'ouvre (carte générée).
+    StarMapOpened,
+    /// Une flotte part en expédition.
+    ExpeditionLaunched {
+        system: usize,
+    },
+    /// Une flotte rentre ; en cas de succès, le système est exploré.
+    ExpeditionReturned {
+        system: usize,
+        success: bool,
+        /// Gain immédiat (Anomalie), 0 sinon.
+        stardust: f64,
+    },
+    /// Tous les systèmes sont explorés.
+    StarMapCompleted,
     /// Big Crunch demandé trop tôt.
     BigCrunchUnavailable {
         supernovas: u32,

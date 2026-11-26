@@ -51,7 +51,9 @@ grep -rlE "serde|std::fs"     crates | grep -v crates/infrastructure # → rien
   (`universe.rs` : règles appliquées via `GameState::rules`, Clés via
   `key_product`), Big Bang et Grand Attracteur (`cosmos.rs` : particules,
   générateurs primordiaux avec `GeneratorDef::particle_cost`, étapes en temps
-  réel avancées comme les recherches) et l'agrégat `GameState`
+  réel avancées comme les recherches), Carte stellaire (`starmap.rs` : carte
+  générée depuis une graine sauvegardée, expéditions dont l'issue est tirée au
+  départ) et l'agrégat `GameState`
   (dont l'automate d'achat et « tout acheter »). Le temps (`dt`) et les tirages
   aléatoires (`roll: f64`) arrivent **en paramètre**. Chaque opération pousse des
   `DomainEvent` dans un `Vec`.

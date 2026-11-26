@@ -39,6 +39,7 @@ use crate::widgets::cosmos::{self, CosmosItem, PARTICLE};
 use crate::widgets::journal::{Journal, Kind};
 use crate::widgets::portals::PortalState;
 use crate::widgets::shop::{self, ShopItem};
+use crate::widgets::starmap::{self as starmap_widget, StarMapState};
 use crate::widgets::toast::Toasts;
 use crate::widgets::{inner, Ctx};
 use crossterm::terminal::{BeginSynchronizedUpdate, EndSynchronizedUpdate};
@@ -534,6 +535,27 @@ impl App {
             }
             return;
         }
+        if let Some(mut map) = self.ui.starmap {
+            let snap = &self.snap;
+            match intent {
+                Intent::PrevPanel => map.sel = starmap_widget::neighbor(snap, map.sel, -1, 0),
+                Intent::NextPanel => map.sel = starmap_widget::neighbor(snap, map.sel, 1, 0),
+                Intent::Up => map.sel = starmap_widget::neighbor(snap, map.sel, 0, -1),
+                Intent::Down => map.sel = starmap_widget::neighbor(snap, map.sel, 0, 1),
+                Intent::Buy | Intent::Yes if map.sel > 0 => {
+                    self.ui.starmap = Some(map);
+                    self.command(Command::LaunchExpedition(map.sel));
+                    return;
+                }
+                Intent::StarMap | Intent::Escape | Intent::No | Intent::Quit => {
+                    self.ui.starmap = None;
+                    return;
+                }
+                _ => {}
+            }
+            self.ui.starmap = Some(map);
+            return;
+        }
         if let Some(popup) = self.ui.options {
             if popup.closing_at.is_none() {
                 match intent {
@@ -788,6 +810,27 @@ impl App {
                 }
             }
             Intent::Save => self.command(Command::Save),
+            Intent::StarMap => {
+                if self.snap.starmap_unlocked {
+                    let mut state = StarMapState::new(now);
+                    // On vise d'emblée un système où une flotte peut partir.
+                    state.sel = self
+                        .snap
+                        .systems
+                        .iter()
+                        .find(|s| s.available)
+                        .map(|s| s.index)
+                        .unwrap_or(0);
+                    self.ui.starmap = Some(state);
+                } else {
+                    self.toasts.push(
+                        now,
+                        theme::GREY,
+                        "Carte stellaire",
+                        "S'ouvre à l'éveil du Grand Attracteur (Acte III)",
+                    );
+                }
+            }
             Intent::Options => {
                 self.ui.options = Some(Popup {
                     opened_at: now,
@@ -1296,6 +1339,18 @@ impl App {
                     };
                     self.toasts.push(now, theme::GREY, "Grand Attracteur", body);
                 }
+                PurchaseTarget::Expedition(system) => {
+                    let body = if self.snap.fleets.len() >= self.snap.fleets_max {
+                        "Toutes les flottes sont en route".to_string()
+                    } else if self.snap.systems.get(system).is_some_and(|s| s.explored) {
+                        "Système déjà exploré".to_string()
+                    } else if self.snap.fleets.iter().any(|f| f.target == system) {
+                        "Une flotte y est déjà en route".to_string()
+                    } else {
+                        "Hors de portée : explore d'abord un système voisin".to_string()
+                    };
+                    self.toasts.push(now, theme::GREY, "Expédition", body);
+                }
                 PurchaseTarget::Lab(l) => {
                     let name = self.lab_name(l);
                     let body = if self.snap.research.is_some() {
@@ -1790,6 +1845,93 @@ impl App {
                 self.service.fill_snapshot(&mut self.snap);
                 let credits = self.credits();
                 self.vis.ending = Some(EndingSequence::new(now + 1.5, credits));
+            }
+            DomainEvent::StarMapOpened => {
+                self.log(
+                    Kind::Achievement,
+                    "▸ Acte III : la Carte stellaire s'ouvre. Envoie tes flottes explorer [X] !",
+                );
+                self.toasts.push(
+                    now,
+                    starmap_widget::kind_color(domain::SystemKind::Pulsar),
+                    "▸ ACTE III : LES ROUTES STELLAIRES",
+                    "La Carte stellaire s'ouvre [X]",
+                );
+                self.vis.fireworks(now + 0.5);
+            }
+            DomainEvent::ExpeditionLaunched { system } => {
+                let (name, secs) = self
+                    .snap
+                    .systems
+                    .get(system)
+                    .map(|s| (s.name.clone(), s.duration))
+                    .unwrap_or_default();
+                self.log(Kind::Purchase, format!("▸ Flotte en route vers {name}"));
+                self.toasts.push(
+                    now,
+                    crate::fx::Rgb(120, 230, 255),
+                    format!("▸ Cap sur {name}"),
+                    format!("Arrivée dans {} (même jeu fermé)", fmt::duration(secs)),
+                );
+            }
+            DomainEvent::ExpeditionReturned {
+                system,
+                success,
+                stardust,
+            } => {
+                let (name, kind, scale) = self
+                    .snap
+                    .systems
+                    .get(system)
+                    .map(|s| (s.name.clone(), s.kind, s.reward_scale))
+                    .unwrap_or((String::new(), domain::SystemKind::Nebula, 1.0));
+                if success {
+                    let reward = starmap_widget::reward_text(kind, scale);
+                    self.log(
+                        Kind::Achievement,
+                        format!("{} {name} exploré : {reward}", kind.symbol()),
+                    );
+                    let body = if stardust > 0.0 {
+                        format!("+{} ✦ d'un coup !", fmt::short(stardust))
+                    } else {
+                        reward
+                    };
+                    self.toasts.push(
+                        now,
+                        starmap_widget::kind_color(kind),
+                        format!("{} {name} exploré !", kind.symbol()),
+                        body,
+                    );
+                    self.vis.map_pops.push((now, system));
+                    self.vis.map_pops.retain(|&(t, _)| now - t < 2.0);
+                    self.vis.fireworks(now);
+                } else {
+                    self.log(
+                        Kind::Error,
+                        format!("▸ La flotte revient de {name} sans rien : le système résiste"),
+                    );
+                    self.toasts.push(
+                        now,
+                        theme::GREY,
+                        format!("▸ Retour de {name}"),
+                        "Échec : la flotte rentre les cales vides",
+                    );
+                }
+            }
+            DomainEvent::StarMapCompleted => {
+                self.log(
+                    Kind::Achievement,
+                    "✶ Carte stellaire complète : toutes les routes sont ouvertes !",
+                );
+                self.toasts.push(
+                    now,
+                    theme::GOLD,
+                    "✶ Atlas complet !",
+                    "Toutes les routes stellaires sont ouvertes",
+                );
+                self.vis.fireworks(now);
+                self.vis.fireworks(now + 0.7);
+                self.vis.fireworks(now + 1.4);
             }
             DomainEvent::BigCrunchUnavailable { supernovas, needed } => {
                 self.toasts.push(

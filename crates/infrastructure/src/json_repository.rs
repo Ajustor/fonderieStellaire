@@ -57,6 +57,10 @@ struct SaveFile {
     forged: Vec<usize>,
     attractor: usize,
     attractor_left: f64,
+    map_seed: u64,
+    explored: Vec<usize>,
+    fleets: Vec<(usize, f64, f64, bool)>,
+    expeditions_launched: u32,
 }
 
 impl From<&SaveData> for SaveFile {
@@ -102,6 +106,10 @@ impl From<&SaveData> for SaveFile {
             forged: d.forged.clone(),
             attractor: d.attractor,
             attractor_left: d.attractor_left,
+            map_seed: d.map_seed,
+            explored: d.explored.clone(),
+            fleets: d.fleets.clone(),
+            expeditions_launched: d.expeditions_launched,
         }
     }
 }
@@ -149,6 +157,10 @@ impl From<SaveFile> for SaveData {
             forged: f.forged,
             attractor: f.attractor,
             attractor_left: f.attractor_left,
+            map_seed: f.map_seed,
+            explored: f.explored,
+            fleets: f.fleets,
+            expeditions_launched: f.expeditions_launched,
         }
     }
 }
@@ -184,6 +196,39 @@ impl JsonSaveRepository {
 
     pub fn backup_path(&self) -> PathBuf {
         self.sibling(".bak")
+    }
+
+    /// Copie la sauvegarde (vérifiée lisible) dans `dest`.
+    pub fn export_to(&self, dest: &Path) -> Result<(), RepositoryError> {
+        match self.load()? {
+            LoadOutcome::Loaded(_) => fs::copy(&self.path, dest)
+                .map(|_| ())
+                .map_err(|e| io_err(&format!("copie vers {}", dest.display()), &e)),
+            LoadOutcome::NotFound => Err(RepositoryError("aucune sauvegarde à exporter".into())),
+            LoadOutcome::Corrupted { backup } => Err(RepositoryError(format!(
+                "sauvegarde illisible (mise de côté dans {backup})"
+            ))),
+        }
+    }
+
+    /// Reprend une sauvegarde exportée : le fichier est vérifié, puis la
+    /// sauvegarde actuelle passe en `.bak`. Renvoie `true` si elle existait.
+    pub fn import_from(&self, src: &Path) -> Result<bool, RepositoryError> {
+        let data = match JsonSaveRepository::new(src).load()? {
+            LoadOutcome::Loaded(d) => d,
+            LoadOutcome::NotFound => {
+                return Err(RepositoryError(format!("{} introuvable", src.display())))
+            }
+            LoadOutcome::Corrupted { .. } => {
+                return Err(RepositoryError(format!(
+                    "{} n'est pas une sauvegarde valide",
+                    src.display()
+                )))
+            }
+        };
+        let backed_up = self.reset()?;
+        self.save(&data)?;
+        Ok(backed_up)
     }
 
     /// Met la sauvegarde existante de côté (`.bak`) pour repartir de zéro.
@@ -347,6 +392,28 @@ mod tests {
             "sauvegarde : médiane {:.1} ms, pire {:.1} ms",
             times[10], times[19]
         );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn export_then_import_round_trip() {
+        let (dir, repo) = temp_repo("export");
+        let file = dir.join("copie.json");
+        assert!(repo.export_to(&file).is_err(), "rien à exporter");
+        let data = SaveData {
+            version: application::SAVE_VERSION,
+            clicks: 77,
+            ..SaveData::default()
+        };
+        repo.save(&data).unwrap();
+        repo.export_to(&file).unwrap();
+        repo.save(&SaveData::default()).unwrap();
+        assert!(repo.import_from(&file).unwrap(), "l'actuelle passe en .bak");
+        match repo.load().unwrap() {
+            LoadOutcome::Loaded(d) => assert_eq!(d.clicks, 77),
+            other => panic!("{other:?}"),
+        }
+        assert!(repo.import_from(&dir.join("absent.json")).is_err());
         let _ = fs::remove_dir_all(dir);
     }
 }

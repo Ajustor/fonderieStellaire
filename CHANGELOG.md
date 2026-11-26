@@ -1,5 +1,49 @@
 # Journal des versions
 
+## v0.10.0 — Acte III, partie 1 : la Carte stellaire
+
+### Nouveautés
+- **Carte stellaire** (touche `X`, à l'éveil du Grand Attracteur) : une carte
+  de 24 systèmes, **générée pour chaque partie**, reliés par des routes de
+  plus en plus lointaines. Un brouillard cache ce qui n'est pas encore à
+  portée.
+- **Expéditions** : envoie des flottes explorer les systèmes voisins, en
+  **temps réel** (de 2 h à une dizaine d'heures, même jeu fermé). Le danger
+  (de ◆ à ◆◆◆◆◆) rallonge le voyage et baisse la chance de succès, mais
+  augmente la récompense. Une expédition ratée revient les cales vides.
+- **Récompenses permanentes** selon le type de système :
+
+  | Système | Récompense |
+  |---|---|
+  | ✦ Nébuleuse | production +10 % (×danger) |
+  | ★ Amas d'étoiles | fragments +10 % (×danger) |
+  | ● Trou noir | +2 h de plafond hors-ligne (×danger) |
+  | ◎ Pulsar | comètes plus fréquentes |
+  | ▲ Civilisation | une flotte de plus |
+  | ◈ Anomalie | des heures de production d'un coup |
+
+- 2 flottes au départ, 4 avec les deux Civilisations.
+- **3 nouveaux succès** (45 au total).
+- **Succès triés par difficulté** dans l'écran Infos, du plus facile au plus
+  difficile (ordre mesuré avec le simulateur).
+
+### Animations
+- Carte qui s'ouvre en fondu sur un ciel étoilé, **brume** qui ondule au-delà
+  des systèmes à portée, **éclats dorés qui circulent** sur les routes
+  explorées, réticule qui palpite autour du système visé.
+- **Flottes** visibles en route, avec leur traînée, du système de départ à
+  leur cible.
+- Exploration réussie : **onde lumineuse** aux couleurs du système, feux
+  d'artifice et notification.
+
+### Corrections
+- La CI de la v0.9.1 échouait (règle d'architecture) : l'export et l'import
+  de sauvegarde passent dans la couche infrastructure.
+
+### Rythme (simulateur, 3 h de jeu par jour)
+- Fin de l'Acte II vers le 26e jour, **Carte stellaire complète vers le
+  35e jour**.
+
 ## v0.9.1 — Options, simulateur et macOS
 
 ### Nouveautés

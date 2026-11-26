@@ -21,6 +21,7 @@ use crate::lab::{LabEffect, LabId};
 use crate::perk::{PerkEffect, PerkId};
 use crate::prestige::{fragment_divisor, fragments_for};
 use crate::stardust::Stardust;
+use crate::starmap::{self, StarMap, SystemKind, BASE_FLEETS};
 use crate::universe::{KeyReward, UniverseId, UniverseRules, ENTROPY_FLOOR};
 use crate::upgrade::{Effect, UpgradeId};
 
@@ -30,6 +31,17 @@ const ACHIEVEMENT_CHECK_INTERVAL: f64 = 1.0;
 const AUTOBUY_INTERVAL: f64 = 1.0;
 /// Nombre maximal de générateurs achetés par passage de l'automate.
 const AUTOBUY_MAX_PER_TICK: usize = 10;
+
+/// Une flotte en expédition.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Expedition {
+    pub target: usize,
+    /// Secondes restantes et durée totale.
+    pub left: f64,
+    pub total: f64,
+    /// Issue tirée au départ.
+    pub success: bool,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct GameState {
@@ -90,6 +102,14 @@ pub struct GameState {
     /// en construction.
     pub attractor: usize,
     pub attractor_build: Option<f64>,
+    /// Acte III : graine de la Carte stellaire (0 : pas encore de carte), la
+    /// carte qui en découle (non sauvegardée), les systèmes explorés et les
+    /// flottes en expédition.
+    pub map_seed: u64,
+    pub map: StarMap,
+    pub explored: Vec<bool>,
+    pub fleets: Vec<Expedition>,
+    pub expeditions_launched: u32,
     /// Niveau de chaque Constellation.
     pub constellations: Vec<u32>,
     revealed: Vec<bool>,
@@ -137,6 +157,14 @@ impl GameState {
             forged: Vec::new(),
             attractor: 0,
             attractor_build: None,
+            map_seed: 0,
+            map: StarMap {
+                systems: Vec::new(),
+                columns: 0,
+            },
+            explored: Vec::new(),
+            fleets: Vec::new(),
+            expeditions_launched: 0,
             constellations: Vec::new(),
             revealed: Vec::new(),
             autobuy_timer: 0.0,
@@ -169,6 +197,23 @@ impl GameState {
             *f &= g.is_primordial();
         }
         self.particles_spent = self.particles_spent.min(self.particles);
+        // Carte stellaire : reconstruite depuis sa graine.
+        if self.map_seed != 0 && self.map.systems.is_empty() {
+            self.map = starmap::generate(self.map_seed);
+        }
+        self.explored.resize(self.map.systems.len(), false);
+        if let Some(home) = self.explored.first_mut() {
+            *home = true;
+        }
+        let n = self.map.systems.len();
+        self.fleets
+            .retain(|f| f.target < n && f.left.is_finite() && f.total > 0.0);
+        let mut seen = Vec::new();
+        self.fleets.retain(|f| {
+            let fresh = !seen.contains(&f.target);
+            seen.push(f.target);
+            fresh
+        });
         self.attractor = self.attractor.min(catalog.attractor.len());
         if self.attractor >= catalog.attractor.len()
             || self.attractor_build.is_some_and(|l| !l.is_finite())
@@ -295,7 +340,7 @@ impl GameState {
                 _ => None,
             })
             .product();
-        rewards
+        rewards / self.map_bonus(SystemKind::Pulsar, 0.10)
             * self.rules(catalog).comet_interval
             * self
                 .perk_effects(catalog)
@@ -375,6 +420,7 @@ impl GameState {
         perks
             * self.crunch_fragments()
             * self.particle_fragments()
+            * self.map_bonus(SystemKind::Cluster, 0.10)
             * self.attractor_product(catalog, |e| match e {
                 AttractorEffect::Fragments(f) => Some(f),
                 _ => None,
@@ -495,6 +541,8 @@ impl GameState {
                 rate = rate.max(r);
             }
         }
+        // Trous noirs explorés : +2 h de plafond chacun (selon le danger).
+        cap += (self.map_bonus(SystemKind::BlackHole, 2.0) - 1.0) * 3600.0;
         let extra_hours = self.constellation_sum(catalog, |e| match e {
             ConstellationEffect::OfflineHours(h) => Some(h),
             _ => None,
@@ -789,6 +837,8 @@ impl GameState {
         self.check_challenge(catalog, events);
         self.advance_research(catalog, dt, events);
         self.advance_attractor(catalog, dt, events);
+        self.ensure_map(catalog, roll, events);
+        self.advance_expeditions(catalog, dt, events);
 
         // Filet à comètes : capture les comètes normales après 2 s de passage.
         if self.lab_active(catalog, LabEffect::CometNet)
@@ -947,6 +997,7 @@ impl GameState {
         // Les recherches et le Grand Attracteur avancent en temps réel, même jeu fermé.
         self.advance_research(catalog, elapsed_secs, events);
         self.advance_attractor(catalog, elapsed_secs, events);
+        self.advance_expeditions(catalog, elapsed_secs, events);
         let (rate, cap) = self.offline_terms(catalog);
         let seconds = elapsed_secs.min(cap);
         let amount = economy::steady_production(catalog, self) * seconds * rate;
@@ -1246,6 +1297,146 @@ impl GameState {
             AttractorEffect::Production(f) | AttractorEffect::Awakening(f) => Some(f),
             _ => None,
         })
+    }
+
+    // ------------------------------------------------------------------
+    // Acte III : Carte stellaire et expéditions
+    // ------------------------------------------------------------------
+
+    /// La Carte stellaire s'ouvre à l'éveil du Grand Attracteur.
+    pub fn starmap_unlocked(&self, catalog: &Catalog) -> bool {
+        self.attractor_awakened(catalog)
+    }
+
+    pub fn is_explored(&self, system: usize) -> bool {
+        self.explored.get(system).copied().unwrap_or(false)
+    }
+
+    /// Un système est visible s'il est exploré ou relié à un système exploré.
+    pub fn is_revealed(&self, system: usize) -> bool {
+        self.map.systems.get(system).is_some_and(|s| {
+            self.is_explored(system) || s.links.iter().any(|&l| self.is_explored(l))
+        })
+    }
+
+    pub fn explored_count(&self) -> usize {
+        self.explored.iter().skip(1).filter(|&&e| e).count()
+    }
+
+    /// Flottes disponibles au total (une de plus par Civilisation explorée).
+    pub fn fleets_max(&self) -> usize {
+        BASE_FLEETS
+            + self
+                .map
+                .systems
+                .iter()
+                .filter(|s| s.kind == SystemKind::Civilization && self.is_explored(s.index))
+                .count()
+    }
+
+    /// Chance de succès d'une expédition (le danger la baisse, l'expérience
+    /// des systèmes déjà explorés la remonte).
+    pub fn expedition_chance(&self, system: usize) -> f64 {
+        let danger = self.map.systems.get(system).map(|s| s.danger).unwrap_or(5) as f64;
+        (1.10 - 0.15 * danger + 0.02 * self.explored_count() as f64).clamp(0.30, 0.95)
+    }
+
+    pub fn can_launch_expedition(&self, catalog: &Catalog, system: usize) -> bool {
+        self.starmap_unlocked(catalog)
+            && system > 0
+            && self.is_revealed(system)
+            && !self.is_explored(system)
+            && !self.fleets.iter().any(|f| f.target == system)
+            && self.fleets.len() < self.fleets_max()
+    }
+
+    /// Envoie une flotte. `roll` décide dès le départ de l'issue (secret).
+    pub fn launch_expedition(
+        &mut self,
+        catalog: &Catalog,
+        system: usize,
+        roll: f64,
+        events: &mut Vec<DomainEvent>,
+    ) {
+        if !self.can_launch_expedition(catalog, system) {
+            events.push(DomainEvent::PurchaseFailed {
+                target: PurchaseTarget::Expedition(system),
+            });
+            return;
+        }
+        let total = self.map.systems[system].duration();
+        let success = roll < self.expedition_chance(system);
+        self.fleets.push(Expedition {
+            target: system,
+            left: total,
+            total,
+            success,
+        });
+        self.expeditions_launched += 1;
+        events.push(DomainEvent::ExpeditionLaunched { system });
+        self.check_achievements(catalog, events);
+    }
+
+    /// Bonus des systèmes explorés d'un type : 1 + `per` × Σ échelle de danger.
+    pub fn map_bonus(&self, kind: SystemKind, per: f64) -> f64 {
+        1.0 + per
+            * self
+                .map
+                .systems
+                .iter()
+                .filter(|s| s.kind == kind && self.is_explored(s.index) && s.index > 0)
+                .map(|s| s.reward_scale())
+                .sum::<f64>()
+    }
+
+    /// Ouvre la carte (graine tirée de `roll`) dès que l'Acte III commence.
+    fn ensure_map(&mut self, catalog: &Catalog, roll: f64, events: &mut Vec<DomainEvent>) {
+        if self.map_seed != 0 || !self.starmap_unlocked(catalog) {
+            return;
+        }
+        self.map_seed = ((roll * (1u64 << 52) as f64) as u64).max(1);
+        self.map = starmap::generate(self.map_seed);
+        self.explored = vec![false; self.map.systems.len()];
+        self.explored[0] = true;
+        events.push(DomainEvent::StarMapOpened);
+    }
+
+    /// Les flottes avancent en temps réel (même jeu fermé).
+    fn advance_expeditions(&mut self, catalog: &Catalog, secs: f64, events: &mut Vec<DomainEvent>) {
+        if self.fleets.is_empty() {
+            return;
+        }
+        let mut back = Vec::new();
+        for f in &mut self.fleets {
+            f.left -= secs;
+            if f.left <= 0.0 {
+                back.push(*f);
+            }
+        }
+        self.fleets.retain(|f| f.left > 0.0);
+        let was_complete = self.explored_count() + 1 >= self.map.systems.len();
+        for f in back {
+            let mut stardust = 0.0;
+            if f.success {
+                self.explored[f.target] = true;
+                let sys = &self.map.systems[f.target];
+                if sys.kind == SystemKind::Anomaly {
+                    // Des heures de production d'un coup.
+                    stardust =
+                        economy::steady_production(catalog, self) * 3600.0 * sys.reward_scale();
+                    self.earn(stardust);
+                }
+            }
+            events.push(DomainEvent::ExpeditionReturned {
+                system: f.target,
+                success: f.success,
+                stardust,
+            });
+        }
+        if !was_complete && self.explored_count() + 1 >= self.map.systems.len() {
+            events.push(DomainEvent::StarMapCompleted);
+        }
+        self.check_achievements(catalog, events);
     }
 
     /// Le Grand Attracteur est-il éveillé ? (fin de l'Acte II)
@@ -1637,6 +1828,8 @@ impl GameState {
                 big_bangs: self.big_bangs,
                 forged: self.forged.iter().filter(|&&f| f).count(),
                 attractor_stages: self.attractor,
+                expeditions: self.expeditions_launched,
+                explored: self.explored_count(),
             };
             for a in &catalog.achievements {
                 if !self.has_achievement(a.id) && a.condition.is_met(&ctx) {
@@ -2669,5 +2862,104 @@ mod tests {
         assert_eq!(s.crunch_production(&c), 7.0, "matière noire ×2 : 1 + 2×3");
         assert_eq!(s.offline_terms(&c).0, 1.0);
         assert!(s.has_achievement(c.achievement_by_key("attractor").unwrap()));
+    }
+
+    /// Partie à l'éveil du Grand Attracteur, carte ouverte.
+    fn act_three(c: &Catalog) -> (GameState, Vec<DomainEvent>) {
+        let mut s = GameState::new(c);
+        let mut ev = Vec::new();
+        s.big_bangs = 1;
+        s.attractor = c.attractor.len();
+        s.tick(c, 0.1, 0.42, &mut ev);
+        (s, ev)
+    }
+
+    #[test]
+    fn star_map_opens_at_the_end_of_act_two() {
+        let c = Catalog::standard();
+        let mut s = GameState::new(&c);
+        let mut ev = Vec::new();
+        s.tick(&c, 0.1, 0.42, &mut ev);
+        assert_eq!(s.map_seed, 0, "pas avant l'éveil");
+        let (s, ev) = act_three(&c);
+        assert!(ev.contains(&DomainEvent::StarMapOpened));
+        assert_eq!(s.map.systems.len(), 25);
+        assert!(s.is_explored(0));
+        assert!(s.is_revealed(1) && !s.is_explored(1));
+        let far = s.map.systems.len() - 1;
+        assert!(!s.is_revealed(far), "brouillard au loin");
+        // La carte se reconstruit à l'identique depuis sa graine.
+        let mut copy = s.clone();
+        copy.map = StarMap {
+            systems: Vec::new(),
+            columns: 0,
+        };
+        copy.normalize(&c);
+        assert_eq!(copy.map, s.map);
+    }
+
+    #[test]
+    fn expeditions_take_real_time_and_reward_success() {
+        let c = Catalog::standard();
+        let (mut s, mut ev) = act_three(&c);
+        let target = 1;
+        assert_eq!(s.fleets_max(), 2);
+        s.launch_expedition(&c, target, 0.0, &mut ev);
+        assert_eq!(s.fleets.len(), 1);
+        s.launch_expedition(&c, target, 0.0, &mut ev);
+        assert_eq!(s.fleets.len(), 1, "une flotte par système");
+        let secs = s.map.systems[target].duration();
+        ev.clear();
+        s.apply_offline(&c, secs + 1.0, &mut ev);
+        assert!(ev.iter().any(|e| matches!(
+            e,
+            DomainEvent::ExpeditionReturned {
+                system: 1,
+                success: true,
+                ..
+            }
+        )));
+        assert!(s.is_explored(target));
+        assert!(s.has_achievement(c.achievement_by_key("exp1").unwrap()));
+        // Une expédition ratée n'explore rien.
+        let next = s.map.systems[0].links[1];
+        s.launch_expedition(&c, next, 0.999, &mut ev);
+        let secs = s.map.systems[next].duration();
+        ev.clear();
+        s.tick(&c, secs + 1.0, 0.5, &mut ev);
+        assert!(ev
+            .iter()
+            .any(|e| matches!(e, DomainEvent::ExpeditionReturned { success: false, .. })));
+        assert!(!s.is_explored(next));
+    }
+
+    #[test]
+    fn explored_systems_give_permanent_bonuses() {
+        let c = Catalog::standard();
+        let (mut s, _) = act_three(&c);
+        let prod = economy::permanent_multiplier(&c, &s);
+        let nebula = s
+            .map
+            .systems
+            .iter()
+            .position(|x| x.kind == SystemKind::Nebula && x.index > 0)
+            .unwrap();
+        s.explored[nebula] = true;
+        let scale = s.map.systems[nebula].reward_scale();
+        let ratio = economy::permanent_multiplier(&c, &s) / prod;
+        assert!((ratio - (1.0 + 0.10 * scale)).abs() < 1e-9);
+        // Chaque Civilisation explorée ajoute une flotte.
+        let civ = s
+            .map
+            .systems
+            .iter()
+            .position(|x| x.kind == SystemKind::Civilization)
+            .unwrap();
+        s.explored[civ] = true;
+        assert_eq!(s.fleets_max(), 3);
+        // Le danger baisse la chance de succès.
+        let easy = s.expedition_chance(1);
+        let hard = s.expedition_chance(s.map.systems.len() - 1);
+        assert!(easy > hard && hard >= 0.25);
     }
 }

@@ -138,6 +138,8 @@ pub struct Visuals {
     pub bang: Option<crate::screens::bigbang::BangSequence>,
     /// Générique de fin de l'Acte II.
     pub ending: Option<crate::screens::ending::EndingSequence>,
+    /// Systèmes tout juste explorés : (instant, système), pour l'onde sur la carte.
+    pub map_pops: Vec<(f64, usize)>,
     /// Étape du Grand Attracteur qui vient d'être achevée : (instant, étape).
     pub attractor_pop: Option<(f64, usize)>,
     pub sun_scale: f64,
@@ -185,6 +187,7 @@ impl Visuals {
             bang: None,
             ending: None,
             attractor_pop: None,
+            map_pops: Vec::new(),
             sun_scale: 1.0,
         }
     }

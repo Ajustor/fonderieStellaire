@@ -128,6 +128,7 @@ pub fn lines(ctx: &Ctx) -> Vec<(String, Style)> {
         "✷ Big Bang [G] (30 Big Crunch) : les Big Crunch repartent de zéro contre des particules primordiales (+100 % de production, +25 % de fragments chacune). Le Laboratoire, les Clés et le Grand Attracteur restent.".into(),
         "▼ Forge primordiale [G] : des particules pour forger 3 générateurs de fin de jeu, présents dans tous les cycles.".into(),
         "◆ Grand Attracteur [G] : 7 étapes payées en particules et construites en temps réel, même jeu fermé. La dernière clôt l'Acte II.".into(),
+        "▸ Carte stellaire [X] (Acte III, après l'éveil du Grand Attracteur) : envoie des flottes explorer des systèmes, en temps réel. Plus un système est dangereux, plus l'expédition est longue et risquée, et plus elle rapporte : production, fragments, hors-ligne, comètes, flottes en plus ou un gros gain immédiat.".into(),
         "○ Hors-ligne : ta fonderie produit à 50 % pendant ton absence (12 h max).".into(),
         "· Raccourcis : [A] tout acheter · [T] automate · [PgUp]/[PgDn] journal.".into(),
         "· Sauvegarde automatique toutes les 30 s et en quittant.".into(),

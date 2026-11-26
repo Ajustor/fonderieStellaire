@@ -91,6 +91,12 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
                     .attractor_stage(b.stage)
                     .map(|s| (s.name, fmt::duration(b.remaining)))
             });
+            let fleets = snap
+                .fleets
+                .iter()
+                .map(|f| f.remaining)
+                .fold(None, |a: Option<f64>, r| Some(a.map_or(r, |a| a.min(r))))
+                .map(|next| (snap.fleets.len(), fmt::duration(next)));
             let pct = fmt::percent(snap.progress.completion);
             let room = area
                 .width
@@ -111,6 +117,13 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
                         s.push_str(&format!(" ◇ {n} {d} [G] ·"));
                     } else {
                         s.push_str(&format!(" ◇ {d} ·"));
+                    }
+                }
+                if let Some((n, d)) = &fleets {
+                    if named {
+                        s.push_str(&format!(" ▸ {n} flotte(s) {d} [X] ·"));
+                    } else {
+                        s.push_str(&format!(" ▸ {d} ·"));
                     }
                 }
                 s

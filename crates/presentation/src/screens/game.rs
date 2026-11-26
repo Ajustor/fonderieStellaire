@@ -16,7 +16,7 @@ use crate::widgets::journal::Journal;
 use crate::widgets::toast::Toasts;
 use crate::widgets::{
     ceremony, challenges, codex, cosmos, generators, header, help_bar, journal, lab, modal,
-    options, portals, shop, sky, sparkline, upgrades, Ctx,
+    options, portals, shop, sky, sparkline, starmap, upgrades, Ctx,
 };
 
 /// Décalage entre deux panneaux de la cascade.
@@ -112,6 +112,9 @@ pub fn render(
             ui.options_armed,
             &info,
         );
+    }
+    if let Some(m) = ui.starmap {
+        starmap::render(buf, area, ctx, &m, &vis.stars, &vis.map_pops);
     }
     if let Some(at) = ui.wipe_at {
         options::render_wipe(buf, area, ctx.now, at);

@@ -41,6 +41,36 @@ pub struct ForgeView {
     pub available: bool,
 }
 
+/// Un système de la Carte stellaire, vu par la présentation.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SystemView {
+    pub index: usize,
+    pub name: String,
+    /// Systèmes reliés.
+    pub links: Vec<usize>,
+    pub column: usize,
+    /// Position verticale dans la colonne (0..1).
+    pub y: f64,
+    pub kind: domain::SystemKind,
+    pub danger: u8,
+    pub explored: bool,
+    /// Visible (exploré ou relié à un système exploré).
+    pub revealed: bool,
+    /// Une flotte peut partir vers lui maintenant.
+    pub available: bool,
+    pub chance: f64,
+    pub duration: f64,
+    pub reward_scale: f64,
+}
+
+/// Une flotte en route.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FleetView {
+    pub target: usize,
+    pub remaining: f64,
+    pub total: f64,
+}
+
 /// Étape du Grand Attracteur en construction.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ResearchBuildView {
@@ -249,4 +279,13 @@ pub struct GameSnapshot {
     pub attractor_buildable: bool,
     pub attractor_awakened: bool,
     pub attractor_production: f64,
+    /// Acte III : Carte stellaire et expéditions.
+    pub starmap_unlocked: bool,
+    pub systems: Vec<SystemView>,
+    pub fleets: Vec<FleetView>,
+    pub fleets_max: usize,
+    /// Systèmes explorés (hors fonderie).
+    pub explored: usize,
+    pub map_production: f64,
+    pub map_fragments: f64,
 }

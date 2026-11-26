@@ -41,4 +41,6 @@ pub enum Command {
     CycleFrameRate,
     /// Efface la partie et repart de zéro (les réglages sont gardés).
     NewGame,
+    /// Envoie une flotte explorer un système de la Carte stellaire.
+    LaunchExpedition(usize),
 }

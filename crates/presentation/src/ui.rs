@@ -69,6 +69,8 @@ pub struct Ui {
     /// Laboratoire (touche L) et sa sélection.
     pub lab: Option<Popup>,
     pub lab_sel: usize,
+    /// Carte stellaire (touche X).
+    pub starmap: Option<crate::widgets::starmap::StarMapState>,
     /// Options (touche R), sélection, et confirmation armée de l'effacement.
     pub options: Option<Popup>,
     pub options_sel: usize,

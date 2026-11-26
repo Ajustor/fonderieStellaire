@@ -66,6 +66,12 @@ pub struct SaveData {
     pub attractor: usize,
     /// Secondes restantes de l'étape en construction (0 ou négatif : aucune).
     pub attractor_left: f64,
+    /// Acte III : graine de la carte, systèmes explorés, flottes en route
+    /// (cible, secondes restantes, durée, succès) et expéditions lancées.
+    pub map_seed: u64,
+    pub explored: Vec<usize>,
+    pub fleets: Vec<(usize, f64, f64, bool)>,
+    pub expeditions_launched: u32,
 }
 
 impl SaveData {
@@ -173,6 +179,20 @@ impl SaveData {
                 .collect(),
             attractor: state.attractor,
             attractor_left: state.attractor_build.unwrap_or(-1.0),
+            map_seed: state.map_seed,
+            explored: state
+                .explored
+                .iter()
+                .enumerate()
+                .filter(|(_, &e)| e)
+                .map(|(i, _)| i)
+                .collect(),
+            fleets: state
+                .fleets
+                .iter()
+                .map(|f| (f.target, f.left, f.total, f.success))
+                .collect(),
+            expeditions_launched: state.expeditions_launched,
         }
     }
 
@@ -251,6 +271,29 @@ impl SaveData {
             }
         }
         s.attractor = self.attractor;
+        s.map_seed = self.map_seed;
+        if s.map_seed != 0 {
+            s.map = domain::starmap::generate(s.map_seed);
+            s.explored = vec![false; s.map.systems.len()];
+            for &i in &self.explored {
+                if let Some(e) = s.explored.get_mut(i) {
+                    *e = true;
+                }
+            }
+        }
+        s.fleets = self
+            .fleets
+            .iter()
+            .map(
+                |&(target, left, total, success)| domain::state::Expedition {
+                    target,
+                    left,
+                    total,
+                    success,
+                },
+            )
+            .collect();
+        s.expeditions_launched = self.expeditions_launched;
         // 0 (valeur par défaut) ou négatif : aucun chantier en cours.
         s.attractor_build = (self.attractor_left > 0.0).then_some(self.attractor_left);
         s.research = catalog

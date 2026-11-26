@@ -39,6 +39,8 @@ pub enum Intent {
     Cosmos,
     /// `R` : Options (réglages, recommencer une partie).
     Options,
+    /// `X` : Carte stellaire (Acte III).
+    StarMap,
     /// `T` : activer / arrêter l'automate.
     ToggleAuto,
     /// `PgUp` / `PgDn` : remonter / redescendre dans le journal.
@@ -163,6 +165,7 @@ pub fn map_key(key: &KeyEvent) -> Option<Intent> {
             'v' => Intent::Universes,
             'g' => Intent::Cosmos,
             'r' => Intent::Options,
+            'x' => Intent::StarMap,
             't' => Intent::ToggleAuto,
             'o' | 'y' => Intent::Yes,
             'n' => Intent::No,

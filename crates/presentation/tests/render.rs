@@ -403,9 +403,12 @@ fn descriptions_and_info_screen() {
     app.set_time(101.0);
     let text = render(&mut app, 100, 30);
     println!("{text}");
-    assert!(text.contains("SUCCÈS  2/42"));
+    assert!(text.contains("SUCCÈS  2/45"));
     assert!(text.contains("★ Premier pas"));
-    assert!(text.contains("○ Centurion"));
+    // Succès du plus facile au plus difficile.
+    let first = text.find("★ Premier pas").expect("premier succès");
+    let comet = text.find("○ Chasseur de comètes").expect("deuxième succès");
+    assert!(first < comet);
     app.on_intent(Intent::Down);
     app.on_intent(Intent::Escape);
     app.set_time(102.0);
@@ -1024,4 +1027,58 @@ fn options_and_new_game_with_double_confirmation() {
     assert_eq!(snap.stardust, 0.0);
     assert_eq!(snap.fragments, 0.0);
     assert_eq!(snap.frame_rate, 20, "les réglages sont gardés");
+}
+
+#[test]
+fn v0_10_star_map_and_expeditions() {
+    // Grand Attracteur éveillé : l'Acte III s'ouvre au premier instant de jeu.
+    let mut save = advanced_save();
+    save.big_bangs = 1;
+    save.attractor = 7;
+    let mut app = app_with(Some(save));
+    let mut t = 100.0;
+    app.set_time(t);
+    app.enter_game_now();
+    app.update(0.033);
+    assert!(app.snapshot().starmap_unlocked);
+    let _ = render(&mut app, 120, 36);
+    app.on_intent(Intent::StarMap);
+    for _ in 0..20 {
+        t += 1.0 / 30.0;
+        app.set_time(t);
+        let _ = render(&mut app, 120, 36);
+    }
+    let text = render(&mut app, 120, 36);
+    println!("{text}");
+    assert!(text.contains("CARTE STELLAIRE"), "{text}");
+    assert!(text.contains("Explorés : 0/24"));
+    assert!(text.contains("[Entrée] envoyer une flotte"));
+    assert!(text.contains("chance de succès"));
+
+    // Envoi d'une flotte, puis son retour quelques heures plus tard.
+    app.on_intent(Intent::Buy);
+    app.update(0.033);
+    let snap = app.snapshot();
+    assert_eq!(snap.fleets.len(), 1);
+    let target = snap.fleets[0].target;
+    let secs = snap.fleets[0].total;
+    let text = render(&mut app, 120, 36);
+    assert!(text.contains('▸'), "la flotte est dessinée :\n{text}");
+    app.update(secs + 1.0);
+    let snap = app.snapshot();
+    assert!(snap.fleets.is_empty());
+    let explored = snap.systems[target].explored;
+    t += 1.0;
+    app.set_time(t);
+    let text = render(&mut app, 120, 36);
+    println!("{text}");
+    if explored {
+        assert!(text.contains("Explorés : 1/24"), "{text}");
+    }
+    // 80×24 : la carte reste lisible.
+    let text = render(&mut app, 80, 24);
+    assert!(text.contains("CARTE STELLAIRE"));
+    app.on_intent(Intent::Escape);
+    let text = render(&mut app, 120, 36);
+    assert!(!text.contains("CARTE STELLAIRE"));
 }

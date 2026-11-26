@@ -51,6 +51,10 @@ pub enum AchievementCondition {
     Forged(usize),
     /// Étapes du Grand Attracteur achevées.
     AttractorStages(usize),
+    /// Expéditions lancées.
+    Expeditions(u32),
+    /// Systèmes explorés (hors fonderie).
+    Explored(usize),
 }
 
 /// Données nécessaires pour évaluer une condition de succès.
@@ -75,6 +79,8 @@ pub struct AchievementContext<'a> {
     pub big_bangs: u32,
     pub forged: usize,
     pub attractor_stages: usize,
+    pub expeditions: u32,
+    pub explored: usize,
 }
 
 impl AchievementCondition {
@@ -108,6 +114,8 @@ impl AchievementCondition {
             AchievementCondition::BigBangs(n) => ctx.big_bangs >= n,
             AchievementCondition::Forged(n) => ctx.forged >= n,
             AchievementCondition::AttractorStages(n) => ctx.attractor_stages >= n,
+            AchievementCondition::Expeditions(n) => ctx.expeditions >= n,
+            AchievementCondition::Explored(n) => ctx.explored >= n,
         }
     }
 }
@@ -147,6 +155,8 @@ mod tests {
             big_bangs: 0,
             forged: 0,
             attractor_stages: 0,
+            expeditions: 0,
+            explored: 0,
         }
     }
 

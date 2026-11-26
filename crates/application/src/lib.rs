@@ -18,7 +18,8 @@ pub use game_service::{GameEvent, GameService, AUTOSAVE_INTERVAL, HISTORY_LEN};
 pub use ports::{Clock, LoadOutcome, RandomSource, RepositoryError, SaveRepository};
 pub use save_dto::{SaveData, SAVE_RESET_BELOW, SAVE_VERSION};
 pub use snapshot::{
-    ActiveChallengeView, ChallengeView, ConstellationView, GameSnapshot, GeneratorView, LabView,
-    NextUpgradeView, PerkView, ProgressView, ResearchView, TeaserView, UniverseView, UpgradeView,
+    ActiveChallengeView, ChallengeView, ConstellationView, FleetView, ForgeView, GameSnapshot,
+    GeneratorView, LabView, NextUpgradeView, PerkView, ProgressView, ResearchBuildView,
+    ResearchView, SystemView, TeaserView, UniverseView, UpgradeView,
 };
 pub use updates::{ReleaseInfo, UpdateError, UpdateEvent, UpdateProvider, UpdateService};

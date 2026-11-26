@@ -247,7 +247,9 @@ const CLICK_UPGRADES: [(&str, f64, f64, f64); 3] = [
 /// Amélioration « maintenir Espace pour récolter » : (nom, total_run requis, coût).
 const HOLD_UPGRADE: (&str, f64, f64) = ("Récolte continue", 150.0, 300.0);
 
-const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 42] = [
+/// Succès, du plus facile au plus difficile (ordre mesuré par le simulateur
+/// sur une partie à 3 h de jeu par jour).
+const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 45] = [
     (
         "first",
         "Premier pas",
@@ -255,34 +257,10 @@ const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 42] = [
         AchievementCondition::GeneratorsOwned(1),
     ),
     (
-        "hundred",
-        "Centurion",
-        "100 exemplaires d'un même générateur",
-        AchievementCondition::SameGenerator(100),
-    ),
-    (
-        "all_types",
-        "Collectionneur",
-        "Au moins un générateur de chaque type",
-        AchievementCondition::AllTypes(9),
-    ),
-    (
-        "m1",
-        "Millionnaire",
-        "Récolter 1 million de poussières au total",
-        AchievementCondition::TotalAll(1e6),
-    ),
-    (
-        "b1",
-        "Milliardaire",
-        "Récolter 1 milliard de poussières au total",
-        AchievementCondition::TotalAll(1e9),
-    ),
-    (
-        "t1",
-        "Magnat cosmique",
-        "Récolter 1 billion de poussières au total",
-        AchievementCondition::TotalAll(1e12),
+        "comet1",
+        "Chasseur de comètes",
+        "Capturer une comète",
+        AchievementCondition::CometsCaught(1),
     ),
     (
         "clicks100",
@@ -297,10 +275,10 @@ const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 42] = [
         AchievementCondition::Clicks(1_000),
     ),
     (
-        "comet1",
-        "Chasseur de comètes",
-        "Capturer une comète",
-        AchievementCondition::CometsCaught(1),
+        "dyson1",
+        "Ingénieur stellaire",
+        "Posséder une Sphère de Dyson",
+        AchievementCondition::OwnGenerator { index: 4, count: 1 },
     ),
     (
         "comet10",
@@ -309,10 +287,10 @@ const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 42] = [
         AchievementCondition::CometsCaught(10),
     ),
     (
-        "nova1",
-        "Supernova !",
-        "Déclencher une Supernova",
-        AchievementCondition::Supernovas(1),
+        "m1",
+        "Millionnaire",
+        "Récolter 1 million de poussières au total",
+        AchievementCondition::TotalAll(1e6),
     ),
     (
         "prod1m",
@@ -321,103 +299,16 @@ const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 42] = [
         AchievementCondition::Production(1e6),
     ),
     (
-        "dyson1",
-        "Ingénieur stellaire",
-        "Posséder une Sphère de Dyson",
-        AchievementCondition::OwnGenerator { index: 4, count: 1 },
-    ),
-    (
-        "weaver1",
-        "Architecte cosmique",
-        "Posséder un Tisseur de galaxies",
-        AchievementCondition::OwnGenerator { index: 8, count: 1 },
-    ),
-    (
-        "fivehundred",
-        "Industriel",
-        "500 exemplaires d'un même générateur",
-        AchievementCondition::SameGenerator(500),
-    ),
-    (
-        "q1",
-        "Empereur galactique",
-        "Récolter 1 billiard de poussières au total",
-        AchievementCondition::TotalAll(1e15),
-    ),
-    (
-        "clicks10k",
-        "Main de fer",
-        "Récolter 10 000 fois à la main",
-        AchievementCondition::Clicks(10_000),
-    ),
-    (
-        "comet50",
-        "Seigneur des comètes",
-        "Capturer 50 comètes",
-        AchievementCondition::CometsCaught(50),
-    ),
-    (
-        "nova5",
-        "Phénix",
-        "Déclencher 5 Supernovas",
-        AchievementCondition::Supernovas(5),
-    ),
-    (
-        "nova25",
-        "Éternel retour",
-        "Déclencher 25 Supernovas",
-        AchievementCondition::Supernovas(25),
-    ),
-    (
-        "prod1b",
-        "Forge divine",
-        "Produire 1 milliard par seconde",
-        AchievementCondition::Production(1e9),
-    ),
-    (
-        "frag100",
-        "Cœur d'étoile",
-        "Gagner 100 fragments au total",
-        AchievementCondition::Fragments(100.0),
+        "nova1",
+        "Supernova !",
+        "Déclencher une Supernova",
+        AchievementCondition::Supernovas(1),
     ),
     (
         "perk1",
         "Apprenti artisan",
         "Acheter une amélioration à l'Atelier stellaire",
         AchievementCondition::PerksOwned(1),
-    ),
-    (
-        "allperks",
-        "Maître de l'Atelier",
-        "Acheter toutes les améliorations de l'Atelier",
-        AchievementCondition::AllPerks,
-    ),
-    (
-        "whitehole1",
-        "Fontaine cosmique",
-        "Posséder un Trou blanc",
-        AchievementCondition::OwnGenerator { index: 9, count: 1 },
-    ),
-    (
-        "multiverse1",
-        "Voyageur des mondes",
-        "Posséder un Moteur à multivers",
-        AchievementCondition::OwnGenerator {
-            index: 11,
-            count: 1,
-        },
-    ),
-    (
-        "const1",
-        "Première étoile",
-        "Monter une Constellation d'un niveau",
-        AchievementCondition::ConstellationLevels(1),
-    ),
-    (
-        "const50",
-        "Cartographe du ciel",
-        "Atteindre 50 niveaux de Constellations au total",
-        AchievementCondition::ConstellationLevels(50),
     ),
     (
         "golden1",
@@ -432,22 +323,112 @@ const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 42] = [
         AchievementCondition::BlackComets(1),
     ),
     (
+        "comet50",
+        "Seigneur des comètes",
+        "Capturer 50 comètes",
+        AchievementCondition::CometsCaught(50),
+    ),
+    (
+        "b1",
+        "Milliardaire",
+        "Récolter 1 milliard de poussières au total",
+        AchievementCondition::TotalAll(1e9),
+    ),
+    (
+        "allperks",
+        "Maître de l'Atelier",
+        "Acheter toutes les améliorations de l'Atelier",
+        AchievementCondition::AllPerks,
+    ),
+    (
+        "const1",
+        "Première étoile",
+        "Monter une Constellation d'un niveau",
+        AchievementCondition::ConstellationLevels(1),
+    ),
+    (
+        "clicks10k",
+        "Main de fer",
+        "Récolter 10 000 fois à la main",
+        AchievementCondition::Clicks(10_000),
+    ),
+    (
+        "all_types",
+        "Collectionneur",
+        "Au moins un générateur de chaque type",
+        AchievementCondition::AllTypes(9),
+    ),
+    (
+        "weaver1",
+        "Architecte cosmique",
+        "Posséder un Tisseur de galaxies",
+        AchievementCondition::OwnGenerator { index: 8, count: 1 },
+    ),
+    (
+        "nova5",
+        "Phénix",
+        "Déclencher 5 Supernovas",
+        AchievementCondition::Supernovas(5),
+    ),
+    (
         "challenge1",
         "Défi relevé",
         "Réussir un Défi",
         AchievementCondition::ChallengesDone(1),
     ),
     (
-        "challenge_all",
-        "Maître des Défis",
-        "Réussir tous les Défis",
-        AchievementCondition::ChallengesDone(5),
+        "frag100",
+        "Cœur d'étoile",
+        "Gagner 100 fragments au total",
+        AchievementCondition::Fragments(100.0),
+    ),
+    (
+        "prod1b",
+        "Forge divine",
+        "Produire 1 milliard par seconde",
+        AchievementCondition::Production(1e9),
+    ),
+    (
+        "whitehole1",
+        "Fontaine cosmique",
+        "Posséder un Trou blanc",
+        AchievementCondition::OwnGenerator { index: 9, count: 1 },
+    ),
+    (
+        "t1",
+        "Magnat cosmique",
+        "Récolter 1 billion de poussières au total",
+        AchievementCondition::TotalAll(1e12),
+    ),
+    (
+        "const50",
+        "Cartographe du ciel",
+        "Atteindre 50 niveaux de Constellations au total",
+        AchievementCondition::ConstellationLevels(50),
+    ),
+    (
+        "hundred",
+        "Centurion",
+        "100 exemplaires d'un même générateur",
+        AchievementCondition::SameGenerator(100),
+    ),
+    (
+        "q1",
+        "Empereur galactique",
+        "Récolter 1 billiard de poussières au total",
+        AchievementCondition::TotalAll(1e15),
     ),
     (
         "crunch1",
         "Effondrement",
         "Déclencher un Big Crunch",
         AchievementCondition::Crunches(1),
+    ),
+    (
+        "challenge_all",
+        "Maître des Défis",
+        "Réussir tous les Défis",
+        AchievementCondition::ChallengesDone(5),
     ),
     (
         "crunch5",
@@ -462,16 +443,31 @@ const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 42] = [
         AchievementCondition::Crunches(10),
     ),
     (
+        "multiverse1",
+        "Voyageur des mondes",
+        "Posséder un Moteur à multivers",
+        AchievementCondition::OwnGenerator {
+            index: 11,
+            count: 1,
+        },
+    ),
+    (
+        "fivehundred",
+        "Industriel",
+        "500 exemplaires d'un même générateur",
+        AchievementCondition::SameGenerator(500),
+    ),
+    (
         "lab1",
         "Premier chercheur",
         "Terminer une recherche au Laboratoire",
         AchievementCondition::LabResearch(1),
     ),
     (
-        "laball",
-        "Laboratoire complet",
-        "Terminer toutes les recherches du Laboratoire",
-        AchievementCondition::LabResearch(12),
+        "nova25",
+        "Éternel retour",
+        "Déclencher 25 Supernovas",
+        AchievementCondition::Supernovas(25),
     ),
     (
         "key1",
@@ -492,6 +488,12 @@ const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 42] = [
         AchievementCondition::BigBangs(1),
     ),
     (
+        "laball",
+        "Laboratoire complet",
+        "Terminer toutes les recherches du Laboratoire",
+        AchievementCondition::LabResearch(12),
+    ),
+    (
         "forgeall",
         "Genèse",
         "Forger les 3 générateurs primordiaux",
@@ -502,6 +504,24 @@ const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 42] = [
         "Fin de l'Acte II",
         "Éveiller le Grand Attracteur",
         AchievementCondition::AttractorStages(7),
+    ),
+    (
+        "exp1",
+        "Premier voyage",
+        "Envoyer une flotte en expédition",
+        AchievementCondition::Expeditions(1),
+    ),
+    (
+        "map10",
+        "Cartographe",
+        "Explorer 10 systèmes de la Carte stellaire",
+        AchievementCondition::Explored(10),
+    ),
+    (
+        "mapall",
+        "Atlas complet",
+        "Explorer tous les systèmes de la Carte stellaire",
+        AchievementCondition::Explored(24),
     ),
 ];
 
@@ -1313,7 +1333,7 @@ mod tests {
         let cost: u32 = c.attractor.iter().map(|s| s.cost).sum();
         assert_eq!(cost, 23);
         assert!(c.upgrade_by_key("hold_0").is_some());
-        assert_eq!(c.achievements.len(), 42);
+        assert_eq!(c.achievements.len(), 45);
         assert_eq!(c.universes.len(), 6);
         assert_eq!(
             c.universes

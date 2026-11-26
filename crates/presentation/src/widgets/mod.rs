@@ -16,6 +16,7 @@ pub mod portals;
 pub mod shop;
 pub mod sky;
 pub mod sparkline;
+pub mod starmap;
 pub mod toast;
 pub mod upgrades;
 

@@ -73,6 +73,7 @@ pub fn permanent_multiplier(catalog: &Catalog, state: &GameState) -> f64 {
         * state.crunch_production(catalog)
         * state.particle_production()
         * state.attractor_production(catalog)
+        * state.map_bonus(crate::starmap::SystemKind::Nebula, 0.10)
         * state.lab_production(catalog)
         * state.universe_production(catalog)
         * state.constellation_production(catalog)

@@ -49,10 +49,12 @@ pub struct SimReport {
     pub milestones: Vec<Milestone>,
     /// Temps simulé au total.
     pub simulated: f64,
-    /// La partie est allée jusqu'à la fin de l'Acte II.
+    /// La partie est allée jusqu'à la fin du contenu (carte complète).
     pub finished: bool,
     pub supernovas_total: u32,
     pub crunches_total: u32,
+    /// Succès débloqués : (clé, instant), dans l'ordre d'obtention.
+    pub achievements: Vec<(&'static str, f64)>,
 }
 
 /// Hasard déterministe (xorshift), indépendant de l'infrastructure.
@@ -186,6 +188,21 @@ pub fn simulate(catalog: &Catalog, cfg: &SimConfig, mut progress: impl FnMut(f64
             s.build_attractor(catalog, &mut ev);
         }
 
+        // Expéditions : la cible la plus sûre parmi les systèmes accessibles.
+        while s.fleets.len() < s.fleets_max() {
+            let target = (1..s.map.systems.len())
+                .filter(|&i| s.can_launch_expedition(catalog, i))
+                .max_by(|&a, &b| {
+                    s.expedition_chance(a)
+                        .partial_cmp(&s.expedition_chance(b))
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+            match target {
+                Some(i) => s.launch_expedition(catalog, i, rng.next(), &mut ev),
+                None => break,
+            }
+        }
+
         // Étapes.
         for e in &ev {
             match e {
@@ -241,6 +258,24 @@ pub fn simulate(catalog: &Catalog, cfg: &SimConfig, mut progress: impl FnMut(f64
                     );
                 }
                 DomainEvent::AttractorAwakened => {
+                    mark(&mut report, "Fin de l'Acte II".into(), t);
+                }
+                DomainEvent::ExpeditionReturned { success: true, .. } => {
+                    let n = s.explored_count();
+                    if n >= 1 {
+                        mark(&mut report, "Carte : 1er système exploré".into(), t);
+                    }
+                    if n >= 10 {
+                        mark(&mut report, "Carte : 10 systèmes explorés".into(), t);
+                    }
+                }
+                DomainEvent::AchievementUnlocked { achievement } => {
+                    if let Some(a) = catalog.achievement(*achievement) {
+                        report.achievements.push((a.key, t));
+                    }
+                }
+                DomainEvent::StarMapCompleted => {
+                    mark(&mut report, "Carte stellaire complète".into(), t);
                     report.finished = true;
                 }
                 _ => {}
@@ -356,5 +391,29 @@ mod tests {
         assert_eq!(fmt_play_time(42.0 * 60.0), "42 min");
         assert_eq!(fmt_play_time(5.0 * 3600.0 + 12.0 * 60.0), "5 h 12 min");
         assert_eq!(fmt_play_time(3.0 * 86400.0 + 4.0 * 3600.0), "3 j 04 h");
+    }
+
+    /// Ordre d'obtention des succès sur une partie simulée (3 h par jour).
+    /// `cargo test --release -p application achievement_order -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn achievement_order() {
+        let c = Catalog::standard();
+        let cfg = SimConfig {
+            daily_hours: Some(3.0),
+            max_secs: 60.0 * 86_400.0,
+            ..SimConfig::default()
+        };
+        let r = simulate(&c, &cfg, |_| {});
+        for (k, t) in &r.achievements {
+            println!("{k:<14} {}", fmt_play_time(*t));
+        }
+        let missing: Vec<_> = c
+            .achievements
+            .iter()
+            .filter(|a| !r.achievements.iter().any(|(k, _)| *k == a.key))
+            .map(|a| a.key)
+            .collect();
+        println!("jamais : {missing:?}");
     }
 }

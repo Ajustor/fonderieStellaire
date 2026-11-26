@@ -10,9 +10,9 @@ use crate::error::AppError;
 use crate::ports::{Clock, LoadOutcome, RandomSource, SaveRepository};
 use crate::save_dto::{SaveData, SAVE_RESET_BELOW};
 use crate::snapshot::{
-    ActiveChallengeView, ChallengeView, ConstellationView, ForgeView, GameSnapshot, GeneratorView,
-    LabView, NextUpgradeView, PerkView, ProgressView, ResearchBuildView, ResearchView, TeaserView,
-    UniverseView, UpgradeView,
+    ActiveChallengeView, ChallengeView, ConstellationView, FleetView, ForgeView, GameSnapshot,
+    GeneratorView, LabView, NextUpgradeView, PerkView, ProgressView, ResearchBuildView,
+    ResearchView, SystemView, TeaserView, UniverseView, UpgradeView,
 };
 
 /// Nombre d'échantillons de production conservés (1 par seconde).
@@ -197,6 +197,11 @@ impl GameService {
             Command::BigBang => self.state.big_bang(&self.catalog, &mut ev),
             Command::Forge(id) => self.state.forge(&self.catalog, id, &mut ev),
             Command::BuildAttractor => self.state.build_attractor(&self.catalog, &mut ev),
+            Command::LaunchExpedition(system) => {
+                let roll = self.rng.next_f64();
+                self.state
+                    .launch_expedition(&self.catalog, system, roll, &mut ev)
+            }
             Command::CycleFrameRate => {
                 self.frame_rate = match self.frame_rate {
                     0 | 30 => 20,
@@ -416,6 +421,34 @@ impl GameService {
         snap.attractor_buildable = st.can_build_attractor(c);
         snap.attractor_awakened = st.attractor_awakened(c);
         snap.attractor_production = st.attractor_production(c);
+        snap.starmap_unlocked = st.starmap_unlocked(c) && !st.map.systems.is_empty();
+        snap.fleets_max = st.fleets_max();
+        snap.explored = st.explored_count();
+        snap.systems.clear();
+        snap.systems
+            .extend(st.map.systems.iter().map(|sys| SystemView {
+                index: sys.index,
+                name: sys.name.clone(),
+                links: sys.links.clone(),
+                column: sys.column,
+                y: sys.y,
+                kind: sys.kind,
+                danger: sys.danger,
+                explored: st.is_explored(sys.index),
+                revealed: st.is_revealed(sys.index),
+                available: st.can_launch_expedition(c, sys.index),
+                chance: st.expedition_chance(sys.index),
+                duration: sys.duration(),
+                reward_scale: sys.reward_scale(),
+            }));
+        snap.fleets.clear();
+        snap.fleets.extend(st.fleets.iter().map(|f| FleetView {
+            target: f.target,
+            remaining: f.left,
+            total: f.total,
+        }));
+        snap.map_production = st.map_bonus(domain::SystemKind::Nebula, 0.10);
+        snap.map_fragments = st.map_bonus(domain::SystemKind::Cluster, 0.10);
         snap.research = st.research.and_then(|(id, left)| {
             let def = c.lab_node(id)?;
             Some(ResearchView {

@@ -199,6 +199,10 @@ fn no_text_is_cut_anywhere() {
     report.extend(audit("big crunch", late.clone(), &[Intent::BigCrunch], 0));
     report.extend(audit("univers", late.clone(), &[Intent::Universes], 0));
     report.extend(audit("options", late.clone(), &[Intent::Options], 2));
+    let mut act3 = late.clone();
+    act3.big_bangs = 1;
+    act3.attractor = 7;
+    report.extend(audit("carte stellaire", act3, &[Intent::StarMap], 6));
     let mut bang = late.clone();
     bang.crunches = 34;
     report.extend(audit("cosmogonie", bang, &[Intent::Cosmos], 11));
