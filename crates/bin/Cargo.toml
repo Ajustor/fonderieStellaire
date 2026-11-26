@@ -1,0 +1,15 @@
+[package]
+name = "fonderie-stellaire"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "fonderie-stellaire"
+path = "src/main.rs"
+
+[dependencies]
+domain = { path = "../domain" }
+application = { path = "../application" }
+infrastructure = { path = "../infrastructure" }
+presentation = { path = "../presentation" }

@@ -1,0 +1,169 @@
+# Architecture
+
+Fonderie Stellaire suit une **Clean Architecture** en quatre couches. La séparation
+est **imposée par le compilateur** : chaque couche est une crate du workspace, et
+une crate ne peut utiliser que ce qu'elle déclare dans son `Cargo.toml`.
+
+```
+        ┌──────────────────────────────────────────────┐
+        │  bin (composition root : câble tout)         │
+        │   ┌──────────────────────────────────────┐   │
+        │   │ presentation (ratatui/crossterm)     │   │
+        │   │ infrastructure (fichiers, horloge…)  │   │
+        │   │   ┌──────────────────────────────┐   │   │
+        │   │   │ application (cas d'usage,    │   │   │
+        │   │   │ ports = traits)              │   │   │
+        │   │   │   ┌──────────────────────┐   │   │   │
+        │   │   │   │ domain (règles pures)│   │   │   │
+        │   │   │   └──────────────────────┘   │   │   │
+        │   │   └──────────────────────────────┘   │   │
+        │   └──────────────────────────────────────┘   │
+        └──────────────────────────────────────────────┘
+```
+
+## Règle de dépendance
+
+**Les dépendances pointent uniquement vers l'intérieur.**
+
+| Crate | Dépend de | Interdit |
+|---|---|---|
+| `domain` | *rien* (aucune crate externe, pas même `serde`) | I/O, horloge, aléa implicite |
+| `application` | `domain` | terminal, fichiers, `serde` |
+| `infrastructure` | `application`, `domain`, `serde`, `serde_json`, `dirs` | terminal |
+| `presentation` | `application`, `domain`, `ratatui`, `crossterm` | fichiers, `serde` |
+| `bin` (`fonderie-stellaire`) | toutes | logique métier |
+
+Vérification rapide :
+
+```sh
+grep -rlE "ratatui|crossterm" crates | grep -v crates/presentation   # → rien
+grep -rlE "serde|std::fs"     crates | grep -v crates/infrastructure # → rien
+```
+
+### Ce que fait chaque couche
+
+- **domain** — règles pures et déterministes : catalogue (`catalog.rs`), coûts et
+  paliers (`generator.rs`), production (`economy.rs`), améliorations, succès,
+  comètes, prestige, et l'agrégat `GameState`. Le temps (`dt`) et les tirages
+  aléatoires (`roll: f64`) arrivent **en paramètre**. Chaque opération pousse des
+  `DomainEvent` dans un `Vec`.
+- **application** — `GameService` orchestre les cas d'usage :
+  `handle(Command)`, `tick(dt)`, `load()`, `save()`, `fill_snapshot()`. Il parle au
+  monde extérieur via les **ports** (`SaveRepository`, `Clock`, `RandomSource`),
+  convertit l'état en `SaveData` (DTO pur Rust) et gère l'historique de production
+  et l'autosave. Il expose un `GameSnapshot` en lecture seule.
+- **infrastructure** — implémentations des ports : `JsonSaveRepository`
+  (miroir `serde` du DTO avec `#[serde(default)]`, écriture `.tmp` + renommage,
+  `.bak` si corrompu), `SystemClock`, `XorShift64`.
+- **presentation** — boucle de jeu, entrées, rendu et effets. Ne modifie jamais
+  l'état : elle envoie des `Command` et lit le `GameSnapshot`. Tous les états
+  purement visuels (tweens, particules, focus, défilement, toasts, journal)
+  vivent ici.
+- **bin** — composition root : instancie les adapters, les injecte dans
+  `GameService`, gère `--reset`, lance `presentation::run`.
+
+## Flux d'une action
+
+```
+ Touche ──► input.rs ──► Intent ──► app.rs ──► Command ──► GameService.handle()
+                                                              │
+                                                              ▼
+                                            GameState (domaine) modifié
+                                                              │
+                                            Vec<GameEvent> ◄──┘ (DomainEvent + sauvegarde…)
+                                                              │
+                         app.rs::react() ◄────────────────────┘
+                          ├─► Visuals  : particules, flash, shake, roulement du compteur…
+                          ├─► Toasts   : succès, paliers, comètes
+                          └─► Journal  : une ligne colorée par événement
+                                                              │
+ Chaque frame (≈ 30 FPS) : GameService.tick(dt) ──► événements ──► react()
+                           GameService.fill_snapshot(&mut snap)
+                           render(snap, Visuals) ──► Buffer ratatui ──► terminal
+```
+
+Toutes les animations sont **basées sur le temps** (`now` en secondes depuis le
+lancement), jamais sur le nombre de frames. La logique avance avec le delta temps
+réel mesuré par `Instant`.
+
+## Organisation de la présentation
+
+```
+presentation/src/
+├── app.rs          boucle, Intent → Command, réactions aux événements
+├── terminal.rs     raw mode, écran alternatif, panic hook, garde RAII
+├── input.rs        KeyEvent → Intent (ne garde que KeyEventKind::Press)
+├── layout.rs       découpage de l'écran de jeu
+├── ui.rs           focus, sélections, défilement, popup
+├── visuals.rs      état des effets de l'écran de jeu
+├── screens/        title (hyperespace + logo), game, supernova, too_small
+├── widgets/        header, generators, upgrades, sky, sparkline, journal,
+│                   help_bar, toast, modal
+├── fx/             moteur d'effets générique (aucune connaissance du jeu)
+│   ├── easing.rs   linear, cubic, sine, back, elastic, bounce
+│   ├── tween.rs    Tween<T: Lerp> (f64, (f64,f64), Rgb, Color)
+│   ├── timeline.rs then / with / delay / at
+│   ├── particles.rs pool fixe de 400 particules, burst / fountain / trail
+│   ├── color.rs    lerp, dégradés, HSL, dim / glow
+│   ├── noise.rs    value noise 2D + fBm
+│   └── effects.rs  flash, fade, offset (shake/slide), glitch, shimmer,
+│                   dissolve, typewriter, contour de bordure
+├── theme.rs        palette centralisée (aucune couleur en dur ailleurs)
+├── bigfont.rs      police 3 lignes
+└── fmt.rs          formats courts / longs / durées
+```
+
+## Guides
+
+### Ajouter un générateur
+
+1. `crates/domain/src/catalog.rs` : ajouter une ligne au tableau `GENERATORS`
+   (nom, pluriel, symbole à largeur simple, coût de base, prod/s). Les 4
+   améliorations du générateur sont générées automatiquement (`gen{N}_t{0..3}`).
+2. `crates/presentation/src/theme.rs` : ajouter sa couleur à `GENERATOR_COLORS`.
+3. Les tableaux d'effets indexés par générateur (`[f64; 9]` dans `visuals.rs`,
+   `gen_rows` dans `ui.rs`) sont dimensionnés à 9 : les agrandir.
+4. Optionnel : un glyphe d'orbite particulier dans `widgets/sky.rs`
+   (`orbit_glyph`).
+
+Les sauvegardes existantes restent compatibles (`owned` est redimensionné).
+
+### Ajouter une amélioration
+
+- Pour un nouveau niveau par générateur : une ligne dans `GENERATOR_TIERS`.
+- Pour une amélioration globale ou de clic : une ligne dans `GLOBAL_UPGRADES` ou
+  `CLICK_UPGRADES`.
+- Pour un nouvel **effet** : ajouter une variante à `upgrade::Effect`, la prendre
+  en compte dans `economy.rs`, et écrire un test.
+
+L'identifiant texte (`key`) doit rester **stable** : c'est lui qui est sauvegardé.
+
+### Ajouter un effet visuel
+
+1. Si l'effet est générique (nouvel easing, nouveau post-effet), l'ajouter dans
+   `fx/` avec un test unitaire — sans dépendre du jeu.
+2. Déclencher l'effet depuis `App::react` / `react_domain` (`app.rs`) en réponse
+   au `DomainEvent` concerné, en stockant un horodatage dans `Visuals`.
+3. Le dessiner dans le widget concerné en calculant l'avancement à partir de
+   `ctx.now` (jamais du nombre de frames), et respecter `ctx.reduced`
+   (mode effets réduits : pas de shake, glitch ni nébuleuse, particules ÷ 4).
+
+### Ajouter un événement de domaine
+
+1. Ajouter la variante dans `domain/src/events.rs` et l'émettre depuis
+   `GameState`.
+2. Le `match` exhaustif de `App::react_domain` refusera de compiler tant que
+   l'événement n'a pas de réaction visuelle : c'est voulu.
+
+## Tests
+
+- **domain** : coûts, achat ×N / MAX, paliers, production, fragments, succès,
+  comètes, gains hors-ligne, rythme du début de partie.
+- **application** : `GameService` avec `FakeClock`, `FakeRng`,
+  `InMemoryRepository` (achat, hors-ligne, Supernova, autosave, aller-retour de
+  sauvegarde, sauvegarde corrompue).
+- **infrastructure** : repository JSON sur fichiers temporaires, xorshift.
+- **presentation** : easing, tweens, timeline, particules, bruit, post-effets,
+  formatage, et rendu complet dans un `TestBackend` 100×30 / 80×24 / 120×40
+  (`tests/render.rs`, avec mesure du temps de rendu et une session complète
+  jusqu'à la Supernova).

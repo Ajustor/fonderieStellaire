@@ -1,0 +1,24 @@
+//! Couche domaine : règles du jeu pures et déterministes.
+//!
+//! Aucune dépendance externe, aucune I/O, aucune horloge, aucun aléa implicite :
+//! le temps écoulé (`dt`) et les tirages aléatoires arrivent en paramètre.
+
+pub mod achievement;
+pub mod catalog;
+pub mod comet;
+pub mod economy;
+pub mod events;
+pub mod generator;
+pub mod prestige;
+pub mod stardust;
+pub mod state;
+pub mod upgrade;
+
+pub use achievement::{AchievementCondition, AchievementContext, AchievementDef, AchievementId};
+pub use catalog::Catalog;
+pub use comet::{CometReward, CometState};
+pub use events::{DomainEvent, PurchaseTarget};
+pub use generator::{BuyMode, GeneratorDef, GeneratorId};
+pub use stardust::Stardust;
+pub use state::GameState;
+pub use upgrade::{Effect, Requirement, UpgradeDef, UpgradeId};
