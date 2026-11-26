@@ -238,10 +238,21 @@ impl App {
         self.dt = dt;
         let now = self.now;
         match self.screen {
-            Screen::Title => self.title.update(dt, now),
+            Screen::Title => {
+                self.title.update(dt, now);
+                // La fonderie continue de produire pendant l'écran titre.
+                for ev in self.service.tick(real_dt) {
+                    self.react(ev);
+                }
+            }
             Screen::Game => {
                 for ev in self.service.tick(real_dt) {
                     self.react(ev);
+                }
+                if let Some(s) = self.ui.shop {
+                    if s.is_closed(now) {
+                        self.ui.shop = None;
+                    }
                 }
                 self.update_nova(now);
                 if let Some(p) = self.ui.popup {
@@ -343,6 +354,31 @@ impl App {
             }
             return;
         }
+        if let Some(shop) = self.ui.shop {
+            if shop.closing_at.is_none() {
+                let count = self.snap.perks.len();
+                match intent {
+                    Intent::Up => self.ui.shop_sel = self.ui.shop_sel.saturating_sub(1),
+                    Intent::Down => {
+                        self.ui.shop_sel = (self.ui.shop_sel + 1).min(count.saturating_sub(1))
+                    }
+                    Intent::Buy | Intent::Yes => {
+                        if let Some(p) = self.snap.perks.get(self.ui.shop_sel) {
+                            let id = p.id;
+                            self.command(Command::BuyPerk(id));
+                        }
+                    }
+                    Intent::ToggleAuto => self.command(Command::ToggleAutoBuy),
+                    Intent::Shop | Intent::Escape | Intent::No | Intent::Quit => {
+                        if let Some(s) = self.ui.shop.as_mut() {
+                            s.closing_at = Some(now);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            return;
+        }
         if let Some(codex) = self.ui.codex {
             if codex.closing_at.is_none() {
                 match intent {
@@ -436,6 +472,22 @@ impl App {
                 self.ui.codex_scroll = 0;
             }
             Intent::ToggleEffects => self.command(Command::ToggleReducedEffects),
+            Intent::BuyAll => self.command(Command::BuyAllUpgrades),
+            Intent::ToggleAuto => self.command(Command::ToggleAutoBuy),
+            Intent::Shop => {
+                self.ui.shop = Some(Popup {
+                    opened_at: now,
+                    closing_at: None,
+                });
+                self.ui.shop_sel = self.snap.perks.iter().position(|p| !p.owned).unwrap_or(0);
+            }
+            Intent::JournalUp => {
+                let max = self.journal.len().saturating_sub(1);
+                self.ui.journal_scroll = (self.ui.journal_scroll + 2).min(max);
+            }
+            Intent::JournalDown => {
+                self.ui.journal_scroll = self.ui.journal_scroll.saturating_sub(2);
+            }
             Intent::Quit | Intent::Escape => self.quit = true,
             Intent::Yes | Intent::No | Intent::Other | Intent::ToggleDebug => {}
         }
@@ -478,12 +530,11 @@ impl App {
                 self.toasts.push(now, theme::CYAN, "Affichage", msg);
             }
             GameEvent::Saved { automatic } => {
-                let msg = if automatic {
-                    "Sauvegarde automatique"
-                } else {
-                    "Partie sauvegardée"
-                };
-                self.log(Kind::Save, msg);
+                // La sauvegarde automatique (toutes les 30 s) reste silencieuse :
+                // elle noierait le journal. Seule la sauvegarde demandée est annoncée.
+                if !automatic {
+                    self.log(Kind::Save, "Partie sauvegardée");
+                }
             }
             GameEvent::SaveFailed(msg) => {
                 self.log(Kind::Error, format!("Échec de la sauvegarde : {msg}"));
@@ -569,6 +620,21 @@ impl App {
             }
             DomainEvent::PurchaseFailed { target } => match target {
                 PurchaseTarget::Generator(g) => self.vis.gen_fail[g.index().min(8)] = now,
+                PurchaseTarget::Perk(p) => {
+                    let (name, cost) = self
+                        .service
+                        .catalog()
+                        .perk(p)
+                        .map(|d| (d.name, d.cost))
+                        .unwrap_or(("?", 0.0));
+                    let owned = self.snap.perks.get(p.index()).is_some_and(|v| v.owned);
+                    let body = if owned {
+                        format!("« {name} » est déjà acquise")
+                    } else {
+                        format!("« {name} » coûte {} fragment(s)", fmt::short(cost))
+                    };
+                    self.toasts.push(now, theme::GREY, "Atelier", body);
+                }
                 PurchaseTarget::Upgrade(u) => {
                     if let Some(t) = self.vis.upg_fail.get_mut(u.index()) {
                         *t = now;
@@ -697,6 +763,51 @@ impl App {
                         fmt::short(fragments_gained),
                         fmt::short(total_fragments)
                     ),
+                );
+            }
+            DomainEvent::BulkUpgrades { count } => {
+                if count == 0 {
+                    self.toasts.push(
+                        now,
+                        theme::GREY,
+                        "Rien à acheter",
+                        "Aucune amélioration abordable pour l'instant",
+                    );
+                } else {
+                    let s = if count > 1 { "s" } else { "" };
+                    self.log(
+                        Kind::Purchase,
+                        format!("Tout acheter : {count} amélioration{s}"),
+                    );
+                    self.vis.fireworks(now);
+                }
+            }
+            DomainEvent::PerkPurchased { perk } => {
+                let (name, description) = self
+                    .service
+                    .catalog()
+                    .perk(perk)
+                    .map(|d| (d.name, d.description))
+                    .unwrap_or(("?", ""));
+                self.toasts
+                    .push(now, theme::GOLD, format!("◆ Atelier : {name}"), description);
+                self.log(Kind::Achievement, format!("◆ Atelier : {name} acquise"));
+                self.vis.fireworks(now);
+            }
+            DomainEvent::AutoBuyChanged { enabled } => {
+                let msg = if enabled {
+                    "Automate activé : il achète chaque seconde le meilleur générateur"
+                } else {
+                    "Automate arrêté"
+                };
+                self.log(Kind::Info, msg);
+            }
+            DomainEvent::AutoBuyLocked => {
+                self.toasts.push(
+                    now,
+                    theme::GREY,
+                    "Automate",
+                    "Achète-le à l'Atelier stellaire [E] avec des fragments",
                 );
             }
             DomainEvent::HoldHarvestLocked => {

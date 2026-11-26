@@ -21,6 +21,60 @@ use crate::ui::Popup;
 pub fn lines(ctx: &Ctx) -> Vec<(String, Style)> {
     let snap = ctx.snap;
     let mut out: Vec<(String, Style)> = Vec::new();
+    let text = theme::fg(theme::TEXT);
+    let pr = snap.progress;
+
+    // --- Où on en est ---
+    out.push((
+        format!("PROGRESSION  {}", fmt::percent(pr.completion)),
+        theme::bold(theme::GOLD),
+    ));
+    let bar_w = 30usize;
+    let filled = ((pr.completion.clamp(0.0, 1.0)) * bar_w as f64).round() as usize;
+    out.push((
+        format!(
+            " {}{}  générateurs {}/{} · succès {}/{} · Atelier {}/{}",
+            "█".repeat(filled),
+            "░".repeat(bar_w - filled),
+            pr.generators_found,
+            pr.generators_total,
+            snap.achievements_unlocked,
+            snap.achievements_total,
+            pr.perks_owned,
+            pr.perks_total
+        ),
+        theme::fg(theme::GOLD),
+    ));
+    out.push((
+        format!(
+            " ✦ Récolté : {} ce cycle · {} depuis toujours",
+            fmt::short(snap.total_run),
+            fmt::short(snap.total_all)
+        ),
+        text,
+    ));
+    let missing = (pr.next_fragment_at - snap.total_run).max(0.0);
+    out.push((
+        format!(
+            " ◆ Prochain fragment : encore {} ✦ (à {} récoltés ce cycle)",
+            fmt::short(missing),
+            fmt::short(pr.next_fragment_at)
+        ),
+        text,
+    ));
+    out.push((
+        format!(
+            " ▲ Améliorations ce cycle : {}/{} · Supernovas : {} · Comètes : {} · Temps : {}",
+            pr.upgrades_bought,
+            pr.upgrades_total,
+            snap.supernovas,
+            snap.meteors_caught,
+            fmt::duration(snap.play_time)
+        ),
+        text,
+    ));
+    out.push((String::new(), Style::default()));
+
     let unlocked = snap.achievements_unlocked;
     out.push((
         format!(
@@ -42,7 +96,6 @@ pub fn lines(ctx: &Ctx) -> Vec<(String, Style)> {
     }
     out.push((String::new(), Style::default()));
     out.push(("COMMENT ÇA MARCHE".into(), theme::bold(theme::CYAN)));
-    let text = theme::fg(theme::TEXT);
     let mechanics = [
         "✧ Générateurs : produisent en continu ; chaque achat coûte 15 % de plus.".to_string(),
         "◆ Paliers : production ×2 à 25, 50, 100, 200, 300, 400 et 500 exemplaires.".into(),
@@ -56,7 +109,10 @@ pub fn lines(ctx: &Ctx) -> Vec<(String, Style)> {
             "★ Succès : +{} de production chacun, pour toujours.",
             fmt::percent(ACHIEVEMENT_BONUS)
         ),
+        "◆ Atelier [E] : dépense tes fragments en bonus permanents (le bonus de prod reste)."
+            .into(),
         "○ Hors-ligne : ta fonderie produit à 50 % pendant ton absence (12 h max).".into(),
+        "· Raccourcis : [A] tout acheter · [T] automate · [PgUp]/[PgDn] journal.".into(),
         "· Sauvegarde automatique toutes les 30 s et en quittant.".into(),
     ];
     for m in mechanics {

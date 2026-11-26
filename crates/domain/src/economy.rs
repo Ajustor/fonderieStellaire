@@ -9,6 +9,7 @@
 use crate::catalog::balance::{ACHIEVEMENT_BONUS, CLICK_BASE};
 use crate::catalog::Catalog;
 use crate::generator::{milestones_reached, GeneratorId};
+use crate::perk::PerkEffect;
 use crate::prestige::fragment_multiplier;
 use crate::state::GameState;
 use crate::upgrade::Effect;
@@ -89,12 +90,20 @@ pub fn steady_production(catalog: &Catalog, state: &GameState) -> f64 {
 
 /// Fraction de la prod/s ajoutée à chaque clic.
 pub fn click_percent(catalog: &Catalog, state: &GameState) -> f64 {
-    bought_effects(catalog, state)
+    let upgrades: f64 = bought_effects(catalog, state)
         .filter_map(|e| match e {
             Effect::ClickPercent(p) => Some(p),
             _ => None,
         })
-        .sum()
+        .sum();
+    let perks: f64 = state
+        .perk_effects(catalog)
+        .filter_map(|e| match e {
+            PerkEffect::ClickBoost(p) => Some(p),
+            _ => None,
+        })
+        .sum();
+    upgrades + perks
 }
 
 /// Vrai si la récolte « touche maintenue » est débloquée.
@@ -149,7 +158,7 @@ mod tests {
         s.upgrades[g0.index()] = true;
         s.fragments = 2.0;
         s.achievements[0] = true;
-        let expected = 10.0 * 1.0 * 2.0 * 1.5 * 1.1 * 1.01;
+        let expected = 10.0 * 1.0 * 2.0 * 1.5 * 1.2 * 1.01;
         assert!(close(total_production(&c, &s), expected));
         assert!(close(steady_production(&c, &s), expected));
         s.comet.start_storm(30.0);

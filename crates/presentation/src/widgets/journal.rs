@@ -100,15 +100,30 @@ impl Journal {
     }
 }
 
-pub fn render(buf: &mut Buffer, area: Rect, journal: &Journal, now: f64) {
-    let title = Line::from(vec![Span::styled(" Journal ", theme::title_style(false))]);
-    let inner = draw::panel(buf, area, title, false);
+/// `scroll` : nombre de lignes remontées (0 = les plus récentes), borné ici.
+pub fn render(buf: &mut Buffer, area: Rect, journal: &Journal, now: f64, scroll: &mut usize) {
+    let rows = area.height.saturating_sub(2) as usize;
+    let max_scroll = journal.len().saturating_sub(rows);
+    *scroll = (*scroll).min(max_scroll);
+    let mut spans = vec![Span::styled(" Journal ", theme::title_style(false))];
+    if *scroll > 0 {
+        spans.push(Span::styled(
+            format!(
+                "↑ {} plus ancien{} · [PgDn] ",
+                *scroll,
+                if *scroll > 1 { "s" } else { "" }
+            ),
+            theme::fg(theme::GOLD),
+        ));
+    } else if max_scroll > 0 {
+        spans.push(Span::styled("[PgUp] historique ", theme::fg(theme::GREY)));
+    }
+    let inner = draw::panel(buf, area, Line::from(spans), false);
     if inner.is_empty() {
         return;
     }
-    let rows = inner.height as usize;
-    let skip = journal.len().saturating_sub(rows);
-    for (row, e) in journal.iter().skip(skip).enumerate() {
+    let skip = journal.len().saturating_sub(rows + *scroll);
+    for (row, e) in journal.iter().skip(skip).take(rows).enumerate() {
         let y = inner.y + row as u16;
         let x = draw::text(
             buf,

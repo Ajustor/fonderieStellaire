@@ -1,6 +1,6 @@
 //! Vue en lecture seule de l'état du jeu, destinée à la présentation.
 
-use domain::{BuyMode, GeneratorId, UpgradeId};
+use domain::{BuyMode, GeneratorId, PerkId, UpgradeId};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GeneratorView {
@@ -30,6 +30,40 @@ pub struct UpgradeView {
     pub id: UpgradeId,
     pub cost: f64,
     pub affordable: bool,
+}
+
+/// Une amélioration de l'Atelier stellaire.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PerkView {
+    pub id: PerkId,
+    pub owned: bool,
+    pub affordable: bool,
+}
+
+/// Prochaine amélioration encore verrouillée et où on en est de sa condition.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NextUpgradeView {
+    pub id: UpgradeId,
+    /// Valeur actuelle (exemplaires possédés ou poussière récoltée ce cycle).
+    pub current: f64,
+    /// Valeur requise.
+    pub needed: f64,
+}
+
+/// Où en est le joueur, globalement.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct ProgressView {
+    /// Générateurs possédés au moins une fois dans ce cycle.
+    pub generators_found: usize,
+    pub generators_total: usize,
+    pub upgrades_bought: usize,
+    pub upgrades_total: usize,
+    pub perks_owned: usize,
+    pub perks_total: usize,
+    /// Complétion globale (0 → 1) : générateurs, succès et Atelier.
+    pub completion: f64,
+    /// `total_run` à atteindre pour le prochain fragment.
+    pub next_fragment_at: f64,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -72,4 +106,12 @@ pub struct GameSnapshot {
     pub reduced_effects: bool,
     /// « Récolte continue » achetée : maintenir Espace récolte en continu.
     pub hold_harvest: bool,
+    /// Fragments disponibles pour l'Atelier.
+    pub fragments_spendable: f64,
+    /// Atelier stellaire, dans l'ordre du catalogue.
+    pub perks: Vec<PerkView>,
+    pub autobuy_unlocked: bool,
+    pub autobuy: bool,
+    pub next_upgrade: Option<NextUpgradeView>,
+    pub progress: ProgressView,
 }

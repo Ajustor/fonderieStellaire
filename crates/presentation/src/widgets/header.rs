@@ -44,6 +44,20 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
     let snap = ctx.snap;
     let now = ctx.now;
 
+    // Progression globale, sur la bordure haute à droite.
+    let progress = format!(
+        " progression {} [I] ",
+        fmt::percent(snap.progress.completion)
+    );
+    draw::text_right(
+        buf,
+        area.right().saturating_sub(2),
+        area.y,
+        &progress,
+        theme::fg(theme::GOLD),
+        area.x + TITLE.chars().count() as u16 + 3,
+    );
+
     // --- Colonne de droite (prod, tempête, supernova, fragments) ---
     let right = inner.right().saturating_sub(1);
     let mut right_min = right;
@@ -93,8 +107,14 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
         inner.x,
     );
     right_min = right_min.min(x);
+    let auto = if snap.autobuy { "▲ auto   " } else { "" };
+    let free = if snap.fragments_spendable >= 1.0 {
+        format!(" · {} libre(s) [E]", fmt::short(snap.fragments_spendable))
+    } else {
+        String::new()
+    };
     let frag = format!(
-        "◆ {} (+{})   ★ {}/{}",
+        "{auto}◆ {} (+{}){free}   ★ {}/{}",
         fmt::short(snap.fragments),
         fmt::percent(snap.fragment_bonus),
         snap.achievements_unlocked,

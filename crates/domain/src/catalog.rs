@@ -2,16 +2,17 @@
 
 use crate::achievement::{AchievementCondition, AchievementDef, AchievementId};
 use crate::generator::{GeneratorDef, GeneratorId};
+use crate::perk::{PerkDef, PerkEffect, PerkId};
 use crate::upgrade::{Effect, Requirement, UpgradeDef, UpgradeId};
 
 /// Constantes d'équilibrage.
 pub mod balance {
-    /// Bonus global par fragment de Supernova (+5 %).
-    pub const FRAGMENT_BONUS: f64 = 0.05;
+    /// Bonus global par fragment de Supernova (+10 %).
+    pub const FRAGMENT_BONUS: f64 = 0.10;
     /// Bonus global par succès débloqué (+1 %).
     pub const ACHIEVEMENT_BONUS: f64 = 0.01;
-    /// Diviseur de la formule des fragments : `floor(sqrt(total_run / 1e8))`.
-    pub const FRAGMENT_DIVISOR: f64 = 1e8;
+    /// Diviseur de la formule des fragments : `floor(sqrt(total_run / 1e7))`.
+    pub const FRAGMENT_DIVISOR: f64 = 1e7;
     /// Plafond du temps hors-ligne pris en compte (12 h).
     pub const OFFLINE_CAP_SECS: f64 = 12.0 * 3600.0;
     /// Rendement de la production hors-ligne.
@@ -120,7 +121,7 @@ const CLICK_UPGRADES: [(&str, f64, f64, f64); 3] = [
 /// Amélioration « maintenir Espace pour récolter » : (nom, total_run requis, coût).
 const HOLD_UPGRADE: (&str, f64, f64) = ("Récolte continue", 150.0, 300.0);
 
-const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 12] = [
+const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 24] = [
     (
         "first",
         "Premier pas",
@@ -193,6 +194,152 @@ const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 12] = [
         "Produire 1 million par seconde",
         AchievementCondition::Production(1e6),
     ),
+    (
+        "dyson1",
+        "Ingénieur stellaire",
+        "Posséder une Sphère de Dyson",
+        AchievementCondition::OwnGenerator { index: 4, count: 1 },
+    ),
+    (
+        "weaver1",
+        "Architecte cosmique",
+        "Posséder un Tisseur de galaxies",
+        AchievementCondition::OwnGenerator { index: 8, count: 1 },
+    ),
+    (
+        "fivehundred",
+        "Industriel",
+        "500 exemplaires d'un même générateur",
+        AchievementCondition::SameGenerator(500),
+    ),
+    (
+        "q1",
+        "Empereur galactique",
+        "Récolter 1 billiard de poussières au total",
+        AchievementCondition::TotalAll(1e15),
+    ),
+    (
+        "clicks10k",
+        "Main de fer",
+        "Récolter 10 000 fois à la main",
+        AchievementCondition::Clicks(10_000),
+    ),
+    (
+        "comet50",
+        "Seigneur des comètes",
+        "Capturer 50 comètes",
+        AchievementCondition::CometsCaught(50),
+    ),
+    (
+        "nova5",
+        "Phénix",
+        "Déclencher 5 Supernovas",
+        AchievementCondition::Supernovas(5),
+    ),
+    (
+        "nova25",
+        "Éternel retour",
+        "Déclencher 25 Supernovas",
+        AchievementCondition::Supernovas(25),
+    ),
+    (
+        "prod1b",
+        "Forge divine",
+        "Produire 1 milliard par seconde",
+        AchievementCondition::Production(1e9),
+    ),
+    (
+        "frag100",
+        "Cœur d'étoile",
+        "Gagner 100 fragments au total",
+        AchievementCondition::Fragments(100.0),
+    ),
+    (
+        "perk1",
+        "Apprenti artisan",
+        "Acheter une amélioration à l'Atelier stellaire",
+        AchievementCondition::PerksOwned(1),
+    ),
+    (
+        "allperks",
+        "Maître de l'Atelier",
+        "Acheter toutes les améliorations de l'Atelier",
+        AchievementCondition::AllPerks,
+    ),
+];
+
+/// Atelier stellaire : (clé, nom, description, symbole, coût en fragments, effet).
+const PERKS: [(&str, &str, &str, char, f64, PerkEffect); 8] = [
+    (
+        "perk_start",
+        "Héritage",
+        "Chaque nouveau cycle commence avec 10 Sondes et 5 Drones",
+        '✧',
+        1.0,
+        PerkEffect::StartingKit {
+            probes: 10,
+            drones: 5,
+        },
+    ),
+    (
+        "perk_click",
+        "Poigne stellaire",
+        "+2 % de la prod/s à chaque récolte manuelle",
+        '•',
+        1.0,
+        PerkEffect::ClickBoost(0.02),
+    ),
+    (
+        "perk_comet",
+        "Aimant à comètes",
+        "Les comètes passent 40 % plus souvent",
+        '●',
+        2.0,
+        PerkEffect::CometMagnet(0.6),
+    ),
+    (
+        "perk_storm",
+        "Tempête prolongée",
+        "Les tempêtes solaires durent 60 s au lieu de 30",
+        '✦',
+        2.0,
+        PerkEffect::LongStorm(2.0),
+    ),
+    (
+        "perk_discount",
+        "Ingénierie frugale",
+        "Tous les générateurs coûtent 20 % de moins",
+        '◇',
+        3.0,
+        PerkEffect::GeneratorDiscount(0.8),
+    ),
+    (
+        "perk_offline",
+        "Résonance",
+        "Hors-ligne : production à 100 % (au lieu de 50 %), jusqu'à 24 h",
+        '○',
+        3.0,
+        PerkEffect::OfflineMastery {
+            rate: 1.0,
+            cap_secs: 24.0 * 3600.0,
+        },
+    ),
+    (
+        "perk_auto",
+        "Automate",
+        "Achète chaque seconde le générateur le plus rentable ([T] pour l'arrêter)",
+        '▲',
+        5.0,
+        PerkEffect::AutoBuyer,
+    ),
+    (
+        "perk_nova",
+        "Nova dorée",
+        "+50 % de fragments à chaque Supernova",
+        '★',
+        8.0,
+        PerkEffect::RichNova(1.5),
+    ),
 ];
 
 /// Toutes les données statiques du jeu.
@@ -201,6 +348,7 @@ pub struct Catalog {
     pub generators: Vec<GeneratorDef>,
     pub upgrades: Vec<UpgradeDef>,
     pub achievements: Vec<AchievementDef>,
+    pub perks: Vec<PerkDef>,
 }
 
 impl Catalog {
@@ -310,10 +458,27 @@ impl Catalog {
             })
             .collect();
 
+        let perks = PERKS
+            .iter()
+            .enumerate()
+            .map(
+                |(i, &(key, name, description, symbol, cost, effect))| PerkDef {
+                    id: PerkId(i),
+                    key,
+                    name,
+                    description,
+                    symbol,
+                    cost,
+                    effect,
+                },
+            )
+            .collect();
+
         Catalog {
             generators,
             upgrades,
             achievements,
+            perks,
         }
     }
 
@@ -331,6 +496,14 @@ impl Catalog {
 
     pub fn upgrade_by_key(&self, key: &str) -> Option<UpgradeId> {
         self.upgrades.iter().find(|u| u.key == key).map(|u| u.id)
+    }
+
+    pub fn perk(&self, id: PerkId) -> Option<&PerkDef> {
+        self.perks.get(id.index())
+    }
+
+    pub fn perk_by_key(&self, key: &str) -> Option<PerkId> {
+        self.perks.iter().find(|p| p.key == key).map(|p| p.id)
     }
 
     pub fn achievement_by_key(&self, key: &str) -> Option<AchievementId> {
@@ -359,7 +532,9 @@ mod tests {
         assert_eq!(c.generators.len(), 9);
         assert_eq!(c.upgrades.len(), 9 * 4 + 4 + 3 + 1);
         assert!(c.upgrade_by_key("hold_0").is_some());
-        assert_eq!(c.achievements.len(), 12);
+        assert_eq!(c.achievements.len(), 24);
+        assert_eq!(c.perks.len(), 8);
+        assert!(c.perk_by_key("perk_auto").is_some());
         assert!(c.upgrade_by_key("gen3_t2").is_some());
         assert!(c.upgrade_by_key("global_1").is_some());
         assert!(c.upgrade_by_key("click_0").is_some());

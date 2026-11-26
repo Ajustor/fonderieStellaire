@@ -3,13 +3,15 @@
 
 use std::collections::VecDeque;
 
-use domain::{economy, BuyMode, Catalog, DomainEvent, GameState};
+use domain::{economy, BuyMode, Catalog, DomainEvent, GameState, Requirement};
 
 use crate::commands::Command;
 use crate::error::AppError;
 use crate::ports::{Clock, LoadOutcome, RandomSource, SaveRepository};
 use crate::save_dto::SaveData;
-use crate::snapshot::{GameSnapshot, GeneratorView, TeaserView, UpgradeView};
+use crate::snapshot::{
+    GameSnapshot, GeneratorView, NextUpgradeView, PerkView, ProgressView, TeaserView, UpgradeView,
+};
 
 /// Nombre d'échantillons de production conservés (1 par seconde).
 pub const HISTORY_LEN: usize = 120;
@@ -163,6 +165,9 @@ impl GameService {
             }
             Command::Supernova => self.state.supernova(&self.catalog, &mut ev),
             Command::Save => out.push(self.save_event(false)),
+            Command::BuyAllUpgrades => self.state.buy_all_upgrades(&self.catalog, &mut ev),
+            Command::BuyPerk(id) => self.state.buy_perk(&self.catalog, id, &mut ev),
+            Command::ToggleAutoBuy => self.state.toggle_autobuy(&self.catalog, &mut ev),
             Command::ToggleReducedEffects => {
                 self.reduced_effects = !self.reduced_effects;
                 out.push(GameEvent::ReducedEffectsChanged(self.reduced_effects));
@@ -234,7 +239,7 @@ impl GameService {
         snap.total_run = st.total_run;
         snap.total_all = st.total_all;
         snap.fragments = st.fragments;
-        snap.fragments_available = st.fragments_available();
+        snap.fragments_available = st.fragments_available_with(c);
         snap.fragment_bonus = domain::prestige::fragment_multiplier(st.fragments) - 1.0;
         snap.supernovas = st.supernovas;
         snap.clicks = st.clicks;
@@ -250,14 +255,55 @@ impl GameService {
         snap.comet_progress = st.comet.progress();
         snap.reduced_effects = self.reduced_effects;
         snap.hold_harvest = economy::hold_harvest_unlocked(c, st);
+        snap.fragments_spendable = st.fragments_spendable();
+        snap.autobuy_unlocked = st.autobuy_unlocked(c);
+        snap.autobuy = st.autobuy;
+        snap.perks.clear();
+        snap.perks.extend(c.perks.iter().map(|p| PerkView {
+            id: p.id,
+            owned: st.has_perk(p.id),
+            affordable: !st.has_perk(p.id) && st.fragments_spendable() + 1e-9 >= p.cost,
+        }));
+        snap.next_upgrade = st.next_locked_upgrade(c).and_then(|id| {
+            let def = c.upgrade(id)?;
+            let (current, needed) = match def.requirement {
+                Requirement::GeneratorOwned { generator, count } => {
+                    (st.owned_of(generator) as f64, count as f64)
+                }
+                Requirement::TotalRun(r) => (st.total_run, r),
+            };
+            Some(NextUpgradeView {
+                id,
+                current,
+                needed,
+            })
+        });
+        let generators_found = st.owned.iter().filter(|&&o| o > 0).count();
+        let perks_owned = st.perks_owned();
+        let achievements = st.achievements_unlocked();
+        let found_total = c.generators.len() + c.achievements.len() + c.perks.len();
+        snap.progress = ProgressView {
+            generators_found,
+            generators_total: c.generators.len(),
+            upgrades_bought: st.upgrades.iter().filter(|&&u| u).count(),
+            upgrades_total: c.upgrades.len(),
+            perks_owned,
+            perks_total: c.perks.len(),
+            completion: if found_total > 0 {
+                (generators_found + achievements + perks_owned) as f64 / found_total as f64
+            } else {
+                0.0
+            },
+            next_fragment_at: st.total_run_for_next_fragment(c),
+        };
 
         snap.generators.clear();
         snap.teaser = None;
         for g in &c.generators {
             if st.is_visible(c, g.id) {
                 let owned = st.owned_of(g.id);
-                let quantity = self.buy_mode.quantity(g, owned, stardust);
-                let cost = g.cost_for(owned, quantity);
+                let quantity = st.purchase_quantity(c, g.id, self.buy_mode);
+                let cost = st.generator_cost(c, g.id, quantity);
                 let gen_prod = economy::generator_production(c, st, g.id);
                 snap.generators.push(GeneratorView {
                     id: g.id,
@@ -530,16 +576,25 @@ mod tests {
         data.stardust = 1e8;
         *repo.slot.borrow_mut() = Some(data);
         s.load().unwrap();
-        assert_eq!(s.snapshot().fragments_available, 2.0);
+        assert_eq!(
+            s.snapshot().fragments_available,
+            6.0,
+            "floor(sqrt(4e8 / 1e7))"
+        );
         let ev = s.handle(Command::Supernova);
         assert!(ev.iter().any(|e| matches!(
             e,
-            GameEvent::Domain(DomainEvent::Supernova { fragments_gained, .. }) if *fragments_gained == 2.0
+            GameEvent::Domain(DomainEvent::Supernova { fragments_gained, .. }) if *fragments_gained == 6.0
         )));
         let snap = s.snapshot();
         assert_eq!(snap.stardust, 0.0);
-        assert_eq!(snap.fragments, 2.0);
-        assert!((snap.fragment_bonus - 0.1).abs() < 1e-12);
+        assert_eq!(snap.fragments, 6.0);
+        assert_eq!(snap.fragments_spendable, 6.0);
+        assert!((snap.fragment_bonus - 0.6).abs() < 1e-12);
+        assert_eq!(snap.perks.len(), 8);
+        assert!(snap.perks.iter().any(|p| p.affordable));
+        // Nouveau cycle : le prochain fragment demande 1e7 récoltés.
+        assert!((snap.progress.next_fragment_at - 1.0e7).abs() < 1.0);
         let _ = Stardust::ZERO;
     }
 

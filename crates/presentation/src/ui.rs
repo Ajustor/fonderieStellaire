@@ -57,6 +57,11 @@ pub struct Ui {
     /// Écran « Infos » (touche I) et son défilement.
     pub codex: Option<Popup>,
     pub codex_scroll: usize,
+    /// Atelier stellaire (touche E) et sa sélection.
+    pub shop: Option<Popup>,
+    pub shop_sel: usize,
+    /// Lignes remontées dans le journal (0 = dernières entrées).
+    pub journal_scroll: usize,
     pub debug: bool,
     pub layout: GameLayout,
     /// Ligne écran de chaque générateur affiché (pour les étincelles d'achat).

@@ -44,23 +44,29 @@ grep -rlE "serde|std::fs"     crates | grep -v crates/infrastructure # → rien
 
 - **domain** — règles pures et déterministes : catalogue (`catalog.rs`), coûts et
   paliers (`generator.rs`), production (`economy.rs`), améliorations, succès,
-  comètes, prestige, et l'agrégat `GameState`. Le temps (`dt`) et les tirages
+  comètes, prestige, Atelier stellaire (`perk.rs`) et l'agrégat `GameState`
+  (dont l'automate d'achat et « tout acheter »). Le temps (`dt`) et les tirages
   aléatoires (`roll: f64`) arrivent **en paramètre**. Chaque opération pousse des
   `DomainEvent` dans un `Vec`.
 - **application** — `GameService` orchestre les cas d'usage :
   `handle(Command)`, `tick(dt)`, `load()`, `save()`, `fill_snapshot()`. Il parle au
   monde extérieur via les **ports** (`SaveRepository`, `Clock`, `RandomSource`),
   convertit l'état en `SaveData` (DTO pur Rust) et gère l'historique de production
-  et l'autosave. Il expose un `GameSnapshot` en lecture seule.
+  et l'autosave. Il expose un `GameSnapshot` en lecture seule (dont la
+  progression globale). `UpdateService` (`updates.rs`) vérifie les mises à jour
+  dans un thread, via le port `UpdateProvider`, et publie des `UpdateEvent`.
 - **infrastructure** — implémentations des ports : `JsonSaveRepository`
   (miroir `serde` du DTO avec `#[serde(default)]`, écriture `.tmp` + renommage,
-  `.bak` si corrompu), `SystemClock`, `XorShift64`.
+  `.bak` si corrompu), `SystemClock`, `XorShift64`, et `GitHubUpdater`
+  (`github_updater.rs` : API des releases via `ureq`, vérification SHA-256 avec
+  `sha2`, remplacement de l'exécutable ; sous Windows l'ancien devient `.old`).
 - **presentation** — boucle de jeu, entrées, rendu et effets. Ne modifie jamais
   l'état : elle envoie des `Command` et lit le `GameSnapshot`. Tous les états
   purement visuels (tweens, particules, focus, défilement, toasts, journal)
   vivent ici.
 - **bin** — composition root : instancie les adapters, les injecte dans
-  `GameService`, gère `--reset`, lance `presentation::run`.
+  `GameService`, gère `--reset`, `--no-update` et `--version` (version injectée
+  par la CI depuis le tag via `FONDERIE_VERSION`), lance `presentation::run`.
 
 ## Flux d'une action
 
@@ -92,13 +98,15 @@ réel mesuré par `Instant`.
 presentation/src/
 ├── app.rs          boucle, Intent → Command, réactions aux événements
 ├── terminal.rs     raw mode, écran alternatif, panic hook, garde RAII
-├── input.rs        KeyEvent → Intent (ne garde que KeyEventKind::Press)
+├── input.rs        KeyEvent → Intent (ne garde que Press) + HoldDetector
+│                   (appui distinct ou touche maintenue, pour la récolte continue)
 ├── layout.rs       découpage de l'écran de jeu
-├── ui.rs           focus, sélections, défilement, popup
+├── ui.rs           focus, sélections, défilement, popups (Supernova, Infos,
+│                   Atelier), défilement du journal
 ├── visuals.rs      état des effets de l'écran de jeu
 ├── screens/        title (hyperespace + logo), game, supernova, too_small
 ├── widgets/        header, generators, upgrades, sky, sparkline, journal,
-│                   help_bar, toast, modal
+│                   help_bar, toast, modal, codex (écran Infos), shop (Atelier)
 ├── fx/             moteur d'effets générique (aucune connaissance du jeu)
 │   ├── easing.rs   linear, cubic, sine, back, elastic, bounce
 │   ├── tween.rs    Tween<T: Lerp> (f64, (f64,f64), Rgb, Color)
@@ -147,6 +155,14 @@ L'identifiant texte (`key`) doit rester **stable** : c'est lui qui est sauvegard
 3. Le dessiner dans le widget concerné en calculant l'avancement à partir de
    `ctx.now` (jamais du nombre de frames), et respecter `ctx.reduced`
    (mode effets réduits : pas de shake, glitch ni nébuleuse, particules ÷ 4).
+
+### Ajouter une amélioration à l'Atelier
+
+1. `crates/domain/src/catalog.rs` : une ligne dans `PERKS` (clé stable, nom,
+   description, symbole à largeur simple, coût en fragments, effet).
+2. Pour un nouvel **effet** : une variante dans `perk::PerkEffect`, appliquée
+   dans `GameState` (ou `economy.rs`), avec un test. Le `match` de l'écran
+   Atelier n'a rien à changer : il affiche le catalogue.
 
 ### Ajouter un événement de domaine
 

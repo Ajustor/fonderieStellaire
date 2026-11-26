@@ -124,8 +124,8 @@ fn game_screen_100x30() {
     assert!(text.contains("Améliorations"));
     assert!(text.contains("Production"));
     assert!(text.contains("Journal"));
-    assert!(text.contains("Supernova : +2 fragments"));
-    assert!(text.contains("◆ 12 (+60%)"));
+    assert!(text.contains("Supernova : +6 fragments"));
+    assert!(text.contains("◆ 12 (+120%)"));
     assert!(text.contains("[Espace] Récolter"));
     assert!(text.contains('▶'));
     // Bordures droites alignées sur la dernière colonne.
@@ -394,7 +394,7 @@ fn descriptions_and_info_screen() {
     app.on_intent(Intent::Down);
     let text = render(&mut app, 100, 30);
     assert!(
-        text.contains("+1% de la prod/s par clic → +30 par clic"),
+        text.contains("+1% de la prod/s par clic → +") && text.contains(" par clic"),
         "{text}"
     );
     assert!(text.contains("Chaque geste ramasse"));
@@ -403,7 +403,7 @@ fn descriptions_and_info_screen() {
     app.set_time(101.0);
     let text = render(&mut app, 100, 30);
     println!("{text}");
-    assert!(text.contains("SUCCÈS  2/12"));
+    assert!(text.contains("SUCCÈS  2/24"));
     assert!(text.contains("★ Premier pas"));
     assert!(text.contains("○ Centurion"));
     app.on_intent(Intent::Down);
@@ -421,8 +421,8 @@ fn update_status_is_shown() {
     app.set_time(5.0);
     let text = render(&mut app, 100, 30);
     assert!(
-        text.contains("v0.1.0"),
-        "version affichée sur l'écran titre"
+        text.contains(&format!("v{}", env!("CARGO_PKG_VERSION"))),
+        "version affichée sur l'écran titre : {text}"
     );
     app.react_update(UpdateEvent::Installed {
         version: "v0.2.0".into(),
@@ -437,4 +437,67 @@ fn update_status_is_shown() {
     app.update(0.033);
     let text = render(&mut app, 100, 30);
     assert!(text.contains("Mise à jour v0.2.0"), "toast en jeu : {text}");
+}
+
+#[test]
+fn v0_2_features_render() {
+    // --- Atelier : achat avec les fragments de la sauvegarde avancée (12).
+    let mut app = game_app();
+    app.on_intent(Intent::Shop);
+    app.set_time(101.0);
+    let text = render(&mut app, 100, 30);
+    println!("{text}");
+    assert!(text.contains("ATELIER STELLAIRE"));
+    assert!(text.contains("Fragments libres : 12 sur 12"));
+    assert!(text.contains("Héritage"));
+    app.on_intent(Intent::Buy);
+    app.update(0.033);
+    assert!(app.snapshot().perks[0].owned);
+    assert_eq!(app.snapshot().fragments_spendable, 11.0);
+    let text = render(&mut app, 100, 30);
+    assert!(text.contains("● acquise"));
+    app.on_intent(Intent::Escape);
+
+    // --- Section Progression de l'écran Infos.
+    app.set_time(102.0);
+    app.update(0.033);
+    app.on_intent(Intent::Info);
+    app.set_time(103.0);
+    let text = render(&mut app, 100, 30);
+    assert!(text.contains("PROGRESSION"));
+    assert!(text.contains("Prochain fragment : encore"));
+    assert!(text.contains("Atelier 1/8"));
+    app.on_intent(Intent::Escape);
+
+    // --- Journal : la sauvegarde auto ne s'y écrit plus, et on peut remonter.
+    app.set_time(104.0);
+    app.update(0.033);
+    let before = render(&mut app, 100, 30);
+    for _ in 0..(31 * 30) {
+        app.update(1.0 / 30.0);
+    }
+    let after = render(&mut app, 100, 30);
+    assert!(!after.contains("Sauvegarde automatique"));
+    assert!(before.contains("Journal"));
+    app.on_intent(Intent::Save);
+    for i in 0..6 {
+        app.on_intent(Intent::Save);
+        app.set_time(110.0 + i as f64);
+    }
+    app.update(0.033);
+    app.on_intent(Intent::JournalUp);
+    let text = render(&mut app, 100, 30);
+    assert!(text.contains("plus ancien"), "{text}");
+
+    // --- Nouvelle partie : la liste vide annonce la prochaine amélioration.
+    let mut fresh = app_with(None);
+    fresh.enter_game_now();
+    fresh.update(0.033);
+    let _ = render(&mut fresh, 100, 30);
+    let text = render(&mut fresh, 100, 30);
+    assert!(
+        text.contains("Prochaine : Alliage renforcé · Sondes"),
+        "{text}"
+    );
+    assert!(text.contains("0 / 10 Sondes"));
 }

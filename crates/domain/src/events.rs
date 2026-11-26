@@ -4,12 +4,15 @@
 use crate::achievement::AchievementId;
 use crate::comet::CometReward;
 use crate::generator::GeneratorId;
+use crate::perk::PerkId;
 use crate::upgrade::UpgradeId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PurchaseTarget {
     Generator(GeneratorId),
     Upgrade(UpgradeId),
+    /// Amélioration de l'Atelier stellaire.
+    Perk(PerkId),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -60,6 +63,20 @@ pub enum DomainEvent {
     },
     /// Supernova demandée alors qu'aucun fragment n'est gagnable.
     SupernovaUnavailable,
+    /// « Tout acheter » : nombre d'améliorations achetées (0 = rien d'abordable).
+    BulkUpgrades {
+        count: usize,
+    },
+    /// Amélioration de l'Atelier achetée avec des fragments.
+    PerkPurchased {
+        perk: PerkId,
+    },
+    /// L'automate d'achat a été activé ou arrêté.
+    AutoBuyChanged {
+        enabled: bool,
+    },
+    /// Automate demandé sans l'avoir acheté à l'Atelier.
+    AutoBuyLocked,
     OfflineGains {
         seconds: f64,
         amount: f64,

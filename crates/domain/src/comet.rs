@@ -64,6 +64,8 @@ pub struct CometState {
     pub active: Option<f64>,
     /// Temps restant de Tempête solaire.
     pub storm_remaining: f64,
+    /// Multiplie l'intervalle entre deux comètes (Atelier : « Aimant à comètes »).
+    pub interval_factor: f64,
 }
 
 impl Default for CometState {
@@ -72,6 +74,7 @@ impl Default for CometState {
             next_in: FIRST_DELAY,
             active: None,
             storm_remaining: 0.0,
+            interval_factor: 1.0,
         }
     }
 }
@@ -106,7 +109,7 @@ impl CometState {
                 let e = elapsed + dt;
                 if e >= CROSSING_TIME {
                     self.active = None;
-                    self.next_in = interval_from_roll(roll);
+                    self.next_in = interval_from_roll(roll) * self.interval_factor;
                     tick.missed = true;
                 } else {
                     self.active = Some(e);
@@ -126,7 +129,7 @@ impl CometState {
     /// Termine le passage de la comète (capturée) et planifie la suivante.
     pub fn take(&mut self, roll_next: f64) -> bool {
         if self.active.take().is_some() {
-            self.next_in = interval_from_roll(roll_next);
+            self.next_in = interval_from_roll(roll_next) * self.interval_factor;
             true
         } else {
             false

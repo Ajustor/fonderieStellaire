@@ -26,6 +26,11 @@ pub struct SaveData {
     pub last_saved: u64,
     /// Option « effets réduits ».
     pub reduced_effects: bool,
+    /// Identifiants texte des améliorations de l'Atelier achetées.
+    pub perks: Vec<String>,
+    pub fragments_spent: f64,
+    /// Automate d'achat activé.
+    pub autobuy: bool,
 }
 
 impl SaveData {
@@ -61,6 +66,14 @@ impl SaveData {
             play_time: state.play_time,
             last_saved: now,
             reduced_effects,
+            perks: catalog
+                .perks
+                .iter()
+                .filter(|p| state.has_perk(p.id))
+                .map(|p| p.key.to_string())
+                .collect(),
+            fragments_spent: state.fragments_spent,
+            autobuy: state.autobuy,
         }
     }
 
@@ -89,6 +102,13 @@ impl SaveData {
         s.clicks = self.clicks;
         s.meteors_caught = self.meteors_caught;
         s.play_time = self.play_time;
+        for key in &self.perks {
+            if let Some(id) = catalog.perk_by_key(key) {
+                s.perks[id.index()] = true;
+            }
+        }
+        s.fragments_spent = self.fragments_spent;
+        s.autobuy = self.autobuy;
         s.normalize(catalog);
         s
     }

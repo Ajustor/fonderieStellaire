@@ -15,7 +15,7 @@ use crate::visuals::Visuals;
 use crate::widgets::journal::Journal;
 use crate::widgets::toast::Toasts;
 use crate::widgets::{
-    codex, generators, header, help_bar, journal, modal, sky, sparkline, upgrades, Ctx,
+    codex, generators, header, help_bar, journal, modal, shop, sky, sparkline, upgrades, Ctx,
 };
 
 /// Décalage entre deux panneaux de la cascade.
@@ -44,7 +44,13 @@ pub fn render(
     sky::render(buf, layout.sky, ctx, vis);
     upgrades::render(buf, layout.upgrades, ctx, vis, ui);
     sparkline::render(buf, layout.production, ctx, view.spark_scratch);
-    journal::render(buf, layout.journal, view.journal, ctx.now);
+    journal::render(
+        buf,
+        layout.journal,
+        view.journal,
+        ctx.now,
+        &mut ui.journal_scroll,
+    );
     help_bar::render(
         buf,
         layout.help,
@@ -63,6 +69,9 @@ pub fn render(
 
     if let Some(popup) = ui.popup {
         modal::render(buf, area, ctx, &popup);
+    }
+    if let Some(shop) = ui.shop {
+        shop::render(buf, area, ctx, &shop, ui.shop_sel);
     }
     if let Some(codex) = ui.codex {
         codex::render(buf, area, ctx, &codex, &mut ui.codex_scroll);

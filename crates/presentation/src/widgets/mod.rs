@@ -7,6 +7,7 @@ pub mod header;
 pub mod help_bar;
 pub mod journal;
 pub mod modal;
+pub mod shop;
 pub mod sky;
 pub mod sparkline;
 pub mod toast;

@@ -23,6 +23,15 @@ pub enum Intent {
     Save,
     ToggleEffects,
     ToggleDebug,
+    /// `A` : acheter toutes les améliorations abordables.
+    BuyAll,
+    /// `E` : Atelier stellaire.
+    Shop,
+    /// `T` : activer / arrêter l'automate.
+    ToggleAuto,
+    /// `PgUp` / `PgDn` : remonter / redescendre dans le journal.
+    JournalUp,
+    JournalDown,
     /// Écran « Infos » : succès et mécaniques.
     Info,
     Quit,
@@ -121,6 +130,8 @@ pub fn map_key(key: &KeyEvent) -> Option<Intent> {
         KeyCode::Enter => Intent::Buy,
         KeyCode::Esc => Intent::Escape,
         KeyCode::F(3) => Intent::ToggleDebug,
+        KeyCode::PageUp => Intent::JournalUp,
+        KeyCode::PageDown => Intent::JournalDown,
         KeyCode::Char(c) => match c.to_ascii_lowercase() {
             'k' => Intent::Up,
             'j' => Intent::Down,
@@ -132,6 +143,9 @@ pub fn map_key(key: &KeyEvent) -> Option<Intent> {
             'f' => Intent::ToggleEffects,
             'q' => Intent::Quit,
             'i' => Intent::Info,
+            'a' => Intent::BuyAll,
+            'e' => Intent::Shop,
+            't' => Intent::ToggleAuto,
             'o' | 'y' => Intent::Yes,
             'n' => Intent::No,
             d @ '1'..='9' => Intent::QuickBuy((d as u8 - b'1') as usize),

@@ -161,7 +161,11 @@ cargo run --release -- --reset
 | `P` | Supernova (confirmation `O` / `N` / `Échap`) |
 | `S` | Sauvegarder maintenant |
 | `F` | Effets complets / effets réduits |
-| `I` | Infos : succès obtenus et fonctionnement de chaque mécanique |
+| `A` | Acheter toutes les améliorations abordables |
+| `E` | Atelier stellaire : bonus permanents payés en fragments |
+| `T` | Activer / arrêter l'automate (une fois acheté à l'Atelier) |
+| `I` | Infos : progression, succès et fonctionnement de chaque mécanique |
+| `PgUp` / `PgDn` | Remonter / redescendre dans le journal |
 | `F3` | Overlay de debug (FPS, particules, temps de rendu) |
 | `Q` / `Échap` | Sauvegarder et quitter |
 
@@ -175,14 +179,19 @@ Majuscules et minuscules sont acceptées.
   de clic (un pourcentage de ta production par seconde).
 - **Récolte continue** (300 ✦, dès 150 ✦ récoltés) : maintenir `Espace` récolte
   tout seul, 10 fois par seconde. Sans elle, seuls les appuis distincts comptent.
-  À racheter après chaque Supernova.
+  Elle est conservée après une Supernova.
 - **Comètes** : toutes les 90 à 240 s. Capture-les avec `C` pendant leurs 15 s de
   traversée : *Tempête solaire* (production ×7 pendant 30 s) ou *Pluie d'étoiles*
   (gain immédiat).
-- **Supernova** : `floor(√(récolte du cycle / 100 M))` fragments, chacun donnant
-  **+5 %** de production pour toujours. Remet à zéro poussière, générateurs et
+- **Supernova** : `floor(√(récolte du cycle / 10 M))` fragments, chacun donnant
+  **+10 %** de production pour toujours. Remet à zéro poussière, générateurs et
   améliorations.
-- **Succès** : 12 succès, **+1 %** de production chacun.
+- **Atelier stellaire** (`E`) : dépense tes fragments en 8 bonus permanents
+  (départ équipé, comètes plus fréquentes, générateurs moins chers, automate
+  d'achat…). Le bonus de production des fragments dépensés est **conservé**.
+- **Succès** : 24 succès, **+1 %** de production chacun.
+- **Progression** : le pourcentage dans l'en-tête et l'écran `I` indiquent où tu
+  en es (générateurs, succès, Atelier, poussière avant le prochain fragment).
 - **Hors-ligne** : ta fonderie produit à 50 % pendant ton absence (12 h max).
 
 ## Mise à jour automatique

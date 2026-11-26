@@ -9,12 +9,17 @@ use crate::comet::{CometReward, CometState};
 use crate::economy;
 use crate::events::{DomainEvent, PurchaseTarget};
 use crate::generator::{milestones_crossed, BuyMode, GeneratorId};
-use crate::prestige::fragments_available;
+use crate::perk::{PerkEffect, PerkId};
+use crate::prestige::fragments_for;
 use crate::stardust::Stardust;
-use crate::upgrade::UpgradeId;
+use crate::upgrade::{Effect, UpgradeId};
 
 /// Intervalle entre deux vérifications de succès.
 const ACHIEVEMENT_CHECK_INTERVAL: f64 = 1.0;
+/// Intervalle entre deux passages de l'automate d'achat.
+const AUTOBUY_INTERVAL: f64 = 1.0;
+/// Nombre maximal de générateurs achetés par passage de l'automate.
+const AUTOBUY_MAX_PER_TICK: usize = 10;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct GameState {
@@ -36,7 +41,15 @@ pub struct GameState {
     pub meteors_caught: u32,
     pub play_time: f64,
     pub comet: CometState,
+    /// Améliorations de l'Atelier achetées (permanentes).
+    pub perks: Vec<bool>,
+    /// Fragments dépensés à l'Atelier (le bonus de production reste calculé
+    /// sur le total `fragments`).
+    pub fragments_spent: f64,
+    /// Automate d'achat activé (si acheté).
+    pub autobuy: bool,
     revealed: Vec<bool>,
+    autobuy_timer: f64,
     achievement_timer: f64,
     /// `play_time` de la dernière récolte « touche maintenue » acceptée.
     last_hold_harvest: f64,
@@ -58,7 +71,11 @@ impl GameState {
             meteors_caught: 0,
             play_time: 0.0,
             comet: CometState::default(),
+            perks: Vec::new(),
+            fragments_spent: 0.0,
+            autobuy: false,
             revealed: Vec::new(),
+            autobuy_timer: 0.0,
             achievement_timer: 0.0,
             last_hold_harvest: f64::NEG_INFINITY,
         };
@@ -73,7 +90,9 @@ impl GameState {
         self.owned.resize(catalog.generators.len(), 0);
         self.upgrades.resize(catalog.upgrades.len(), false);
         self.achievements.resize(catalog.achievements.len(), false);
+        self.perks.resize(catalog.perks.len(), false);
         for v in [
+            &mut self.fragments_spent,
             &mut self.total_run,
             &mut self.total_all,
             &mut self.fragments,
@@ -84,6 +103,8 @@ impl GameState {
                 *v = 0.0;
             }
         }
+        self.fragments_spent = self.fragments_spent.min(self.fragments);
+        self.autobuy &= self.has_perk_effect(catalog, |e| matches!(e, PerkEffect::AutoBuyer));
         self.stardust = Stardust::new(self.stardust.value());
         self.revealed = catalog
             .generators
@@ -106,6 +127,120 @@ impl GameState {
 
     pub fn achievements_unlocked(&self) -> usize {
         self.achievements.iter().filter(|&&a| a).count()
+    }
+
+    pub fn has_perk(&self, id: PerkId) -> bool {
+        self.perks.get(id.index()).copied().unwrap_or(false)
+    }
+
+    pub fn perks_owned(&self) -> usize {
+        self.perks.iter().filter(|&&p| p).count()
+    }
+
+    /// Effets des améliorations de l'Atelier possédées.
+    pub fn perk_effects<'a>(
+        &'a self,
+        catalog: &'a Catalog,
+    ) -> impl Iterator<Item = PerkEffect> + 'a {
+        catalog
+            .perks
+            .iter()
+            .filter(|p| self.has_perk(p.id))
+            .map(|p| p.effect)
+    }
+
+    fn has_perk_effect(&self, catalog: &Catalog, f: impl Fn(&PerkEffect) -> bool) -> bool {
+        self.perk_effects(catalog).any(|e| f(&e))
+    }
+
+    /// Fragments disponibles pour l'Atelier.
+    pub fn fragments_spendable(&self) -> f64 {
+        (self.fragments - self.fragments_spent).max(0.0)
+    }
+
+    /// Multiplicateur appliqué au coût des générateurs (Atelier : « Ingénierie frugale »).
+    pub fn generator_cost_factor(&self, catalog: &Catalog) -> f64 {
+        self.perk_effects(catalog)
+            .filter_map(|e| match e {
+                PerkEffect::GeneratorDiscount(f) => Some(f),
+                _ => None,
+            })
+            .product()
+    }
+
+    fn comet_interval_factor(&self, catalog: &Catalog) -> f64 {
+        self.perk_effects(catalog)
+            .filter_map(|e| match e {
+                PerkEffect::CometMagnet(f) => Some(f),
+                _ => None,
+            })
+            .product()
+    }
+
+    fn storm_factor(&self, catalog: &Catalog) -> f64 {
+        self.perk_effects(catalog)
+            .filter_map(|e| match e {
+                PerkEffect::LongStorm(f) => Some(f),
+                _ => None,
+            })
+            .product()
+    }
+
+    fn nova_factor(&self, catalog: &Catalog) -> f64 {
+        self.perk_effects(catalog)
+            .filter_map(|e| match e {
+                PerkEffect::RichNova(f) => Some(f),
+                _ => None,
+            })
+            .product()
+    }
+
+    /// (rendement, plafond en secondes) de la production hors-ligne.
+    pub fn offline_terms(&self, catalog: &Catalog) -> (f64, f64) {
+        self.perk_effects(catalog)
+            .find_map(|e| match e {
+                PerkEffect::OfflineMastery { rate, cap_secs } => Some((rate, cap_secs)),
+                _ => None,
+            })
+            .unwrap_or((OFFLINE_RATE, OFFLINE_CAP_SECS))
+    }
+
+    /// Vrai si l'automate d'achat a été acheté.
+    pub fn autobuy_unlocked(&self, catalog: &Catalog) -> bool {
+        self.has_perk_effect(catalog, |e| matches!(e, PerkEffect::AutoBuyer))
+    }
+
+    /// Coût réel de `n` exemplaires (remises comprises).
+    pub fn generator_cost(&self, catalog: &Catalog, id: GeneratorId, n: u64) -> f64 {
+        catalog
+            .generator(id)
+            .map(|d| d.cost_for(self.owned_of(id), n) * self.generator_cost_factor(catalog))
+            .unwrap_or(f64::INFINITY)
+    }
+
+    /// Quantité achetée selon le mode, remises comprises (au moins 1 en MAX).
+    pub fn purchase_quantity(&self, catalog: &Catalog, id: GeneratorId, mode: BuyMode) -> u64 {
+        let Some(def) = catalog.generator(id) else {
+            return 0;
+        };
+        let budget = self.stardust.value() / self.generator_cost_factor(catalog);
+        mode.quantity(def, self.owned_of(id), budget)
+    }
+
+    /// Prochaine amélioration encore verrouillée (la moins chère).
+    pub fn next_locked_upgrade(&self, catalog: &Catalog) -> Option<UpgradeId> {
+        catalog
+            .upgrades
+            .iter()
+            .filter(|u| {
+                !self.has_upgrade(u.id) && !u.requirement.is_met(&self.owned, self.total_run)
+            })
+            .min_by(|a, b| {
+                a.cost
+                    .partial_cmp(&b.cost)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|u| u.id)
     }
 
     /// Visible si possédé, si le précédent est possédé, ou si `total_run ≥ coût × 0.5`.
@@ -131,8 +266,23 @@ impl GameState {
         }
     }
 
+    /// Fragments gagnables maintenant (Atelier « Nova dorée » compris).
+    pub fn fragments_available_with(&self, catalog: &Catalog) -> f64 {
+        let base = (fragments_for(self.total_run) * self.nova_factor(catalog)).floor();
+        (base - self.fragments_this_run).max(0.0)
+    }
+
+    /// `total_run` nécessaire pour gagner un fragment de plus que maintenant.
+    pub fn total_run_for_next_fragment(&self, catalog: &Catalog) -> f64 {
+        let factor = self.nova_factor(catalog).max(1e-9);
+        let next = self.fragments_available_with(catalog) + self.fragments_this_run + 1.0;
+        // floor(sqrt(t / D) × facteur) ≥ next  ⇔  t ≥ (next / facteur)² × D
+        (next / factor).powi(2) * crate::catalog::balance::FRAGMENT_DIVISOR
+    }
+
+    /// Fragments gagnables sans tenir compte de l'Atelier.
     pub fn fragments_available(&self) -> f64 {
-        fragments_available(self.total_run, self.fragments_this_run)
+        (fragments_for(self.total_run) - self.fragments_this_run).max(0.0)
     }
 
     fn earn(&mut self, amount: f64) {
@@ -189,11 +339,13 @@ impl GameState {
             return;
         }
         let owned = self.owned_of(id);
+        let factor = self.generator_cost_factor(catalog);
+        let budget = self.stardust.value() / factor;
         let count = match mode {
-            BuyMode::Max => def.max_affordable(owned, self.stardust.value()),
-            other => other.quantity(def, owned, self.stardust.value()),
+            BuyMode::Max => def.max_affordable(owned, budget),
+            other => other.quantity(def, owned, budget),
         };
-        let cost = def.cost_for(owned, count);
+        let cost = def.cost_for(owned, count) * factor;
         if count == 0 || !self.stardust.spend(cost) {
             events.push(fail);
             return;
@@ -244,6 +396,7 @@ impl GameState {
         let production = economy::total_production(catalog, self);
         self.earn(production * dt);
 
+        self.comet.interval_factor = self.comet_interval_factor(catalog);
         let comet = self.comet.advance(dt, roll);
         if comet.spawned {
             events.push(DomainEvent::CometSpawned);
@@ -256,6 +409,14 @@ impl GameState {
         }
 
         self.check_reveals(catalog, events);
+
+        if self.autobuy {
+            self.autobuy_timer += dt;
+            if self.autobuy_timer >= AUTOBUY_INTERVAL {
+                self.autobuy_timer = 0.0;
+                self.run_autobuyer(catalog, events);
+            }
+        }
 
         self.achievement_timer += dt;
         if self.achievement_timer >= ACHIEVEMENT_CHECK_INTERVAL {
@@ -277,7 +438,16 @@ impl GameState {
             return;
         }
         let production = economy::total_production(catalog, self);
-        let reward = CometReward::from_roll(roll_reward, self.stardust.value(), production);
+        let reward = match CometReward::from_roll(roll_reward, self.stardust.value(), production) {
+            CometReward::SolarStorm {
+                multiplier,
+                duration,
+            } => CometReward::SolarStorm {
+                multiplier,
+                duration: duration * self.storm_factor(catalog),
+            },
+            other => other,
+        };
         match reward {
             CometReward::SolarStorm { duration, .. } => self.comet.start_storm(duration),
             CometReward::StarShower { amount } => self.earn(amount),
@@ -289,7 +459,7 @@ impl GameState {
 
     /// Déclenche une Supernova si au moins un fragment est gagnable.
     pub fn supernova(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
-        let gained = self.fragments_available();
+        let gained = self.fragments_available_with(catalog);
         if gained < 1.0 {
             events.push(DomainEvent::SupernovaUnavailable);
             return;
@@ -300,8 +470,29 @@ impl GameState {
         self.stardust = Stardust::ZERO;
         self.total_run = 0.0;
         self.owned.iter_mut().for_each(|o| *o = 0);
-        self.upgrades.iter_mut().for_each(|u| *u = false);
+        // « Récolte continue » est un confort, pas une progression : on la garde.
+        for u in &catalog.upgrades {
+            if u.effect != Effect::HoldHarvest {
+                self.upgrades[u.id.index()] = false;
+            }
+        }
         self.comet.storm_remaining = 0.0;
+        // Atelier « Héritage » : le nouveau cycle démarre équipé.
+        let kits: Vec<(u64, u64)> = self
+            .perk_effects(catalog)
+            .filter_map(|e| match e {
+                PerkEffect::StartingKit { probes, drones } => Some((probes, drones)),
+                _ => None,
+            })
+            .collect();
+        for (probes, drones) in kits {
+            if let Some(o) = self.owned.get_mut(0) {
+                *o += probes;
+            }
+            if let Some(o) = self.owned.get_mut(1) {
+                *o += drones;
+            }
+        }
         self.revealed = catalog
             .generators
             .iter()
@@ -324,8 +515,9 @@ impl GameState {
         if !elapsed_secs.is_finite() || elapsed_secs <= 0.0 {
             return;
         }
-        let seconds = elapsed_secs.min(OFFLINE_CAP_SECS);
-        let amount = economy::steady_production(catalog, self) * seconds * OFFLINE_RATE;
+        let (rate, cap) = self.offline_terms(catalog);
+        let seconds = elapsed_secs.min(cap);
+        let amount = economy::steady_production(catalog, self) * seconds * rate;
         if amount <= 0.0 {
             return;
         }
@@ -342,6 +534,93 @@ impl GameState {
             .collect();
     }
 
+    /// Achète toutes les améliorations abordables, de la moins chère à la plus chère.
+    pub fn buy_all_upgrades(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
+        let mut count = 0;
+        loop {
+            let next = catalog
+                .upgrades
+                .iter()
+                .filter(|u| {
+                    self.is_upgrade_available(catalog, u.id) && self.stardust.can_afford(u.cost)
+                })
+                .min_by(|a, b| {
+                    a.cost
+                        .partial_cmp(&b.cost)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .map(|u| u.id);
+            match next {
+                Some(id) => {
+                    self.buy_upgrade(catalog, id, events);
+                    count += 1;
+                }
+                None => break,
+            }
+        }
+        events.push(DomainEvent::BulkUpgrades { count });
+    }
+
+    /// Achat à l'Atelier stellaire avec des fragments.
+    pub fn buy_perk(&mut self, catalog: &Catalog, id: PerkId, events: &mut Vec<DomainEvent>) {
+        let Some(def) = catalog.perk(id) else {
+            events.push(DomainEvent::PurchaseFailed {
+                target: PurchaseTarget::Perk(id),
+            });
+            return;
+        };
+        if self.has_perk(id) || self.fragments_spendable() + 1e-9 < def.cost {
+            events.push(DomainEvent::PurchaseFailed {
+                target: PurchaseTarget::Perk(id),
+            });
+            return;
+        }
+        self.fragments_spent += def.cost;
+        self.perks[id.index()] = true;
+        events.push(DomainEvent::PerkPurchased { perk: id });
+        if def.effect == PerkEffect::AutoBuyer {
+            self.autobuy = true;
+            events.push(DomainEvent::AutoBuyChanged { enabled: true });
+        }
+        self.check_achievements(catalog, events);
+    }
+
+    /// Active ou arrête l'automate d'achat.
+    pub fn toggle_autobuy(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
+        if !self.autobuy_unlocked(catalog) {
+            events.push(DomainEvent::AutoBuyLocked);
+            return;
+        }
+        self.autobuy = !self.autobuy;
+        self.autobuy_timer = 0.0;
+        events.push(DomainEvent::AutoBuyChanged {
+            enabled: self.autobuy,
+        });
+    }
+
+    /// Automate : achète le générateur visible qui rapporte le plus par
+    /// poussière dépensée, tant que c'est abordable (10 achats max par passage).
+    fn run_autobuyer(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
+        for _ in 0..AUTOBUY_MAX_PER_TICK {
+            let best = catalog
+                .generators
+                .iter()
+                .filter(|g| self.is_visible(catalog, g.id))
+                .map(|g| {
+                    let cost = self.generator_cost(catalog, g.id, 1);
+                    let gain = g.base_prod * economy::generator_multiplier(catalog, self, g.id);
+                    (g.id, cost, gain / cost)
+                })
+                .max_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal));
+            match best {
+                Some((id, cost, _)) if self.stardust.can_afford(cost) => {
+                    self.buy_generator(catalog, id, BuyMode::One, events);
+                }
+                _ => break,
+            }
+        }
+    }
+
     /// Vérifie les succès et émet un événement par succès nouvellement débloqué.
     pub fn check_achievements(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
         let production = economy::total_production(catalog, self);
@@ -354,6 +633,9 @@ impl GameState {
                 comets: self.meteors_caught,
                 supernovas: self.supernovas,
                 production,
+                fragments: self.fragments,
+                perks_owned: self.perks_owned(),
+                perks_total: catalog.perks.len(),
             };
             for a in &catalog.achievements {
                 if !self.has_achievement(a.id) && a.condition.is_met(&ctx) {
@@ -442,6 +724,142 @@ mod tests {
         s.harvest(&c, &mut ev);
         s.harvest(&c, &mut ev);
         assert_eq!(s.clicks, before + 2);
+    }
+
+    fn perk(c: &Catalog, key: &str) -> PerkId {
+        c.perk_by_key(key).unwrap()
+    }
+
+    #[test]
+    fn perks_cost_fragments_but_keep_the_bonus() {
+        let (c, mut s, mut ev) = setup();
+        s.fragments = 3.0;
+        let bonus_before = crate::prestige::fragment_multiplier(s.fragments);
+        s.buy_perk(&c, perk(&c, "perk_start"), &mut ev);
+        assert!(ev.contains(&DomainEvent::PerkPurchased {
+            perk: perk(&c, "perk_start")
+        }));
+        assert_eq!(s.fragments_spendable(), 2.0);
+        assert_eq!(
+            crate::prestige::fragment_multiplier(s.fragments),
+            bonus_before,
+            "bonus intact"
+        );
+        ev.clear();
+        // Trop cher (5 > 2) puis déjà acheté.
+        s.buy_perk(&c, perk(&c, "perk_auto"), &mut ev);
+        s.buy_perk(&c, perk(&c, "perk_start"), &mut ev);
+        assert!(ev
+            .iter()
+            .all(|e| matches!(e, DomainEvent::PurchaseFailed { .. })));
+        assert_eq!(s.fragments_spendable(), 2.0);
+        let artisan = c.achievement_by_key("perk1").unwrap();
+        assert!(s.has_achievement(artisan));
+    }
+
+    #[test]
+    fn starting_kit_and_hold_survive_supernova() {
+        let (c, mut s, mut ev) = setup();
+        s.fragments = 1.0;
+        s.buy_perk(&c, perk(&c, "perk_start"), &mut ev);
+        let hold = c.upgrade_by_key("hold_0").unwrap();
+        let alloy = c.upgrade_by_key("gen0_t0").unwrap();
+        s.upgrades[hold.index()] = true;
+        s.upgrades[alloy.index()] = true;
+        s.total_run = 1e8;
+        s.supernova(&c, &mut ev);
+        assert_eq!(&s.owned[..2], &[10, 5]);
+        assert!(s.has_upgrade(hold), "Récolte continue conservée");
+        assert!(!s.has_upgrade(alloy));
+    }
+
+    #[test]
+    fn discount_comet_storm_offline_and_nova_perks() {
+        let (c, mut s, mut ev) = setup();
+        let full = s.generator_cost(&c, GeneratorId(0), 1);
+        s.fragments = 100.0;
+        for key in [
+            "perk_discount",
+            "perk_comet",
+            "perk_storm",
+            "perk_offline",
+            "perk_nova",
+        ] {
+            s.buy_perk(&c, perk(&c, key), &mut ev);
+        }
+        assert!((s.generator_cost(&c, GeneratorId(0), 1) - full * 0.8).abs() < 1e-9);
+        s.stardust = Stardust::new(12.0);
+        s.buy_generator(&c, GeneratorId(0), BuyMode::One, &mut ev);
+        assert_eq!(s.owned[0], 1, "15 × 0.8 = 12 : abordable");
+        // Comète : intervalle × 0.6.
+        s.tick(&c, 50.0, 0.0, &mut ev);
+        s.catch_comet(&c, 0.1, 0.0, &mut ev);
+        assert!((s.comet.next_in - 90.0 * 0.6).abs() < 1e-9);
+        assert!(
+            (s.comet.storm_remaining - 60.0).abs() < 1e-9,
+            "tempête de 60 s"
+        );
+        assert_eq!(s.offline_terms(&c), (1.0, 24.0 * 3600.0));
+        s.total_run = 1e9; // 10 fragments de base → 15 avec Nova dorée
+        assert_eq!(s.fragments_available_with(&c), 15.0);
+    }
+
+    #[test]
+    fn autobuyer_buys_and_can_be_toggled() {
+        let (c, mut s, mut ev) = setup();
+        s.toggle_autobuy(&c, &mut ev);
+        assert_eq!(ev, [DomainEvent::AutoBuyLocked]);
+        ev.clear();
+        s.fragments = 5.0;
+        s.buy_perk(&c, perk(&c, "perk_auto"), &mut ev);
+        assert!(s.autobuy && ev.contains(&DomainEvent::AutoBuyChanged { enabled: true }));
+        s.stardust = Stardust::new(1000.0);
+        s.tick(&c, 1.0, 0.5, &mut ev);
+        assert!(s.owned.iter().sum::<u64>() > 0, "l'automate a acheté");
+        let spent_on = s.owned.clone();
+        s.toggle_autobuy(&c, &mut ev);
+        assert!(!s.autobuy);
+        s.stardust = Stardust::new(1e6);
+        s.tick(&c, 2.0, 0.5, &mut ev);
+        assert_eq!(s.owned, spent_on, "arrêté : plus d'achats");
+    }
+
+    #[test]
+    fn buy_all_upgrades_cheapest_first() {
+        let (c, mut s, mut ev) = setup();
+        s.buy_all_upgrades(&c, &mut ev);
+        assert_eq!(ev, [DomainEvent::BulkUpgrades { count: 0 }]);
+        ev.clear();
+        s.owned[0] = 10;
+        s.owned[1] = 10;
+        s.total_run = 2e4;
+        s.stardust = Stardust::new(1_500.0);
+        s.buy_all_upgrades(&c, &mut ev);
+        // Abordables : Sondes t0 (225) puis Récolte continue (300) puis Gants (1 000) = 1 525 > 1 500.
+        let bought: Vec<_> = ev
+            .iter()
+            .filter_map(|e| match e {
+                DomainEvent::UpgradePurchased { upgrade, .. } => {
+                    Some(c.upgrade(*upgrade).unwrap().key.clone())
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(bought, ["gen0_t0", "hold_0"]);
+        assert_eq!(ev.last(), Some(&DomainEvent::BulkUpgrades { count: 2 }));
+    }
+
+    #[test]
+    fn next_locked_upgrade_is_the_cheapest_locked() {
+        let (c, s, _) = setup();
+        let next = s
+            .next_locked_upgrade(&c)
+            .map(|id| c.upgrade(id).unwrap().key.clone());
+        assert_eq!(
+            next.as_deref(),
+            Some("gen0_t0"),
+            "Alliage · Sondes (225) est la moins chère"
+        );
     }
 
     #[test]
@@ -541,7 +959,7 @@ mod tests {
         s.clicks = 77;
         s.play_time = 1234.0;
         s.supernova(&c, &mut ev);
-        assert_eq!(s.fragments, 3.0);
+        assert_eq!(s.fragments, 9.0, "floor(sqrt(9e8 / 1e7))");
         assert_eq!(s.supernovas, 1);
         assert_eq!(s.stardust.value(), 0.0);
         assert_eq!(s.total_run, 0.0);
@@ -554,7 +972,7 @@ mod tests {
         assert!(ev.iter().any(|e| matches!(
             e,
             DomainEvent::Supernova { fragments_gained, total_fragments }
-                if *fragments_gained == 3.0 && *total_fragments == 3.0
+                if *fragments_gained == 9.0 && *total_fragments == 9.0
         )));
         // Le succès « Supernova ! » est débloqué immédiatement.
         let nova = c.achievement_by_key("nova1").unwrap();

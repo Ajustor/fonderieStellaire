@@ -23,6 +23,17 @@ pub enum AchievementCondition {
     Supernovas(u32),
     /// Production par seconde minimale.
     Production(f64),
+    /// Au moins `count` exemplaires du générateur n° `index`.
+    OwnGenerator {
+        index: usize,
+        count: u64,
+    },
+    /// Fragments gagnés au total.
+    Fragments(f64),
+    /// Améliorations de l'Atelier achetées.
+    PerksOwned(usize),
+    /// Toutes les améliorations de l'Atelier.
+    AllPerks,
 }
 
 /// Données nécessaires pour évaluer une condition de succès.
@@ -34,6 +45,9 @@ pub struct AchievementContext<'a> {
     pub comets: u32,
     pub supernovas: u32,
     pub production: f64,
+    pub fragments: f64,
+    pub perks_owned: usize,
+    pub perks_total: usize,
 }
 
 impl AchievementCondition {
@@ -49,6 +63,14 @@ impl AchievementCondition {
             AchievementCondition::CometsCaught(n) => ctx.comets >= n,
             AchievementCondition::Supernovas(n) => ctx.supernovas >= n,
             AchievementCondition::Production(p) => ctx.production >= p,
+            AchievementCondition::OwnGenerator { index, count } => {
+                ctx.owned.get(index).copied().unwrap_or(0) >= count
+            }
+            AchievementCondition::Fragments(f) => ctx.fragments >= f,
+            AchievementCondition::PerksOwned(n) => ctx.perks_owned >= n,
+            AchievementCondition::AllPerks => {
+                ctx.perks_total > 0 && ctx.perks_owned >= ctx.perks_total
+            }
         }
     }
 }
@@ -75,6 +97,9 @@ mod tests {
             comets: 0,
             supernovas: 0,
             production: 0.0,
+            fragments: 0.0,
+            perks_owned: 0,
+            perks_total: 0,
         }
     }
 

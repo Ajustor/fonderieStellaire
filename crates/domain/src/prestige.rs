@@ -26,24 +26,29 @@ mod tests {
 
     #[test]
     fn fragment_formula() {
+        // floor(sqrt(total_run / 1e7))
         assert_eq!(fragments_for(0.0), 0.0);
-        assert_eq!(fragments_for(9.9e7), 0.0);
-        assert_eq!(fragments_for(1e8), 1.0);
-        assert_eq!(fragments_for(4e8), 2.0);
-        assert_eq!(fragments_for(8.9e8), 2.0);
-        assert_eq!(fragments_for(9e8), 3.0);
+        assert_eq!(fragments_for(9.9e6), 0.0);
+        assert_eq!(fragments_for(1e7), 1.0);
+        assert_eq!(fragments_for(4e7), 2.0);
+        assert_eq!(fragments_for(8.9e7), 2.0);
+        assert_eq!(fragments_for(9e7), 3.0);
+        assert_eq!(fragments_for(1e9), 10.0);
         assert_eq!(fragments_for(f64::NAN), 0.0);
     }
 
     #[test]
     fn available_subtracts_already_earned() {
-        assert_eq!(fragments_available(9e8, 1.0), 2.0);
-        assert_eq!(fragments_available(1e8, 5.0), 0.0);
+        assert_eq!(fragments_available(9e7, 1.0), 2.0);
+        assert_eq!(fragments_available(1e7, 5.0), 0.0);
     }
 
     #[test]
     fn multiplier() {
         assert_eq!(fragment_multiplier(0.0), 1.0);
-        assert!((fragment_multiplier(12.0) - 1.6).abs() < 1e-12);
+        assert!(
+            (fragment_multiplier(12.0) - 2.2).abs() < 1e-12,
+            "+10 % par fragment"
+        );
     }
 }

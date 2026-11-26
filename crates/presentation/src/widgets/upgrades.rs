@@ -5,8 +5,8 @@ use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 
 use super::Ctx;
-use application::GameSnapshot;
-use domain::{Effect, UpgradeId};
+use application::{GameSnapshot, NextUpgradeView};
+use domain::{Effect, Requirement, UpgradeId};
 
 use crate::draw;
 use crate::fmt;
@@ -35,15 +35,13 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
     if n == 0 {
         let pulse = 0.5 + 0.5 * (now * 1.2).sin();
         let c = theme::MUTED.lerp(theme::GREY, pulse * 0.6);
-        let txt = draw::truncate(EMPTY_TEXT, inner.width.saturating_sub(2) as usize);
-        draw::text(
-            buf,
-            inner.x + 1,
-            inner.y + inner.height / 2,
-            &txt,
-            theme::fg(c),
-            inner.right(),
-        );
+        let max = inner.width.saturating_sub(2) as usize;
+        let txt = draw::truncate(EMPTY_TEXT, max);
+        let y = inner.y + inner.height.saturating_sub(3) / 2;
+        draw::text(buf, inner.x + 1, y, &txt, theme::fg(c), inner.right());
+        if let Some(next) = snap.next_upgrade {
+            render_next(buf, inner, y + 1, ctx, next);
+        }
         return;
     }
     ui.upg_sel = ui.upg_sel.min(n - 1);
@@ -208,6 +206,63 @@ fn render_detail(buf: &mut Buffer, inner: Rect, desc_h: u16, ctx: &Ctx, id: Upgr
             inner.x + 1,
             y + 1,
             &flavor,
+            theme::fg(theme::MUTED),
+            inner.right(),
+        );
+    }
+}
+
+/// « Prochaine : … » : la prochaine amélioration verrouillée et où on en est.
+fn render_next(buf: &mut Buffer, inner: Rect, y: u16, ctx: &Ctx, next: NextUpgradeView) {
+    let Some(def) = ctx.catalog.upgrade(next.id) else {
+        return;
+    };
+    let max = inner.width.saturating_sub(2) as usize;
+    if y < inner.bottom() {
+        let line = draw::truncate(&format!("Prochaine : {}", def.name), max);
+        draw::text(
+            buf,
+            inner.x + 1,
+            y,
+            &line,
+            theme::fg(theme::CYAN),
+            inner.right(),
+        );
+    }
+    if y + 1 < inner.bottom() {
+        let what = match def.requirement {
+            Requirement::GeneratorOwned { generator, .. } => ctx
+                .catalog
+                .generator(generator)
+                .map(|g| g.plural.to_string())
+                .unwrap_or_default(),
+            Requirement::TotalRun(_) => "✦ récoltés".to_string(),
+        };
+        let pct = (next.current / next.needed.max(1e-9)).clamp(0.0, 1.0);
+        let label = format!(
+            " {} / {} {what}",
+            fmt::short(next.current),
+            fmt::short(next.needed)
+        );
+        let bar_w = (inner.width as usize)
+            .saturating_sub(label.chars().count() + 3)
+            .clamp(4, 20);
+        let filled = (pct * bar_w as f64).round() as usize;
+        let mut x = inner.x + 1;
+        for i in 0..bar_w {
+            let (ch, c) = if i < filled {
+                ('█', theme::CYAN)
+            } else {
+                ('░', theme::BAR_EMPTY)
+            };
+            draw::put(buf, inner, x as i32, (y + 1) as i32, ch, c);
+            x += 1;
+        }
+        draw::text(
+            buf,
+            x,
+            y + 1,
+            &label,
             theme::fg(theme::MUTED),
             inner.right(),
         );

@@ -24,15 +24,17 @@ fn items(mode: BuyMode) -> Vec<Item> {
     };
     vec![
         it("Espace", "Récolter", 0),
-        it("↑↓", "Choisir", 7),
+        it("↑↓", "Choisir", 10),
         it("Entrée", "Acheter", 1),
-        it("Tab", "Panneau", 8),
+        it("A", "Tout", 5),
+        it("Tab", "Panneau", 11),
         it("M", mode.label(), 2),
-        it("C", "Comète", 5),
-        it("P", "Supernova", 3),
-        it("S", "Sauver", 9),
-        it("F", "Effets", 10),
-        it("I", "Infos", 6),
+        it("C", "Comète", 8),
+        it("P", "Nova", 3),
+        it("E", "Atelier", 6),
+        it("I", "Infos", 7),
+        it("S", "Sauver", 12),
+        it("F", "Effets", 13),
         it("Q", "Quitter", 4),
     ]
 }

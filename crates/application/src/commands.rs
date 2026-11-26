@@ -1,4 +1,4 @@
-use domain::{GeneratorId, UpgradeId};
+use domain::{GeneratorId, PerkId, UpgradeId};
 
 /// Intentions de jeu envoyées par la présentation au [`crate::GameService`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -13,4 +13,10 @@ pub enum Command {
     Supernova,
     Save,
     ToggleReducedEffects,
+    /// Achète toutes les améliorations abordables.
+    BuyAllUpgrades,
+    /// Achat à l'Atelier stellaire.
+    BuyPerk(PerkId),
+    /// Active / arrête l'automate d'achat.
+    ToggleAutoBuy,
 }

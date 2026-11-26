@@ -30,6 +30,9 @@ struct SaveFile {
     play_time: f64,
     last_saved: u64,
     reduced_effects: bool,
+    perks: Vec<String>,
+    fragments_spent: f64,
+    autobuy: bool,
 }
 
 impl From<&SaveData> for SaveFile {
@@ -50,6 +53,9 @@ impl From<&SaveData> for SaveFile {
             play_time: d.play_time,
             last_saved: d.last_saved,
             reduced_effects: d.reduced_effects,
+            perks: d.perks.clone(),
+            fragments_spent: d.fragments_spent,
+            autobuy: d.autobuy,
         }
     }
 }
@@ -72,6 +78,9 @@ impl From<SaveFile> for SaveData {
             play_time: f.play_time,
             last_saved: f.last_saved,
             reduced_effects: f.reduced_effects,
+            perks: f.perks,
+            fragments_spent: f.fragments_spent,
+            autobuy: f.autobuy,
         }
     }
 }

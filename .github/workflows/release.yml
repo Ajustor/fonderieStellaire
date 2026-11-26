@@ -91,14 +91,24 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
+      - name: Notes de version (section du CHANGELOG)
+        run: |
+          awk -v tag="## ${GITHUB_REF_NAME}" '
+            $0 == tag { keep = 1; next }
+            /^## / && keep { exit }
+            keep { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then echo "Voir CHANGELOG.md." > notes.md; fi
+          cat notes.md
       - uses: softprops/action-gh-release@v2
         with:
           name: Fonderie Stellaire ${{ github.ref_name }}
-          generate_release_notes: true
+          body_path: notes.md
           files: dist/*
 
   docker:
