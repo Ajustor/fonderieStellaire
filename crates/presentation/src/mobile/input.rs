@@ -361,6 +361,10 @@ impl App {
             return;
         }
         if let Some(m) = self.mobile_mut() {
+            if !m.absence.is_empty() {
+                m.absence.clear();
+                return;
+            }
             if m.confirm.take().is_some() || m.detail.take().is_some() {
                 return;
             }
@@ -469,6 +473,11 @@ impl App {
             }
             Hit::Key(intent) => self.on_intent(intent),
             Hit::Block | Hit::Slider | Hit::Map => {}
+            Hit::CloseAbsence => {
+                if let Some(m) = self.mobile_mut() {
+                    m.absence.clear();
+                }
+            }
             Hit::OpenPage(page) => {
                 if let Some(m) = self.mobile_mut() {
                     m.page = Some(page);

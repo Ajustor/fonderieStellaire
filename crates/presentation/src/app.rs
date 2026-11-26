@@ -316,6 +316,27 @@ impl App {
     pub fn reload_save(&mut self) -> Result<(), String> {
         let events = self.service.load().map_err(|e| e.to_string())?;
         self.service.fill_snapshot(&mut self.snap);
+        let mut report = self.absence_report(&events);
+        // La carte commence par la poussière produite pendant l'absence.
+        for ev in &events {
+            if let GameEvent::Domain(DomainEvent::OfflineGains { seconds, amount }) = ev {
+                report.insert(
+                    0,
+                    (
+                        '✦',
+                        format!(
+                            "+{} poussière d'étoile en {}",
+                            fmt::short(*amount),
+                            fmt::duration(*seconds)
+                        ),
+                        theme::GOLD,
+                    ),
+                );
+            }
+        }
+        if let Some(m) = self.mobile.as_mut() {
+            m.absence = report;
+        }
         for ev in events {
             self.react(ev);
         }

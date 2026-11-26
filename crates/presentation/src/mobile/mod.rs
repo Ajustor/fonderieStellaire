@@ -96,6 +96,7 @@ pub enum Hit {
     CancelConfirm,
     EventChoice(usize),
     DailyToggle,
+    CloseAbsence,
     /// Recherche du Labo, par position d'affichage.
     Lab(usize),
     /// Élément de la Cosmogonie, par index.
@@ -242,6 +243,8 @@ pub struct MobileUi {
     pub map_sel: usize,
     /// Mégastructures : case choisie.
     pub mega_sel: usize,
+    /// Rapport d'absence à montrer au retour dans l'app.
+    pub absence: Vec<(char, String, crate::fx::Rgb)>,
 }
 
 /// Version tactile d'un message qui cite des touches : « [Z] pour décider »

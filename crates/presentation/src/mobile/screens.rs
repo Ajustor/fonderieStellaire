@@ -180,6 +180,61 @@ pub fn render(
     if let Some(c) = m.confirm {
         super::cosmos::render_confirm(buf, area, ctx, m, c);
     }
+    if !m.absence.is_empty() {
+        render_absence(buf, area, m);
+    }
+}
+
+/// « Pendant ton absence » : ce que la fonderie a fait, et un bouton pour reprendre.
+fn render_absence(buf: &mut Buffer, area: Rect, m: &mut MobileUi) {
+    let w = area.width.saturating_sub(4) as usize;
+    let mut lines: Vec<(String, Rgb)> = Vec::new();
+    for (sym, text, color) in &m.absence {
+        for (i, l) in draw::wrap(&format!("{sym} {text}"), w)
+            .into_iter()
+            .enumerate()
+        {
+            lines.push((if i == 0 { l } else { format!("  {l}") }, *color));
+        }
+    }
+    let h = (lines.len() as u16 + BUTTON_H + 5).min(area.height);
+    let r = Rect::new(area.x, area.y + (area.height - h) / 2, area.width, h);
+    m.hits.add(area, Hit::Block);
+    effects::fade(buf, area, 0.5);
+    draw::clear(buf, r);
+    draw::fill_bg(buf, r, theme::SELECT_BG);
+    draw::card(buf, r, r, theme::GOLD);
+    draw::text(
+        buf,
+        r.x + 2,
+        r.y,
+        " ✦ Pendant ton absence ",
+        theme::bold(theme::GOLD),
+        r.right() - 1,
+    );
+    for (i, (l, c)) in lines.iter().enumerate() {
+        let y = r.y + 2 + i as u16;
+        if y + BUTTON_H + 1 >= r.bottom() {
+            break;
+        }
+        draw::text(buf, r.x + 2, y, l, theme::fg(*c), r.right() - 1);
+    }
+    let b = Rect::new(
+        r.x + 2,
+        r.bottom() - 1 - BUTTON_H,
+        r.width.saturating_sub(4),
+        BUTTON_H,
+    );
+    button(
+        buf,
+        &mut m.hits,
+        m.press,
+        b,
+        "",
+        "Récupérer",
+        theme::GOLD,
+        Some(Hit::CloseAbsence),
+    );
 }
 
 // ----------------------------------------------------------------------

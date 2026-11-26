@@ -368,3 +368,18 @@ fn cosmos_tab_unlocks_with_the_first_supernova() {
     let cosmos = app.mobile_tabs().into_iter().find(|t| t.tab == Tab::Cosmos);
     assert!(cosmos.unwrap().unlocked);
 }
+
+#[test]
+fn absence_report_card_after_resume() {
+    let mut save = advanced_save();
+    save.last_saved = 1_700_000_000 - 3 * 3600;
+    let mut app = mobile_app(Some(save));
+    app.reload_save().expect("reprise");
+    let screen = settle(&mut app, 44, 43);
+    println!("{screen}");
+    assert!(screen.contains("Pendant ton absence"), "{screen}");
+    let ok = find(&app, |h| *h == Hit::CloseAbsence).expect("Récupérer");
+    tap(&mut app, ok);
+    settle(&mut app, 44, 43);
+    assert!(find(&app, |h| *h == Hit::CloseAbsence).is_none(), "carte fermée");
+}
