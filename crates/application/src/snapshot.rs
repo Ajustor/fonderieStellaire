@@ -49,6 +49,8 @@ pub struct GameSnapshot {
     pub play_time: f64,
     pub achievements_unlocked: usize,
     pub achievements_total: usize,
+    /// Succès débloqués, indexés comme le catalogue.
+    pub achievements: Vec<bool>,
     pub buy_mode: BuyMode,
     pub storm_remaining: f64,
     /// Avancement de la comète active (0 → 1).

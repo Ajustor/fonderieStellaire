@@ -376,3 +376,65 @@ fn production_panel_has_axes_and_trend() {
     assert!(chart_colors.contains(&station), "couleur des stations");
     assert!(chart_colors.contains(&dyson), "couleur des sphères");
 }
+
+#[test]
+fn descriptions_and_info_screen() {
+    let mut app = game_app();
+    let text = render(&mut app, 100, 30);
+    println!("{text}");
+    // Encart du générateur sélectionné (la Sonde) : ce qu'elle fait + chiffres.
+    assert!(text.contains("Petite sonde autonome"));
+    assert!(text.contains("/s par unité"));
+    assert!(text.contains("×2 à 50 (encore 8)"));
+    // Encart de l'amélioration sélectionnée : effet + ambiance.
+    assert!(text.contains("Maintenir [Espace] : 10 récoltes/s"));
+    assert!(text.contains("Un gant motorisé"));
+    // Amélioration suivante : effet chiffré d'après la production actuelle.
+    app.on_intent(Intent::NextPanel);
+    app.on_intent(Intent::Down);
+    let text = render(&mut app, 100, 30);
+    assert!(
+        text.contains("+1% de la prod/s par clic → +30 par clic"),
+        "{text}"
+    );
+    assert!(text.contains("Chaque geste ramasse"));
+
+    app.on_intent(Intent::Info);
+    app.set_time(101.0);
+    let text = render(&mut app, 100, 30);
+    println!("{text}");
+    assert!(text.contains("SUCCÈS  2/12"));
+    assert!(text.contains("★ Premier pas"));
+    assert!(text.contains("○ Centurion"));
+    app.on_intent(Intent::Down);
+    app.on_intent(Intent::Escape);
+    app.set_time(102.0);
+    app.update(0.033);
+    let text = render(&mut app, 80, 24);
+    assert!(!text.contains("SUCCÈS"), "Infos refermé");
+}
+
+#[test]
+fn update_status_is_shown() {
+    use application::UpdateEvent;
+    let mut app = app_with(None);
+    app.set_time(5.0);
+    let text = render(&mut app, 100, 30);
+    assert!(
+        text.contains("v0.1.0"),
+        "version affichée sur l'écran titre"
+    );
+    app.react_update(UpdateEvent::Installed {
+        version: "v0.2.0".into(),
+    });
+    let text = render(&mut app, 100, 30);
+    assert!(
+        text.contains("v0.2.0 installée, relance le jeu !"),
+        "{text}"
+    );
+    app.enter_game_now();
+    app.set_time(6.0); // le toast a fini de glisser
+    app.update(0.033);
+    let text = render(&mut app, 100, 30);
+    assert!(text.contains("Mise à jour v0.2.0"), "toast en jeu : {text}");
+}

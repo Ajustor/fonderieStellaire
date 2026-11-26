@@ -5,6 +5,9 @@ use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 
 use super::Ctx;
+use application::GameSnapshot;
+use domain::{Effect, UpgradeId};
+
 use crate::draw;
 use crate::fmt;
 use crate::fx::easing::ease_out_cubic;
@@ -44,12 +47,15 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
         return;
     }
     ui.upg_sel = ui.upg_sel.min(n - 1);
-    let has_desc = inner.height >= 4;
-    let list_h = if has_desc {
-        inner.height - 2
+    // Encart de détail : séparateur + effet chiffré (+ texte d'ambiance si la place le permet).
+    let desc_h: u16 = if inner.height >= 7 {
+        3
+    } else if inner.height >= 4 {
+        2
     } else {
-        inner.height
-    } as usize;
+        0
+    };
+    let list_h = (inner.height - desc_h) as usize;
     keep_visible(ui.upg_sel, &mut ui.upg_scroll, list_h);
     if n <= list_h {
         ui.upg_scroll = 0;
@@ -129,31 +135,81 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
         }
     }
 
-    if has_desc {
-        let sep_y = inner.bottom() - 2;
-        let sep: String = "─".repeat(inner.width.saturating_sub(2) as usize);
+    if desc_h > 0 {
+        if let Some(u) = snap.upgrades.get(ui.upg_sel) {
+            render_detail(buf, inner, desc_h, ctx, u.id);
+        }
+    }
+}
+
+/// Gain concret apporté par une amélioration, d'après la production actuelle.
+pub fn impact(effect: Effect, snap: &GameSnapshot) -> Option<String> {
+    match effect {
+        Effect::GeneratorMultiplier { generator, factor } => {
+            let prod = snap
+                .generators
+                .iter()
+                .find(|g| g.id == generator)
+                .map(|g| g.production)
+                .unwrap_or(0.0);
+            Some(format!("+{}/s", fmt::short(prod * (factor - 1.0))))
+        }
+        Effect::GlobalMultiplier(factor) => Some(format!(
+            "+{}/s",
+            fmt::short(snap.production * (factor - 1.0))
+        )),
+        Effect::ClickPercent(pct) => {
+            Some(format!("+{} par clic", fmt::short(snap.production * pct)))
+        }
+        Effect::HoldHarvest => None,
+    }
+}
+
+/// Encart « qui fait quoi » de l'amélioration sélectionnée.
+fn render_detail(buf: &mut Buffer, inner: Rect, desc_h: u16, ctx: &Ctx, id: UpgradeId) {
+    let Some(def) = ctx.catalog.upgrade(id) else {
+        return;
+    };
+    let sep_y = inner.bottom() - desc_h;
+    let sep: String = "─".repeat(inner.width.saturating_sub(2) as usize);
+    draw::text(
+        buf,
+        inner.x + 1,
+        sep_y,
+        &sep,
+        theme::fg(theme::BORDER),
+        inner.right(),
+    );
+    let max = inner.width.saturating_sub(2) as usize;
+
+    // Ligne 1 : l'effet, puis son gain concret maintenant.
+    let y = sep_y + 1;
+    let gain = impact(def.effect, ctx.snap);
+    let gain_w = gain.as_ref().map(|g| g.chars().count() + 3).unwrap_or(0);
+    let desc = draw::truncate(&def.description, max.saturating_sub(gain_w));
+    let x = draw::text(
+        buf,
+        inner.x + 1,
+        y,
+        &desc,
+        theme::fg(theme::CYAN),
+        inner.right(),
+    );
+    if let Some(g) = gain {
+        let x = draw::text(buf, x, y, " → ", theme::fg(theme::MUTED), inner.right());
+        draw::text(buf, x, y, &g, theme::bold(theme::GREEN), inner.right());
+    }
+
+    // Ligne 2 : ce que c'est.
+    if desc_h >= 3 {
+        let flavor = draw::truncate(&def.flavor, max);
         draw::text(
             buf,
             inner.x + 1,
-            sep_y,
-            &sep,
-            theme::fg(theme::BORDER),
+            y + 1,
+            &flavor,
+            theme::fg(theme::MUTED),
             inner.right(),
         );
-        if let Some(def) = snap
-            .upgrades
-            .get(ui.upg_sel)
-            .and_then(|u| ctx.catalog.upgrade(u.id))
-        {
-            let desc = draw::truncate(&def.description, inner.width.saturating_sub(2) as usize);
-            draw::text(
-                buf,
-                inner.x + 1,
-                sep_y + 1,
-                &desc,
-                theme::fg(theme::CYAN),
-                inner.right(),
-            );
-        }
     }
 }

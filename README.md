@@ -161,6 +161,7 @@ cargo run --release -- --reset
 | `P` | Supernova (confirmation `O` / `N` / `Échap`) |
 | `S` | Sauvegarder maintenant |
 | `F` | Effets complets / effets réduits |
+| `I` | Infos : succès obtenus et fonctionnement de chaque mécanique |
 | `F3` | Overlay de debug (FPS, particules, temps de rendu) |
 | `Q` / `Échap` | Sauvegarder et quitter |
 
@@ -183,6 +184,21 @@ Majuscules et minuscules sont acceptées.
   améliorations.
 - **Succès** : 12 succès, **+1 %** de production chacun.
 - **Hors-ligne** : ta fonderie produit à 50 % pendant ton absence (12 h max).
+
+## Mise à jour automatique
+
+Au lancement, le jeu vérifie en arrière-plan (sans jamais le ralentir) s'il
+existe une version plus récente sur GitHub. Si oui, il la télécharge, vérifie sa
+somme SHA-256 et remplace l'exécutable : la nouvelle version est utilisée au
+**prochain lancement**. L'état s'affiche en bas à droite de l'écran titre
+(`v0.1.0 · à jour`), et un message apparaît dans le journal.
+
+- Pas de droits d'écriture sur le dossier du jeu, ou version compilée avec
+  `cargo` : le jeu signale simplement qu'une nouvelle version existe.
+- Hors-ligne : rien ne se passe, le jeu démarre normalement.
+- Pour désactiver : `fonderie-stellaire --no-update` ou la variable
+  d'environnement `FONDERIE_NO_UPDATE=1` (déjà le cas dans l'image Docker).
+- `fonderie-stellaire --version` affiche la version installée.
 
 ## Sauvegarde
 

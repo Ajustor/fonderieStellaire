@@ -1,6 +1,7 @@
 //! Widgets de l'écran de jeu. Ils lisent le `GameSnapshot` et l'état visuel,
 //! et dessinent directement dans le `Buffer`.
 
+pub mod codex;
 pub mod generators;
 pub mod header;
 pub mod help_bar;

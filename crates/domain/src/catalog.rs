@@ -61,6 +61,39 @@ const GENERATORS: [(&str, &str, char, f64, f64); 9] = [
     ),
 ];
 
+/// Ce que fait chaque générateur (affiché dans le détail de la sélection).
+const GENERATOR_FLAVORS: [&str; 9] = [
+    "Petite sonde autonome qui aspire la poussière en orbite basse.",
+    "Essaim de drones qui ratissent les ceintures d'astéroïdes.",
+    "Vaisseau-usine qui fauche les nuages de poussière interstellaire.",
+    "Base lunaire qui raffine la poussière à grande échelle.",
+    "Coque géante qui capte toute l'énergie d'une étoile.",
+    "Fonderie plongée au cœur d'une étoile pour en couler la matière.",
+    "Condense des nébuleuses entières en poussière d'étoile pure.",
+    "Extrait la poussière des fluctuations du vide quantique.",
+    "Tisse des galaxies neuves, fil d'étoile après fil d'étoile.",
+];
+
+/// Textes d'ambiance des niveaux d'amélioration par générateur.
+const TIER_FLAVORS: [&str; 4] = [
+    "Un blindage plus solide : moins de pannes, plus de récolte.",
+    "Des réglages au micron près pour ne plus rien laisser filer.",
+    "On pousse les machines bien au-delà de leurs limites.",
+    "Une micro-singularité au cœur de chaque machine.",
+];
+const GLOBAL_FLAVORS: [&str; 4] = [
+    "Courbe la lumière pour repérer les gisements les plus riches.",
+    "Des voiles géantes canalisent le vent solaire vers la fonderie.",
+    "Toutes les machines vibrent à l'unisson du cosmos.",
+    "Le vide lui-même se met à produire.",
+];
+const CLICK_FLAVORS: [&str; 3] = [
+    "Chaque geste ramasse un peu plus de poussière.",
+    "Une poigne capable d'arracher la queue d'une comète.",
+    "Tout ce que tu touches se change en poussière d'étoile.",
+];
+const HOLD_FLAVOR: &str = "Un gant motorisé qui récolte tant que tu gardes le doigt appuyé.";
+
 /// Niveaux d'amélioration par générateur : (nom, possédés requis, ×coût de base, facteur).
 const GENERATOR_TIERS: [(&str, u64, f64, f64); 4] = [
     ("Alliage renforcé", 10, 15.0, 2.0),
@@ -184,24 +217,31 @@ impl Catalog {
                     symbol,
                     base_cost,
                     base_prod,
+                    description: GENERATOR_FLAVORS.get(i).copied().unwrap_or(""),
                 },
             )
             .collect();
 
         let mut upgrades = Vec::new();
-        let mut push =
-            |key: String, name: String, description: String, cost, requirement, effect| {
-                let id = UpgradeId(upgrades.len());
-                upgrades.push(UpgradeDef {
-                    id,
-                    key,
-                    name,
-                    description,
-                    cost,
-                    requirement,
-                    effect,
-                });
-            };
+        let mut push = |key: String,
+                        name: String,
+                        description: String,
+                        flavor: &str,
+                        cost,
+                        requirement,
+                        effect| {
+            let id = UpgradeId(upgrades.len());
+            upgrades.push(UpgradeDef {
+                id,
+                key,
+                name,
+                description,
+                flavor: flavor.to_string(),
+                cost,
+                requirement,
+                effect,
+            });
+        };
 
         for g in &generators {
             for (t, &(tier_name, count, cost_mult, factor)) in GENERATOR_TIERS.iter().enumerate() {
@@ -209,6 +249,7 @@ impl Catalog {
                     format!("gen{}_t{}", g.id.index(), t),
                     format!("{tier_name} · {}", g.plural),
                     format!("×{} production des {}", fmt_factor(factor), g.plural),
+                    TIER_FLAVORS[t],
                     g.base_cost * cost_mult,
                     Requirement::GeneratorOwned {
                         generator: g.id,
@@ -226,6 +267,7 @@ impl Catalog {
                 format!("global_{i}"),
                 name.to_string(),
                 format!("×{} production globale", fmt_factor(factor)),
+                GLOBAL_FLAVORS[i],
                 cost,
                 Requirement::TotalRun(req),
                 Effect::GlobalMultiplier(factor),
@@ -236,6 +278,7 @@ impl Catalog {
                 format!("click_{i}"),
                 name.to_string(),
                 format!("+{}% de la prod/s par clic", (pct * 100.0).round()),
+                CLICK_FLAVORS[i],
                 cost,
                 Requirement::TotalRun(req),
                 Effect::ClickPercent(pct),
@@ -246,9 +289,10 @@ impl Catalog {
             "hold_0".to_string(),
             name.to_string(),
             format!(
-                "Maintenir [Espace] récolte en continu ({}/s)",
+                "Maintenir [Espace] : {} récoltes/s",
                 (1.0 / balance::HOLD_HARVEST_INTERVAL).round()
             ),
+            HOLD_FLAVOR,
             cost,
             Requirement::TotalRun(req),
             Effect::HoldHarvest,
@@ -335,6 +379,17 @@ mod tests {
         assert_eq!(u.cost, 15.0 * 15.0);
         let g = c.upgrade(c.upgrade_by_key("global_0").unwrap()).unwrap();
         assert_eq!(g.description, "×1.5 production globale");
+    }
+
+    #[test]
+    fn everything_is_described() {
+        let c = Catalog::standard();
+        assert!(c.generators.iter().all(|g| !g.description.is_empty()));
+        assert!(c
+            .upgrades
+            .iter()
+            .all(|u| !u.flavor.is_empty() && !u.description.is_empty()));
+        assert!(c.achievements.iter().all(|a| !a.description.is_empty()));
     }
 
     #[test]

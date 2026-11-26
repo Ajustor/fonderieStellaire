@@ -23,6 +23,8 @@ pub enum Intent {
     Save,
     ToggleEffects,
     ToggleDebug,
+    /// Écran « Infos » : succès et mécaniques.
+    Info,
     Quit,
     /// `O` dans une popup.
     Yes,
@@ -129,6 +131,7 @@ pub fn map_key(key: &KeyEvent) -> Option<Intent> {
             's' => Intent::Save,
             'f' => Intent::ToggleEffects,
             'q' => Intent::Quit,
+            'i' => Intent::Info,
             'o' | 'y' => Intent::Yes,
             'n' => Intent::No,
             d @ '1'..='9' => Intent::QuickBuy((d as u8 - b'1') as usize),

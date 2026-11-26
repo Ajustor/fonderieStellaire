@@ -29,7 +29,9 @@ RUN useradd --create-home --uid 1000 joueur \
 COPY --from=build /src/target/release/fonderie-stellaire /usr/local/bin/fonderie-stellaire
 USER joueur
 # dirs::data_dir() suit XDG_DATA_HOME : la sauvegarde va dans /data/fonderie-stellaire/.
-ENV XDG_DATA_HOME=/data \
+# Pas de mise à jour automatique dans un conteneur : on met à jour l'image.
+ENV FONDERIE_NO_UPDATE=1 \
+    XDG_DATA_HOME=/data \
     COLORTERM=truecolor \
     TERM=xterm-256color \
     LANG=C.UTF-8

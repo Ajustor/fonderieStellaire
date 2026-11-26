@@ -24,6 +24,8 @@ pub struct GeneratorDef {
     pub symbol: char,
     pub base_cost: f64,
     pub base_prod: f64,
+    /// Ce que fait ce générateur, en une phrase.
+    pub description: &'static str,
 }
 
 impl GeneratorDef {
@@ -127,6 +129,7 @@ mod tests {
             symbol: '✧',
             base_cost: 15.0,
             base_prod: 0.1,
+            description: "",
         }
     }
 

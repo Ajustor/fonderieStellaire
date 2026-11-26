@@ -14,7 +14,9 @@ use crate::ui::{Panel, Ui};
 use crate::visuals::Visuals;
 use crate::widgets::journal::Journal;
 use crate::widgets::toast::Toasts;
-use crate::widgets::{generators, header, help_bar, journal, modal, sky, sparkline, upgrades, Ctx};
+use crate::widgets::{
+    codex, generators, header, help_bar, journal, modal, sky, sparkline, upgrades, Ctx,
+};
 
 /// Décalage entre deux panneaux de la cascade.
 pub const CASCADE_STAGGER: f64 = 0.08;
@@ -61,6 +63,9 @@ pub fn render(
 
     if let Some(popup) = ui.popup {
         modal::render(buf, area, ctx, &popup);
+    }
+    if let Some(codex) = ui.codex {
+        codex::render(buf, area, ctx, &codex, &mut ui.codex_scroll);
     }
 }
 

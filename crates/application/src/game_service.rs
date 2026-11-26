@@ -242,6 +242,9 @@ impl GameService {
         snap.play_time = st.play_time;
         snap.achievements_unlocked = st.achievements_unlocked();
         snap.achievements_total = c.achievements.len();
+        snap.achievements.clear();
+        snap.achievements
+            .extend(c.achievements.iter().map(|a| st.has_achievement(a.id)));
         snap.buy_mode = self.buy_mode;
         snap.storm_remaining = st.comet.storm_remaining;
         snap.comet_progress = st.comet.progress();

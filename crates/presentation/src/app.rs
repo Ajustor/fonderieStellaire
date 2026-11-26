@@ -9,7 +9,8 @@ use ratatui::layout::Rect;
 use ratatui::widgets::{Block, BorderType, Borders, Widget};
 use ratatui::Frame;
 
-use application::{Command, GameEvent, GameService, GameSnapshot};
+use application::updates::display_version;
+use application::{Command, GameEvent, GameService, GameSnapshot, UpdateEvent, UpdateService};
 use domain::catalog::balance::{ACHIEVEMENT_BONUS, FRAGMENT_BONUS};
 use domain::{CometReward, DomainEvent, Effect, GeneratorId, PurchaseTarget, Requirement};
 
@@ -84,6 +85,9 @@ pub struct App {
     hold: HoldDetector,
     /// Dernière fois qu'on a expliqué comment débloquer la récolte continue.
     hold_hint_at: f64,
+    updates: UpdateService,
+    /// Dernier état connu de la mise à jour automatique.
+    update_status: Option<UpdateEvent>,
 }
 
 fn seed() -> u64 {
@@ -115,6 +119,8 @@ impl App {
             stats: FrameStats::default(),
             hold: HoldDetector::default(),
             hold_hint_at: NEVER,
+            updates: UpdateService::disabled(env!("CARGO_PKG_VERSION")),
+            update_status: None,
         };
         app.vis.set_reduced(app.snap.reduced_effects);
         app.journal.push(
@@ -127,6 +133,15 @@ impl App {
             app.react(ev);
         }
         app
+    }
+
+    /// Branche le service de mise à jour automatique.
+    pub fn set_updates(&mut self, updates: UpdateService) {
+        self.updates = updates;
+    }
+
+    pub fn update_status(&self) -> Option<&UpdateEvent> {
+        self.update_status.as_ref()
     }
 
     pub fn screen(&self) -> Screen {
@@ -234,6 +249,11 @@ impl App {
                         self.ui.popup = None;
                     }
                 }
+                if let Some(c) = self.ui.codex {
+                    if c.is_closed(now) {
+                        self.ui.codex = None;
+                    }
+                }
             }
         }
         self.service.fill_snapshot(&mut self.snap);
@@ -241,6 +261,9 @@ impl App {
         let sky = inner(self.ui.layout.sky);
         self.vis.update(dt, now, sky, reduced);
         self.toasts.update(now);
+        while let Some(ev) = self.updates.poll() {
+            self.react_update(ev);
+        }
     }
 
     fn update_nova(&mut self, now: f64) {
@@ -320,6 +343,21 @@ impl App {
             }
             return;
         }
+        if let Some(codex) = self.ui.codex {
+            if codex.closing_at.is_none() {
+                match intent {
+                    Intent::Up => self.ui.codex_scroll = self.ui.codex_scroll.saturating_sub(1),
+                    Intent::Down => self.ui.codex_scroll += 1,
+                    Intent::Info | Intent::Escape | Intent::No | Intent::Quit => {
+                        if let Some(c) = self.ui.codex.as_mut() {
+                            c.closing_at = Some(now);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            return;
+        }
         if let Some(popup) = self.ui.popup {
             if popup.closing_at.is_none() {
                 match intent {
@@ -390,6 +428,13 @@ impl App {
                 }
             }
             Intent::Save => self.command(Command::Save),
+            Intent::Info => {
+                self.ui.codex = Some(Popup {
+                    opened_at: now,
+                    closing_at: None,
+                });
+                self.ui.codex_scroll = 0;
+            }
             Intent::ToggleEffects => self.command(Command::ToggleReducedEffects),
             Intent::Quit | Intent::Escape => self.quit = true,
             Intent::Yes | Intent::No | Intent::Other | Intent::ToggleDebug => {}
@@ -783,9 +828,94 @@ impl App {
                 }
             }
         }
+        if self.screen == Screen::Title {
+            self.render_update_status(buf, area);
+        }
         if self.ui.debug {
             self.render_debug(buf, area);
         }
+    }
+
+    /// Réaction aux événements de la mise à jour automatique.
+    pub fn react_update(&mut self, ev: UpdateEvent) {
+        let now = self.now;
+        match &ev {
+            UpdateEvent::UpToDate => {}
+            UpdateEvent::Downloading { version } => {
+                self.log(
+                    Kind::Info,
+                    format!("Nouvelle version {version} : téléchargement…"),
+                );
+            }
+            UpdateEvent::Installed { version } => {
+                self.log(
+                    Kind::Purchase,
+                    format!("Mise à jour {version} installée : relance le jeu pour en profiter"),
+                );
+                self.toasts.push(
+                    now,
+                    theme::GREEN,
+                    format!("✦ Mise à jour {version} installée"),
+                    "Relance le jeu pour en profiter",
+                );
+            }
+            UpdateEvent::ManualOnly {
+                version,
+                reason,
+                url,
+            } => {
+                self.log(
+                    Kind::Info,
+                    format!("Version {version} disponible ({reason}) : {url}"),
+                );
+                self.toasts.push(
+                    now,
+                    theme::CYAN,
+                    format!("Version {version} disponible"),
+                    "Télécharge-la sur la page GitHub du jeu",
+                );
+            }
+            UpdateEvent::Failed(msg) => {
+                self.log(Kind::Save, format!("Mises à jour : {msg}"));
+            }
+        }
+        self.update_status = Some(ev);
+    }
+
+    /// Version et état de la mise à jour, en bas à droite de l'écran titre.
+    fn render_update_status(&self, buf: &mut Buffer, area: Rect) {
+        let version = display_version(self.updates.current_version());
+        let (status, color) = match &self.update_status {
+            None if self.updates.is_enabled() => {
+                ("recherche de mises à jour…".to_string(), theme::GREY)
+            }
+            None => (String::new(), theme::GREY),
+            Some(UpdateEvent::UpToDate) => ("à jour".to_string(), theme::GREY),
+            Some(UpdateEvent::Downloading { version }) => {
+                (format!("téléchargement de {version}…"), theme::CYAN)
+            }
+            Some(UpdateEvent::Installed { version }) => (
+                format!("{version} installée, relance le jeu !"),
+                theme::GREEN,
+            ),
+            Some(UpdateEvent::ManualOnly { version, .. }) => {
+                (format!("{version} disponible sur GitHub"), theme::CYAN)
+            }
+            Some(UpdateEvent::Failed(_)) => (String::new(), theme::GREY),
+        };
+        let text = if status.is_empty() {
+            format!("{version} ")
+        } else {
+            format!("{version} · {status} ")
+        };
+        let y = area.bottom().saturating_sub(1);
+        let w = text.chars().count() as u16;
+        let x = area.right().saturating_sub(w + 1).max(area.x);
+        draw::clear(
+            buf,
+            Rect::new(x, y, w.min(area.width), 1).intersection(area),
+        );
+        draw::text(buf, x, y, &text, theme::fg(color), area.right());
     }
 
     fn render_debug(&self, buf: &mut Buffer, area: Rect) {
@@ -830,9 +960,14 @@ impl App {
 }
 
 /// Lance le jeu dans le terminal. Sauvegarde à la sortie.
-pub fn run(service: GameService, startup: Vec<GameEvent>) -> io::Result<RunOutcome> {
+pub fn run(
+    service: GameService,
+    startup: Vec<GameEvent>,
+    updates: UpdateService,
+) -> io::Result<RunOutcome> {
     let mut guard = TerminalGuard::new()?;
     let mut app = App::new(service, startup);
+    app.set_updates(updates);
     let result = app.run_loop(guard.terminal());
     let save_error = app.service.save().err().map(|e| e.to_string());
     drop(guard);

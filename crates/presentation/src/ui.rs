@@ -54,6 +54,9 @@ pub struct Ui {
     pub upg_sel: usize,
     pub upg_scroll: usize,
     pub popup: Option<Popup>,
+    /// Écran « Infos » (touche I) et son défilement.
+    pub codex: Option<Popup>,
+    pub codex_scroll: usize,
     pub debug: bool,
     pub layout: GameLayout,
     /// Ligne écran de chaque générateur affiché (pour les étincelles d'achat).

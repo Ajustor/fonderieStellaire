@@ -48,7 +48,10 @@ pub struct UpgradeDef {
     /// Identifiant texte stable, utilisé par la sauvegarde.
     pub key: String,
     pub name: String,
+    /// Effet, en clair (« ×2 production des Sondes »).
     pub description: String,
+    /// Texte d'ambiance : ce que c'est.
+    pub flavor: String,
     pub cost: f64,
     pub requirement: Requirement,
     pub effect: Effect,

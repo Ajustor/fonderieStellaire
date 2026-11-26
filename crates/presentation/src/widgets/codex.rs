@@ -1,0 +1,138 @@
+//! Écran « Infos » (touche I) : succès obtenus ou non, et comment marche chaque mécanique.
+
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect;
+use ratatui::style::Style;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, BorderType, Borders, Clear, Widget};
+
+use domain::catalog::balance::{ACHIEVEMENT_BONUS, FRAGMENT_BONUS};
+
+use super::Ctx;
+use crate::draw;
+use crate::fmt;
+use crate::fx::easing::ease_out_cubic;
+use crate::fx::effects;
+use crate::layout::centered;
+use crate::theme;
+use crate::ui::Popup;
+
+/// Lignes du contenu (texte, style), recalculées à l'ouverture.
+pub fn lines(ctx: &Ctx) -> Vec<(String, Style)> {
+    let snap = ctx.snap;
+    let mut out: Vec<(String, Style)> = Vec::new();
+    let unlocked = snap.achievements_unlocked;
+    out.push((
+        format!(
+            "SUCCÈS  {}/{}  (+{} de production)",
+            unlocked,
+            snap.achievements_total,
+            fmt::percent(unlocked as f64 * ACHIEVEMENT_BONUS)
+        ),
+        theme::bold(theme::GOLD),
+    ));
+    for (i, a) in ctx.catalog.achievements.iter().enumerate() {
+        let done = snap.achievements.get(i).copied().unwrap_or(false);
+        let (mark, style) = if done {
+            ("★", theme::fg(theme::GOLD))
+        } else {
+            ("○", theme::fg(theme::GREY))
+        };
+        out.push((format!(" {mark} {} — {}", a.name, a.description), style));
+    }
+    out.push((String::new(), Style::default()));
+    out.push(("COMMENT ÇA MARCHE".into(), theme::bold(theme::CYAN)));
+    let text = theme::fg(theme::TEXT);
+    let mechanics = [
+        "✧ Générateurs : produisent en continu ; chaque achat coûte 15 % de plus.".to_string(),
+        "◆ Paliers : production ×2 à 25, 50, 100, 200, 300, 400 et 500 exemplaires.".into(),
+        "▲ Améliorations : multiplient un générateur, toute la production ou tes clics.".into(),
+        "● Comètes : toutes les 1m30 à 4m ; [C] pour la capturer (tempête ×7 ou pluie).".into(),
+        format!(
+            "✦ Supernova : repart de zéro contre des fragments (+{} de prod chacun).",
+            fmt::percent(FRAGMENT_BONUS)
+        ),
+        format!(
+            "★ Succès : +{} de production chacun, pour toujours.",
+            fmt::percent(ACHIEVEMENT_BONUS)
+        ),
+        "○ Hors-ligne : ta fonderie produit à 50 % pendant ton absence (12 h max).".into(),
+        "· Sauvegarde automatique toutes les 30 s et en quittant.".into(),
+    ];
+    for m in mechanics {
+        out.push((format!(" {m}"), text));
+    }
+    out
+}
+
+/// Nombre de lignes visibles pour une zone donnée (pour borner le défilement).
+pub fn visible_rows(area: Rect) -> usize {
+    rect(area).height.saturating_sub(4) as usize
+}
+
+fn rect(area: Rect) -> Rect {
+    centered(
+        area,
+        area.width.saturating_sub(4).min(90),
+        area.height.saturating_sub(2),
+    )
+}
+
+pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, scroll: &mut usize) {
+    let s = ease_out_cubic(popup.scale(ctx.now));
+    if s <= 0.0 {
+        return;
+    }
+    effects::fade(buf, area, 0.6 * s);
+    let full = rect(area);
+    let w = ((full.width as f64 * s).round() as u16).max(2);
+    let h = ((full.height as f64 * s).round() as u16).max(2);
+    let r = centered(area, w, h);
+    Clear.render(r, buf);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::bold(theme::CYAN))
+        .title(Line::from(Span::styled(" ✦ INFOS ✦ ", theme::bold(theme::GOLD))).centered());
+    let inner = block.inner(r);
+    block.render(r, buf);
+    if s < 0.95 || inner.height < 3 {
+        return;
+    }
+    let content = lines(ctx);
+    let rows = inner.height.saturating_sub(2) as usize;
+    let max_scroll = content.len().saturating_sub(rows);
+    *scroll = (*scroll).min(max_scroll);
+    let width = inner.width.saturating_sub(2) as usize;
+    for (i, (text, style)) in content.iter().skip(*scroll).take(rows).enumerate() {
+        let t = draw::truncate(text, width);
+        draw::text(
+            buf,
+            inner.x + 1,
+            inner.y + i as u16,
+            &t,
+            *style,
+            inner.right(),
+        );
+    }
+    let more = if max_scroll > 0 {
+        format!(
+            "  ({}/{})",
+            *scroll + rows.min(content.len()),
+            content.len()
+        )
+    } else {
+        String::new()
+    };
+    let footer = format!("[↑↓] défiler   [I] / [Échap] fermer{more}");
+    let fw = footer.chars().count() as u16;
+    let x = inner.x + inner.width.saturating_sub(fw) / 2;
+    draw::text(
+        buf,
+        x,
+        inner.bottom() - 1,
+        &footer,
+        theme::fg(theme::GREY),
+        inner.right(),
+    );
+}

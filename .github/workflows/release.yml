@@ -25,11 +25,13 @@ jobs:
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             archive: fonderie-stellaire-x86_64-pc-windows-msvc.zip
+            raw: fonderie-stellaire-x86_64-pc-windows-msvc.exe
             binary: fonderie-stellaire.exe
           # Ubuntu 22.04 : glibc plus ancienne → binaire compatible avec plus de distributions.
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-22.04
             archive: fonderie-stellaire-x86_64-unknown-linux-gnu.tar.gz
+            raw: fonderie-stellaire-x86_64-unknown-linux-gnu
             binary: fonderie-stellaire
     steps:
       - uses: actions/checkout@v4
@@ -45,6 +47,9 @@ jobs:
 
       - name: Build release
         run: cargo build --release --locked --target ${{ matrix.target }}
+        env:
+          # Numéro de version affiché et comparé par la mise à jour automatique.
+          FONDERIE_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
 
       - name: Archive (Windows)
         if: runner.os == 'Windows'
@@ -53,7 +58,11 @@ jobs:
           $dir = "target/${{ matrix.target }}/release"
           Copy-Item README.md $dir/
           Compress-Archive -Path "$dir/${{ matrix.binary }}", "$dir/README.md" -DestinationPath ${{ matrix.archive }}
-          (Get-FileHash ${{ matrix.archive }} -Algorithm SHA256).Hash.ToLower() + "  ${{ matrix.archive }}" | Out-File -Encoding ascii "${{ matrix.archive }}.sha256"
+          # Binaire brut : utilisé par la mise à jour automatique.
+          Copy-Item "$dir/${{ matrix.binary }}" "${{ matrix.raw }}"
+          foreach ($f in @("${{ matrix.archive }}", "${{ matrix.raw }}")) {
+            (Get-FileHash $f -Algorithm SHA256).Hash.ToLower() + "  $f" | Out-File -Encoding ascii "$f.sha256"
+          }
 
       - name: Archive (Linux)
         if: runner.os == 'Linux'
@@ -61,7 +70,9 @@ jobs:
           dir="target/${{ matrix.target }}/release"
           cp README.md "$dir/"
           tar -czf ${{ matrix.archive }} -C "$dir" ${{ matrix.binary }} README.md
-          sha256sum ${{ matrix.archive }} > ${{ matrix.archive }}.sha256
+          # Binaire brut : utilisé par la mise à jour automatique.
+          cp "$dir/${{ matrix.binary }}" "${{ matrix.raw }}"
+          for f in "${{ matrix.archive }}" "${{ matrix.raw }}"; do sha256sum "$f" > "$f.sha256"; done
 
       - uses: actions/upload-artifact@v4
         with:
@@ -69,6 +80,8 @@ jobs:
           path: |
             ${{ matrix.archive }}
             ${{ matrix.archive }}.sha256
+            ${{ matrix.raw }}
+            ${{ matrix.raw }}.sha256
 
   github-release:
     name: GitHub Release

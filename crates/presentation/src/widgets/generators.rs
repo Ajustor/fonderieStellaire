@@ -7,6 +7,9 @@ use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
 
 use super::Ctx;
+use application::GeneratorView;
+use domain::generator::MILESTONES;
+
 use crate::draw;
 use crate::fmt;
 use crate::fx::color::gradient;
@@ -63,7 +66,16 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
         return;
     }
     ui.gen_sel = ui.gen_sel.min(count - 1);
-    let visible = (inner.height / 2).max(1) as usize;
+    // Encart de détail en bas : séparateur + 2 lignes (ou 1 si peu de place).
+    let detail_h = if inner.height >= 14 {
+        3
+    } else if inner.height >= 10 {
+        2
+    } else {
+        0
+    };
+    let list = Rect::new(inner.x, inner.y, inner.width, inner.height - detail_h);
+    let visible = (list.height / 2).max(1) as usize;
     keep_visible(ui.gen_sel, &mut ui.gen_scroll, visible);
     // Si tout tient, on ne défile pas (laisse de la place à la ligne mystère).
     if count <= visible {
@@ -72,7 +84,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
 
     let mut y = inner.y;
     for (idx, g) in snap.generators.iter().enumerate().skip(ui.gen_scroll) {
-        if y + 1 >= inner.bottom() {
+        if y + 1 >= list.bottom() {
             break;
         }
         let gi = g.id.index();
@@ -260,7 +272,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
 
     // Ligne mystère (teaser).
     if let Some(t) = snap.teaser {
-        if y < inner.bottom() && ui.gen_scroll + visible >= count {
+        if y < list.bottom() && ui.gen_scroll + visible >= count {
             let txt = format!(
                 "   ??? ─ encore {} ✦ à récolter",
                 fmt::short(t.remaining.max(1.0))
@@ -270,4 +282,70 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
             draw::text(buf, inner.x, y, &txt, theme::fg(c), inner.right());
         }
     }
+
+    if detail_h > 0 {
+        if let Some(g) = snap.generators.get(ui.gen_sel) {
+            render_detail(buf, inner, detail_h, ctx, g);
+        }
+    }
+}
+
+/// Encart « qui fait quoi » du générateur sélectionné.
+fn render_detail(buf: &mut Buffer, inner: Rect, detail_h: u16, ctx: &Ctx, g: &GeneratorView) {
+    let Some(def) = ctx.catalog.generator(g.id) else {
+        return;
+    };
+    let color = theme::generator_color(g.id.index());
+    let sep_y = inner.bottom() - detail_h;
+    let sep: String = "─".repeat(inner.width.saturating_sub(2) as usize);
+    draw::text(
+        buf,
+        inner.x + 1,
+        sep_y,
+        &sep,
+        theme::fg(theme::BORDER),
+        inner.right(),
+    );
+    let max = inner.width.saturating_sub(2) as usize;
+    let mut y = sep_y + 1;
+
+    if detail_h >= 3 {
+        let x = draw::text(
+            buf,
+            inner.x + 1,
+            y,
+            &format!("{} ", def.symbol),
+            theme::bold(color),
+            inner.right(),
+        );
+        let text = draw::truncate(def.description, max.saturating_sub(2));
+        draw::text(buf, x, y, &text, theme::fg(theme::MUTED), inner.right());
+        y += 1;
+    }
+
+    // Production par unité (bonus compris), part du total, prochain palier.
+    let per_unit = if g.owned > 0 {
+        g.production / g.owned as f64
+    } else {
+        def.base_prod
+    };
+    let milestone = match MILESTONES.iter().find(|&&m| m > g.owned) {
+        Some(&m) => format!("×2 à {m} (encore {})", m - g.owned),
+        None => "tous les paliers atteints".to_string(),
+    };
+    let stats = format!(
+        "{}/s par unité · {}% du total · {}",
+        fmt::short(per_unit),
+        (g.share * 100.0).round() as i64,
+        milestone
+    );
+    let stats = draw::truncate(&stats, max);
+    draw::text(
+        buf,
+        inner.x + 1,
+        y,
+        &stats,
+        theme::fg(theme::CYAN),
+        inner.right(),
+    );
 }
