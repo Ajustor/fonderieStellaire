@@ -21,6 +21,10 @@ pub enum PurchaseTarget {
     Constellation(ConstellationId),
     /// Recherche du Laboratoire.
     Lab(LabId),
+    /// Forge d'un générateur primordial.
+    Forge(GeneratorId),
+    /// Étape du Grand Attracteur.
+    Attractor(usize),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -126,6 +130,30 @@ pub enum DomainEvent {
     UniverseKeyEarned {
         universe: UniverseId,
     },
+    /// Big Bang : les Big Crunch repartent de zéro contre des particules.
+    BigBang {
+        particles_gained: u32,
+        total_particles: u32,
+    },
+    /// Big Bang demandé trop tôt.
+    BigBangUnavailable {
+        crunches: u32,
+        needed: u32,
+    },
+    /// Un générateur primordial est forgé (pour toujours).
+    GeneratorForged {
+        generator: GeneratorId,
+    },
+    /// La construction d'une étape du Grand Attracteur commence.
+    AttractorStageStarted {
+        stage: usize,
+    },
+    /// Une étape du Grand Attracteur est achevée.
+    AttractorStageDone {
+        stage: usize,
+    },
+    /// La dernière étape est achevée : le Grand Attracteur s'éveille.
+    AttractorAwakened,
     /// Big Crunch demandé trop tôt.
     BigCrunchUnavailable {
         supernovas: u32,

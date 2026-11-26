@@ -100,16 +100,47 @@ impl Journal {
     }
 }
 
+/// Une ligne affichée : (entrée, n° de ligne dans l'entrée, texte, caractères
+/// de l'entrée qui précèdent cette ligne).
+struct VisualLine<'a> {
+    entry: &'a Entry,
+    first: bool,
+    text: String,
+    before: usize,
+}
+
+/// Découpe les entrées en lignes affichées (les messages longs passent à la ligne).
+fn visual_lines(journal: &Journal, width: usize) -> Vec<VisualLine<'_>> {
+    let mut out = Vec::new();
+    for e in journal.iter() {
+        let mut before = 0;
+        for (i, l) in draw::wrap(&e.text, width).into_iter().enumerate() {
+            let n = l.chars().count() + 1;
+            out.push(VisualLine {
+                entry: e,
+                first: i == 0,
+                text: l,
+                before,
+            });
+            before += n;
+        }
+    }
+    out
+}
+
 /// `scroll` : nombre de lignes remontées (0 = les plus récentes), borné ici.
 pub fn render(buf: &mut Buffer, area: Rect, journal: &Journal, now: f64, scroll: &mut usize) {
     let rows = area.height.saturating_sub(2) as usize;
-    let max_scroll = journal.len().saturating_sub(rows);
+    let stamp_w = journal.last().map(|e| e.stamp.chars().count()).unwrap_or(5);
+    let text_w = (area.width as usize).saturating_sub(stamp_w + 5).max(8);
+    let lines = visual_lines(journal, text_w);
+    let max_scroll = lines.len().saturating_sub(rows);
     *scroll = (*scroll).min(max_scroll);
     let mut spans = vec![Span::styled(" Journal ", theme::title_style(false))];
     if *scroll > 0 {
         spans.push(Span::styled(
             format!(
-                "↑ {} plus ancien{} · [PgDn] ",
+                "↑ {} ligne{} · [PgDn] ",
                 *scroll,
                 if *scroll > 1 { "s" } else { "" }
             ),
@@ -122,30 +153,26 @@ pub fn render(buf: &mut Buffer, area: Rect, journal: &Journal, now: f64, scroll:
     if inner.is_empty() {
         return;
     }
-    let skip = journal.len().saturating_sub(rows + *scroll);
-    for (row, e) in journal.iter().skip(skip).take(rows).enumerate() {
+    let skip = lines.len().saturating_sub(rows + *scroll);
+    for (row, l) in lines.iter().skip(skip).take(rows).enumerate() {
         let y = inner.y + row as u16;
-        let x = draw::text(
-            buf,
-            inner.x + 1,
-            y,
-            &e.stamp,
-            theme::fg(theme::GREY),
-            inner.right(),
-        );
-        let shown = typewriter(&e.text, now - e.born, TYPE_CPS);
-        let max = inner.right().saturating_sub(x + 2) as usize;
-        let shown = draw::truncate(shown, max);
-        let after = draw::text(
-            buf,
-            x + 1,
-            y,
-            &shown,
-            theme::fg(e.kind.color()),
-            inner.right(),
-        );
+        let e = l.entry;
+        let x = inner.x + 1;
+        if l.first {
+            draw::text(buf, x, y, &e.stamp, theme::fg(theme::GREY), inner.right());
+        }
+        let x = x + e.stamp.chars().count() as u16 + 1;
+        // Frappe à la machine : on montre la part de cette ligne déjà « tapée ».
+        let typed = typewriter(&e.text, now - e.born, TYPE_CPS).chars().count();
+        let here = typed.saturating_sub(l.before).min(l.text.chars().count());
+        if here == 0 && typed < l.before {
+            continue;
+        }
+        let shown: String = l.text.chars().take(here).collect();
+        let after = draw::text(buf, x, y, &shown, theme::fg(e.kind.color()), inner.right());
         // Curseur clignotant pendant la frappe.
-        if shown.chars().count() < e.text.chars().count().min(max) && after < inner.right() {
+        let typing = typed < e.text.chars().count();
+        if typing && here < l.text.chars().count() && after < inner.right() {
             draw::put(
                 buf,
                 inner,

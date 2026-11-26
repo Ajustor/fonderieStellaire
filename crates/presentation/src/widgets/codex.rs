@@ -32,10 +32,12 @@ pub fn lines(ctx: &Ctx) -> Vec<(String, Style)> {
     let bar_w = 30usize;
     let filled = ((pr.completion.clamp(0.0, 1.0)) * bar_w as f64).round() as usize;
     out.push((
+        format!(" {}{}", "█".repeat(filled), "░".repeat(bar_w - filled),),
+        theme::fg(theme::GOLD),
+    ));
+    out.push((
         format!(
-            " {}{}  générateurs {}/{} · succès {}/{} · Atelier {}/{}",
-            "█".repeat(filled),
-            "░".repeat(bar_w - filled),
+            " ● Générateurs {}/{} · succès {}/{} · Atelier {}/{}",
             pr.generators_found,
             pr.generators_total,
             snap.achievements_unlocked,
@@ -64,10 +66,14 @@ pub fn lines(ctx: &Ctx) -> Vec<(String, Style)> {
     ));
     out.push((
         format!(
-            " ▲ Améliorations ce cycle : {}/{} · Supernovas : {} · Constellations : {} niv. · Temps : {}",
-            pr.upgrades_bought,
-            pr.upgrades_total,
-            snap.supernovas,
+            " ▲ Améliorations ce cycle : {}/{} · Supernovas : {}",
+            pr.upgrades_bought, pr.upgrades_total, snap.supernovas,
+        ),
+        text,
+    ));
+    out.push((
+        format!(
+            " ★ Constellations : {} niv. · Temps de jeu : {}",
             snap.constellation_levels,
             fmt::duration(snap.play_time)
         ),
@@ -116,18 +122,42 @@ pub fn lines(ctx: &Ctx) -> Vec<(String, Style)> {
         "★ Constellations [E] : niveaux sans fin pour tes fragments, de plus en plus chers.".into(),
         "◆ Défis [D] : un cycle avec une contrainte, contre une récompense permanente.".into(),
         "● Comètes rares : dorée (×77 pendant 7 s), noire (+1 fragment, ou elle te vole).".into(),
-        "✶ Big Crunch [U] (15 Supernovas) : tout le niveau Supernova repart de zéro contre".into(),
-        "   de la matière noire : production ×2, ×3, ×4… et fragments +25 % par Crunch.".into(),
-        "✶ Laboratoire [L] (10 Big Crunch) : recherches en temps réel, une à la fois,".into(),
-        "   qui avancent même jeu fermé : automatismes, conservation, puissance.".into(),
-        "◎ Univers parallèles [V] (10 Big Crunch) : choisis les règles de chaque cycle".into(),
-        "   au Big Crunch ; atteins leur objectif pour gagner leur Clé (bonus permanent).".into(),
+        "✶ Big Crunch [U] (15 Supernovas) : tout le niveau Supernova repart de zéro contre de la matière noire : production ×2, ×3, ×4… et fragments +25 % par Crunch.".into(),
+        "✶ Laboratoire [L] (10 Big Crunch) : recherches en temps réel, une à la fois, qui avancent même jeu fermé : automatismes, conservation, puissance.".into(),
+        "◎ Univers parallèles [V] (10 Big Crunch) : choisis les règles de chaque cycle au Big Crunch ; atteins leur objectif pour gagner leur Clé (bonus permanent).".into(),
+        "✷ Big Bang [G] (30 Big Crunch) : les Big Crunch repartent de zéro contre des particules primordiales (+100 % de production, +25 % de fragments chacune). Le Laboratoire, les Clés et le Grand Attracteur restent.".into(),
+        "▼ Forge primordiale [G] : des particules pour forger 3 générateurs de fin de jeu, présents dans tous les cycles.".into(),
+        "◆ Grand Attracteur [G] : 7 étapes payées en particules et construites en temps réel, même jeu fermé. La dernière clôt l'Acte II.".into(),
         "○ Hors-ligne : ta fonderie produit à 50 % pendant ton absence (12 h max).".into(),
         "· Raccourcis : [A] tout acheter · [T] automate · [PgUp]/[PgDn] journal.".into(),
         "· Sauvegarde automatique toutes les 30 s et en quittant.".into(),
     ];
     for m in mechanics {
         out.push((format!(" {m}"), text));
+    }
+    out
+}
+
+/// Renvoie un texte à la ligne ; les lignes suivantes sont alignées sous le
+/// texte qui suit le symbole de tête (« ★ Nom — … »).
+fn hanging_wrap(text: &str, width: usize) -> Vec<String> {
+    let lead = text.chars().take_while(|c| *c == ' ').count();
+    let rest: Vec<char> = text.chars().skip(lead).collect();
+    let indent = if rest.len() > 2 && rest[1] == ' ' && !rest[0].is_alphanumeric() {
+        lead + 2
+    } else {
+        lead
+    };
+    let first = draw::wrap(text, width);
+    if first.len() <= 1 {
+        return first;
+    }
+    let head = first[0].clone();
+    let tail = text.chars().skip(head.chars().count()).collect::<String>();
+    let pad = " ".repeat(indent);
+    let mut out = vec![head];
+    for l in draw::wrap(tail.trim_start(), width.saturating_sub(indent).max(10)) {
+        out.push(format!("{pad}{l}"));
     }
     out
 }
@@ -166,18 +196,25 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, scroll: &m
     if s < 0.95 || inner.height < 3 {
         return;
     }
-    let content = lines(ctx);
+    let width = inner.width.saturating_sub(2) as usize;
+    // Renvoi à la ligne avec retrait sous le texte (après le symbole).
+    let content: Vec<(String, Style)> = lines(ctx)
+        .into_iter()
+        .flat_map(|(text, style)| {
+            hanging_wrap(&text, width)
+                .into_iter()
+                .map(move |l| (l, style))
+        })
+        .collect();
     let rows = inner.height.saturating_sub(2) as usize;
     let max_scroll = content.len().saturating_sub(rows);
     *scroll = (*scroll).min(max_scroll);
-    let width = inner.width.saturating_sub(2) as usize;
     for (i, (text, style)) in content.iter().skip(*scroll).take(rows).enumerate() {
-        let t = draw::truncate(text, width);
         draw::text(
             buf,
             inner.x + 1,
             inner.y + i as u16,
-            &t,
+            text,
             *style,
             inner.right(),
         );

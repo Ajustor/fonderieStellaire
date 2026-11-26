@@ -302,6 +302,23 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
         );
     }
 
+    // 4 ter. Grand Attracteur : une galaxie qui grandit à chaque étape.
+    if snap.attractor_stages > 0 || snap.attractor_build.is_some() {
+        let building = snap
+            .attractor_build
+            .map(|b| 1.0 - b.remaining / b.total.max(1.0));
+        draw_attractor(
+            buf,
+            inner,
+            tnow,
+            now,
+            snap.attractor_stages,
+            ctx.catalog.attractor.len(),
+            building,
+            vis.attractor_pop,
+        );
+    }
+
     // 5. Soleil (en bas à droite, partiellement hors cadre).
     let cx = w - 2.0;
     let cy = h - 0.5;
@@ -577,5 +594,100 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
     let fp = (now - vis.sky_flash) / 0.45;
     if (0.0..1.0).contains(&fp) {
         effects::flash(buf, inner, vis.sky_flash_color, (1.0 - fp) * 0.75);
+    }
+}
+
+/// Le Grand Attracteur dans le ciel : deux bras en spirale autour d'un cœur
+/// doré, un peu plus grands et plus brillants à chaque étape achevée. L'étape
+/// en chantier se dessine en pointillés qui se remplissent ; une étape achevée
+/// envoie une onde lumineuse.
+#[allow(clippy::too_many_arguments)]
+fn draw_attractor(
+    buf: &mut Buffer,
+    inner: Rect,
+    tnow: f64,
+    now: f64,
+    stages: usize,
+    total: usize,
+    building: Option<f64>,
+    pop: Option<(f64, usize)>,
+) {
+    let w = inner.width as f64;
+    let h = inner.height as f64;
+    let cx = inner.x as f64 + w * 0.14;
+    let cy = inner.y as f64 + h * 0.42;
+    let total = total.max(1) as f64;
+    let k = stages as f64 / total;
+    let max_r = (w * 0.16).min(h * 1.1).max(3.0);
+    let radius = max_r * (0.35 + 0.65 * k);
+    let gold = Rgb(255, 210, 110);
+    let violet = Rgb(190, 110, 255);
+    let blue = Rgb(90, 150, 255);
+    let arm = |r: f64, a0: f64| -> (f64, f64) {
+        let a = a0 + r * 0.55 - tnow * 0.4;
+        (cx + r * a.cos(), cy + r * a.sin() * 0.5)
+    };
+    // Bras achevés.
+    let mut r = 0.8;
+    while r < radius {
+        for a0 in [0.0, PI] {
+            let (x, y) = arm(r, a0);
+            let t = r / radius;
+            let c = gold
+                .lerp(violet, t)
+                .lerp(blue, (t - 0.6).max(0.0))
+                .dim(0.55 - 0.45 * k);
+            let ch = if t < 0.35 { '•' } else { '·' };
+            draw::put(buf, inner, x as i32, y as i32, ch, c);
+        }
+        r += 0.45;
+    }
+    // Étape en chantier : le prolongement des bras, en pointillés qui se remplissent.
+    if let Some(p) = building {
+        let next = max_r * (0.35 + 0.65 * ((stages + 1) as f64 / total));
+        let mut r = radius;
+        let pulse = 0.5 + 0.5 * (now * 3.0).sin();
+        while r < next {
+            let done = (r - radius) / (next - radius).max(0.1) <= p;
+            for a0 in [0.0, PI] {
+                let (x, y) = arm(r, a0);
+                let c = if done {
+                    violet.dim(0.4)
+                } else {
+                    Rgb(70, 60, 110).lerp(violet, 0.3 * pulse)
+                };
+                draw::put(
+                    buf,
+                    inner,
+                    x as i32,
+                    y as i32,
+                    if done { '·' } else { '.' },
+                    c,
+                );
+            }
+            r += 0.9;
+        }
+    }
+    // Cœur qui palpite, de plus en plus éclatant.
+    let beat = 0.5 + 0.5 * (now * 2.0).sin();
+    let core = gold.glow(0.2 + 0.3 * beat * k);
+    let ch = if stages >= total as usize {
+        '✶'
+    } else {
+        '◆'
+    };
+    draw::put_styled(buf, inner, cx as i32, cy as i32, ch, theme::bold(core));
+    // Onde d'une étape achevée.
+    if let Some((at, _)) = pop {
+        let t = (now - at) / 1.6;
+        if (0.0..1.0).contains(&t) {
+            let rr = 1.0 + t * max_r * 2.2;
+            for i in 0..32 {
+                let a = i as f64 / 32.0 * 2.0 * PI;
+                let x = cx + rr * a.cos();
+                let y = cy + rr * a.sin() * 0.5;
+                draw::put(buf, inner, x as i32, y as i32, '✦', gold.dim(t));
+            }
+        }
     }
 }

@@ -2,8 +2,10 @@
 
 use crate::achievement::{AchievementContext, AchievementId};
 use crate::catalog::balance::{
-    CRUNCH_FRAGMENTS, CRUNCH_PRODUCTION, CRUNCH_SUPERNOVAS, HOLD_HARVEST_INTERVAL,
-    LAB_UNLOCK_CRUNCHES, OFFLINE_CAP_SECS, OFFLINE_RATE, REVEAL_RATIO, UNIVERSES_UNLOCK_CRUNCHES,
+    BIGBANG_CRUNCHES, CRUNCH_FRAGMENTS, CRUNCH_PRODUCTION, CRUNCH_SUPERNOVAS,
+    HOLD_HARVEST_INTERVAL, LAB_UNLOCK_CRUNCHES, OFFLINE_CAP_SECS, OFFLINE_RATE,
+    PARTICLES_PER_CRUNCHES, PARTICLE_FRAGMENTS, PARTICLE_PRODUCTION, REVEAL_RATIO,
+    UNIVERSES_UNLOCK_CRUNCHES,
 };
 use crate::catalog::Catalog;
 use crate::challenge::{ChallengeId, ChallengeReward, Restriction};
@@ -11,6 +13,7 @@ use crate::comet::{
     CometKind, CometReward, CometState, BLACK_THEFT, GOLDEN_DURATION, GOLDEN_MULTIPLIER,
 };
 use crate::constellation::{ConstellationEffect, ConstellationId};
+use crate::cosmos::{particles_for, AttractorEffect};
 use crate::economy;
 use crate::events::{DomainEvent, PurchaseTarget};
 use crate::generator::{milestones_crossed, BuyMode, GeneratorId};
@@ -76,6 +79,17 @@ pub struct GameState {
     pub universe_keys: Vec<bool>,
     /// `play_time` du début du cycle (pour l'entropie).
     pub run_started: f64,
+    /// Big Bang déclenchés et particules primordiales (gagnées / dépensées :
+    /// le bonus reste calculé sur `particles`).
+    pub big_bangs: u32,
+    pub particles: u32,
+    pub particles_spent: u32,
+    /// Générateurs primordiaux forgés, indexés par générateur.
+    pub forged: Vec<bool>,
+    /// Étapes du Grand Attracteur achevées, et secondes restantes de l'étape
+    /// en construction.
+    pub attractor: usize,
+    pub attractor_build: Option<f64>,
     /// Niveau de chaque Constellation.
     pub constellations: Vec<u32>,
     revealed: Vec<bool>,
@@ -117,6 +131,12 @@ impl GameState {
             universe: UniverseId::ORIGIN,
             universe_keys: Vec::new(),
             run_started: 0.0,
+            big_bangs: 0,
+            particles: 0,
+            particles_spent: 0,
+            forged: Vec::new(),
+            attractor: 0,
+            attractor_build: None,
             constellations: Vec::new(),
             revealed: Vec::new(),
             autobuy_timer: 0.0,
@@ -144,6 +164,17 @@ impl GameState {
         }
         self.lab_paused.resize(catalog.lab.len(), false);
         self.dark_matter_spent = self.dark_matter_spent.min(self.crunches);
+        self.forged.resize(catalog.generators.len(), false);
+        for (f, g) in self.forged.iter_mut().zip(&catalog.generators) {
+            *f &= g.is_primordial();
+        }
+        self.particles_spent = self.particles_spent.min(self.particles);
+        self.attractor = self.attractor.min(catalog.attractor.len());
+        if self.attractor >= catalog.attractor.len()
+            || self.attractor_build.is_some_and(|l| !l.is_finite())
+        {
+            self.attractor_build = None;
+        }
         if self
             .research
             .is_some_and(|(id, left)| id.index() >= catalog.lab.len() || !left.is_finite())
@@ -308,9 +339,9 @@ impl GameState {
             .product()
     }
 
-    /// Choisir son univers est-il possible ? (10 Big Crunch)
+    /// Choisir son univers est-il possible ? (10 Big Crunch, ou déjà un Big Bang)
     pub fn universes_unlocked(&self) -> bool {
-        self.crunches >= UNIVERSES_UNLOCK_CRUNCHES
+        self.crunches >= UNIVERSES_UNLOCK_CRUNCHES || self.big_bangs > 0
     }
 
     /// Facteur d'entropie du cycle en cours (1 = aucune perte).
@@ -343,6 +374,11 @@ impl GameState {
             .product();
         perks
             * self.crunch_fragments()
+            * self.particle_fragments()
+            * self.attractor_product(catalog, |e| match e {
+                AttractorEffect::Fragments(f) => Some(f),
+                _ => None,
+            })
             * self.rules(catalog).fragments
             * self.key_product(catalog, |r| match r {
                 KeyReward::Fragments(f) => Some(f),
@@ -454,6 +490,11 @@ impl GameState {
                 cap = cap.max(cap_secs);
             }
         }
+        for e in self.attractor_effects(catalog) {
+            if let AttractorEffect::Offline(r) = e {
+                rate = rate.max(r);
+            }
+        }
         let extra_hours = self.constellation_sum(catalog, |e| match e {
             ConstellationEffect::OfflineHours(h) => Some(h),
             _ => None,
@@ -521,6 +562,9 @@ impl GameState {
             return false;
         };
         if self.supernovas < def.unlock_supernovas {
+            return false;
+        }
+        if def.is_primordial() && !self.is_forged(id) {
             return false;
         }
         if let Some(Restriction::OnlyFirstGenerators(n)) = self.active_restriction(catalog) {
@@ -744,6 +788,7 @@ impl GameState {
         self.check_reveals(catalog, events);
         self.check_challenge(catalog, events);
         self.advance_research(catalog, dt, events);
+        self.advance_attractor(catalog, dt, events);
 
         // Filet à comètes : capture les comètes normales après 2 s de passage.
         if self.lab_active(catalog, LabEffect::CometNet)
@@ -899,8 +944,9 @@ impl GameState {
         if !elapsed_secs.is_finite() || elapsed_secs <= 0.0 {
             return;
         }
-        // Les recherches avancent en temps réel, même jeu fermé.
+        // Les recherches et le Grand Attracteur avancent en temps réel, même jeu fermé.
         self.advance_research(catalog, elapsed_secs, events);
+        self.advance_attractor(catalog, elapsed_secs, events);
         let (rate, cap) = self.offline_terms(catalog);
         let seconds = elapsed_secs.min(cap);
         let amount = economy::steady_production(catalog, self) * seconds * rate;
@@ -961,9 +1007,14 @@ impl GameState {
         events.push(DomainEvent::BulkUpgrades { count });
     }
 
-    /// Multiplicateur de production de la matière noire : ×(1 + crunches).
-    pub fn crunch_production(&self) -> f64 {
-        1.0 + CRUNCH_PRODUCTION * self.crunches as f64
+    /// Multiplicateur de production de la matière noire : ×(1 + crunches),
+    /// renforcé par le Cœur de superamas du Grand Attracteur.
+    pub fn crunch_production(&self, catalog: &Catalog) -> f64 {
+        let boost = self.attractor_product(catalog, |e| match e {
+            AttractorEffect::DarkMatter(f) => Some(f),
+            _ => None,
+        });
+        1.0 + CRUNCH_PRODUCTION * boost * self.crunches as f64
     }
 
     /// Multiplicateur de fragments de la matière noire.
@@ -1050,9 +1101,203 @@ impl GameState {
         self.check_achievements(catalog, events);
     }
 
-    /// Le Laboratoire est-il ouvert ? (10 Big Crunch)
+    /// Le Laboratoire est-il ouvert ? (10 Big Crunch, ou déjà un Big Bang)
     pub fn lab_unlocked(&self) -> bool {
-        self.crunches >= LAB_UNLOCK_CRUNCHES
+        self.crunches >= LAB_UNLOCK_CRUNCHES || self.big_bangs > 0
+    }
+
+    // ------------------------------------------------------------------
+    // Big Bang, générateurs primordiaux, Grand Attracteur
+    // ------------------------------------------------------------------
+
+    /// Multiplicateur de production des particules : ×(1 + particules).
+    pub fn particle_production(&self) -> f64 {
+        1.0 + PARTICLE_PRODUCTION * self.particles as f64
+    }
+
+    /// Multiplicateur de fragments des particules : +25 % par particule.
+    pub fn particle_fragments(&self) -> f64 {
+        1.0 + PARTICLE_FRAGMENTS * self.particles as f64
+    }
+
+    pub fn particles_spendable(&self) -> u32 {
+        self.particles.saturating_sub(self.particles_spent)
+    }
+
+    /// Le Big Bang est-il possible ? (30 Big Crunch, aucun Défi en cours)
+    pub fn can_big_bang(&self) -> bool {
+        self.crunches >= BIGBANG_CRUNCHES && self.challenge.is_none()
+    }
+
+    /// Particules que rapporterait un Big Bang maintenant.
+    pub fn particles_available(&self) -> u32 {
+        if self.can_big_bang() {
+            particles_for(self.crunches, PARTICLES_PER_CRUNCHES)
+        } else {
+            0
+        }
+    }
+
+    /// Big Bang : remet à zéro les Big Crunch (et tout le niveau Supernova)
+    /// contre des particules primordiales. Le Laboratoire, les Clés d'univers,
+    /// les succès, les forges et le Grand Attracteur sont conservés.
+    pub fn big_bang(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
+        if !self.can_big_bang() {
+            events.push(DomainEvent::BigBangUnavailable {
+                crunches: self.crunches,
+                needed: BIGBANG_CRUNCHES,
+            });
+            return;
+        }
+        let gained = self.particles_available();
+        self.particles += gained;
+        self.big_bangs += 1;
+        self.crunches = 0;
+        self.dark_matter_spent = 0;
+        self.fragments = 0.0;
+        self.fragments_spent = 0.0;
+        self.fragments_this_run = 0.0;
+        if !self.lab_owned_effect(catalog, LabEffect::KeepAtelier) {
+            self.perks.iter_mut().for_each(|p| *p = false);
+            self.autobuy = false;
+        }
+        self.constellations.iter_mut().for_each(|l| *l = 0);
+        if !self.lab_owned_effect(catalog, LabEffect::KeepChallenges) {
+            self.challenges_done.iter_mut().for_each(|d| *d = false);
+        }
+        self.challenge = None;
+        self.supernovas = self
+            .lab_effects(catalog)
+            .filter_map(|e| match e {
+                LabEffect::HeadStart(n) => Some(n),
+                _ => None,
+            })
+            .max()
+            .unwrap_or(0);
+        self.universe = UniverseId::ORIGIN;
+        self.reset_run(catalog);
+        events.push(DomainEvent::BigBang {
+            particles_gained: gained,
+            total_particles: self.particles,
+        });
+        self.check_achievements(catalog, events);
+    }
+
+    pub fn is_forged(&self, id: GeneratorId) -> bool {
+        self.forged.get(id.index()).copied().unwrap_or(false)
+    }
+
+    /// Un générateur primordial peut-il être forgé ? (dans l'ordre)
+    pub fn can_forge(&self, catalog: &Catalog, id: GeneratorId) -> bool {
+        let Some(def) = catalog.generator(id) else {
+            return false;
+        };
+        let previous_ok = id.index() == 0
+            || catalog
+                .generator(GeneratorId(id.index() - 1))
+                .is_none_or(|p| !p.is_primordial() || self.is_forged(p.id));
+        def.is_primordial()
+            && !self.is_forged(id)
+            && previous_ok
+            && self.particles_spendable() >= def.particle_cost
+    }
+
+    /// Forge un générateur primordial : il apparaît pour toujours.
+    pub fn forge(&mut self, catalog: &Catalog, id: GeneratorId, events: &mut Vec<DomainEvent>) {
+        if !self.can_forge(catalog, id) {
+            events.push(DomainEvent::PurchaseFailed {
+                target: PurchaseTarget::Forge(id),
+            });
+            return;
+        }
+        let Some(def) = catalog.generator(id) else {
+            return;
+        };
+        self.particles_spent += def.particle_cost;
+        self.forged[id.index()] = true;
+        events.push(DomainEvent::GeneratorForged { generator: id });
+        self.check_reveals(catalog, events);
+        self.check_achievements(catalog, events);
+    }
+
+    /// Effets des étapes achevées du Grand Attracteur.
+    pub fn attractor_effects<'a>(
+        &'a self,
+        catalog: &'a Catalog,
+    ) -> impl Iterator<Item = AttractorEffect> + 'a {
+        catalog
+            .attractor
+            .iter()
+            .take(self.attractor)
+            .map(|s| s.effect)
+    }
+
+    fn attractor_product(
+        &self,
+        catalog: &Catalog,
+        f: impl Fn(AttractorEffect) -> Option<f64>,
+    ) -> f64 {
+        self.attractor_effects(catalog).filter_map(f).product()
+    }
+
+    /// Multiplicateur de production du Grand Attracteur.
+    pub fn attractor_production(&self, catalog: &Catalog) -> f64 {
+        self.attractor_product(catalog, |e| match e {
+            AttractorEffect::Production(f) | AttractorEffect::Awakening(f) => Some(f),
+            _ => None,
+        })
+    }
+
+    /// Le Grand Attracteur est-il éveillé ? (fin de l'Acte II)
+    pub fn attractor_awakened(&self, catalog: &Catalog) -> bool {
+        !catalog.attractor.is_empty() && self.attractor >= catalog.attractor.len()
+    }
+
+    /// La prochaine étape peut-elle être lancée ?
+    pub fn can_build_attractor(&self, catalog: &Catalog) -> bool {
+        self.big_bangs > 0
+            && self.attractor_build.is_none()
+            && catalog
+                .attractor_stage(self.attractor)
+                .is_some_and(|s| self.particles_spendable() >= s.cost)
+    }
+
+    /// Lance la construction de la prochaine étape (particules payées tout de suite).
+    pub fn build_attractor(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
+        if !self.can_build_attractor(catalog) {
+            events.push(DomainEvent::PurchaseFailed {
+                target: PurchaseTarget::Attractor(self.attractor),
+            });
+            return;
+        }
+        let Some(stage) = catalog.attractor_stage(self.attractor) else {
+            return;
+        };
+        self.particles_spent += stage.cost;
+        self.attractor_build = Some(stage.build_secs);
+        events.push(DomainEvent::AttractorStageStarted {
+            stage: self.attractor,
+        });
+    }
+
+    /// La construction avance en temps réel (même jeu fermé).
+    fn advance_attractor(&mut self, catalog: &Catalog, secs: f64, events: &mut Vec<DomainEvent>) {
+        let Some(left) = self.attractor_build else {
+            return;
+        };
+        let left = left - secs;
+        if left > 0.0 {
+            self.attractor_build = Some(left);
+            return;
+        }
+        self.attractor_build = None;
+        let stage = self.attractor;
+        self.attractor = (self.attractor + 1).min(catalog.attractor.len());
+        events.push(DomainEvent::AttractorStageDone { stage });
+        self.check_achievements(catalog, events);
+        if self.attractor_awakened(catalog) {
+            events.push(DomainEvent::AttractorAwakened);
+        }
     }
 
     pub fn dark_matter_spendable(&self) -> u32 {
@@ -1389,6 +1634,9 @@ impl GameState {
                 crunches: self.crunches,
                 lab_done: self.lab.iter().filter(|&&d| d).count(),
                 universe_keys: self.universe_keys.iter().filter(|&&k| k).count(),
+                big_bangs: self.big_bangs,
+                forged: self.forged.iter().filter(|&&f| f).count(),
+                attractor_stages: self.attractor,
             };
             for a in &catalog.achievements {
                 if !self.has_achievement(a.id) && a.condition.is_met(&ctx) {
@@ -2312,7 +2560,114 @@ mod tests {
         s.owned = vec![3];
         s.total_run = f64::NAN;
         s.normalize(&c);
-        assert_eq!(s.owned.len(), 12);
+        assert_eq!(s.owned.len(), 15);
         assert_eq!(s.total_run, 0.0);
+    }
+
+    fn gen(c: &Catalog, i: usize) -> GeneratorId {
+        c.generators[i].id
+    }
+
+    #[test]
+    fn big_bang_needs_30_crunches_and_resets_the_crunch_layer() {
+        let (c, mut s, mut ev) = setup();
+        s.crunches = 29;
+        s.big_bang(&c, &mut ev);
+        assert!(matches!(
+            ev.last(),
+            Some(DomainEvent::BigBangUnavailable { crunches: 29, .. })
+        ));
+        s.crunches = 34;
+        s.dark_matter_spent = 20;
+        s.supernovas = 15;
+        s.fragments = 1e4;
+        s.lab[0] = true;
+        s.universe_keys[1] = true;
+        s.universe = UniverseId(2);
+        let prod_before = economy::permanent_multiplier(&c, &s);
+        ev.clear();
+        s.big_bang(&c, &mut ev);
+        assert!(ev.iter().any(|e| matches!(
+            e,
+            DomainEvent::BigBang {
+                particles_gained: 3,
+                total_particles: 3
+            }
+        )));
+        assert_eq!(s.crunches, 0);
+        assert_eq!(s.dark_matter_spent, 0);
+        assert_eq!(s.supernovas, 0);
+        assert_eq!(s.fragments, 0.0);
+        assert_eq!(s.universe, UniverseId::ORIGIN);
+        assert!(s.lab[0], "le Laboratoire est gardé");
+        assert!(s.universe_keys[1], "les Clés sont gardées");
+        assert!(s.lab_unlocked() && s.universes_unlocked());
+        assert_eq!(s.particle_production(), 4.0);
+        assert_eq!(s.particle_fragments(), 1.75);
+        assert!(economy::permanent_multiplier(&c, &s) < prod_before);
+        assert!(s.has_achievement(c.achievement_by_key("bang1").unwrap()));
+    }
+
+    #[test]
+    fn primordial_generators_are_forged_in_order_with_particles() {
+        let (c, mut s, mut ev) = setup();
+        let neutron = gen(&c, 12);
+        let reality = gen(&c, 13);
+        s.total_run = 1e20;
+        assert!(!s.is_visible(&c, neutron), "pas encore forgé");
+        s.particles = 3;
+        assert!(!s.can_forge(&c, reality), "dans l'ordre");
+        s.forge(&c, neutron, &mut ev);
+        assert!(s.is_forged(neutron));
+        assert!(s.is_visible(&c, neutron));
+        assert_eq!(s.particles_spendable(), 2);
+        assert_eq!(s.particle_production(), 4.0, "le bonus reste entier");
+        s.forge(&c, reality, &mut ev);
+        assert_eq!(s.particles_spendable(), 0);
+        s.forge(&c, gen(&c, 14), &mut ev);
+        assert!(matches!(
+            ev.last(),
+            Some(DomainEvent::PurchaseFailed {
+                target: PurchaseTarget::Forge(_)
+            })
+        ));
+        assert!(!s.can_forge(&c, gen(&c, 3)), "les autres ne se forgent pas");
+    }
+
+    #[test]
+    fn attractor_is_built_in_real_time_and_awakens() {
+        let (c, mut s, mut ev) = setup();
+        s.particles = 30;
+        s.build_attractor(&c, &mut ev);
+        assert!(s.attractor_build.is_none(), "il faut un Big Bang");
+        s.big_bangs = 1;
+        s.build_attractor(&c, &mut ev);
+        assert_eq!(s.attractor_build, Some(3.0 * 3600.0));
+        assert_eq!(s.particles_spendable(), 28);
+        s.build_attractor(&c, &mut ev);
+        assert_eq!(s.particles_spendable(), 28, "une étape à la fois");
+        // Jeu fermé 4 h : l'étape est achevée.
+        ev.clear();
+        s.apply_offline(&c, 4.0 * 3600.0, &mut ev);
+        assert_eq!(s.attractor, 1);
+        assert!(ev
+            .iter()
+            .any(|e| matches!(e, DomainEvent::AttractorStageDone { stage: 0 })));
+        assert_eq!(s.attractor_production(&c), 2.0);
+        // Toutes les étapes, jusqu'à l'éveil.
+        let mut awakened = false;
+        for _ in 1..c.attractor.len() {
+            s.build_attractor(&c, &mut ev);
+            ev.clear();
+            s.tick(&c, 40.0 * 3600.0, 0.5, &mut ev);
+            awakened |= ev.contains(&DomainEvent::AttractorAwakened);
+        }
+        assert!(awakened && s.attractor_awakened(&c));
+        assert_eq!(s.attractor_production(&c), 2.0 * 3.0 * 5.0 * 10.0);
+        assert_eq!(s.crunch_production(&c), 1.0, "aucun Crunch : ×1");
+        s.crunches = 3;
+        assert_eq!(s.crunch_production(&c), 7.0, "matière noire ×2 : 1 + 2×3");
+        assert_eq!(s.offline_terms(&c).0, 1.0);
+        assert!(s.has_achievement(c.achievement_by_key("attractor").unwrap()));
     }
 }

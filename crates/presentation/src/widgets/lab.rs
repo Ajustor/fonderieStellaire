@@ -125,8 +125,16 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, selected: 
         }
     }
 
-    let height = (rows.len() as u16 + 10).min(area.height.saturating_sub(2));
-    let width = area.width.saturating_sub(4).min(86);
+    let width = area.width.saturating_sub(4).min(92);
+    let text_w = width.saturating_sub(4) as usize;
+    let head = head_lines(ctx, text_w);
+    let detail_h = (0..order.len())
+        .map(|i| detail_lines(ctx, &order, i, text_w).len())
+        .max()
+        .unwrap_or(0) as u16;
+    // bordures + en-tête + blanc + liste + séparateur + détail + pied
+    let chrome = 2 + head.len() as u16 + 1 + 1 + detail_h + 1;
+    let height = (rows.len() as u16 + chrome).min(area.height.saturating_sub(2));
     let w = ((width as f64 * s).round() as u16).max(2);
     let h = ((height as f64 * s).round() as u16).max(2);
     let rect = centered(area, w, h);
@@ -149,72 +157,30 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, selected: 
         return;
     }
     let right = inner.right();
-    let max = inner.width.saturating_sub(2) as usize;
-
-    let head = format!(
-        "Matière noire libre : {} sur {}   ·   bonus ×{} conservé après achat",
-        snap.dark_matter_spendable,
-        snap.crunches,
-        fmt::short(snap.crunch_production)
-    );
-    draw::text(
-        buf,
-        inner.x + 1,
-        inner.y,
-        &draw::truncate(&head, max),
-        theme::bold(theme::CYAN),
-        right,
-    );
-
-    // Recherche en cours : barre de progression.
-    let research_line = match snap.research {
-        Some(r) => {
-            let name = ctx.catalog.lab_node(r.id).map(|d| d.name).unwrap_or("?");
-            let p = if r.total > 0.0 {
-                1.0 - r.remaining / r.total
-            } else {
-                1.0
-            };
-            let bar_w = 20usize;
-            let filled = (p.clamp(0.0, 1.0) * bar_w as f64).round() as usize;
-            format!(
-                "En cours : {name} {}{} encore {} (avance même jeu fermé)",
-                "█".repeat(filled),
-                "░".repeat(bar_w - filled),
-                fmt::duration(r.remaining)
-            )
-        }
-        None => "Aucune recherche en cours : choisis-en une.".to_string(),
-    };
-    draw::text(
-        buf,
-        inner.x + 1,
-        inner.y + 1,
-        &draw::truncate(&research_line, max),
-        theme::fg(violet.glow(0.3)),
-        right,
-    );
+    for (i, (l, c)) in head.iter().enumerate() {
+        draw::text(
+            buf,
+            inner.x + 1,
+            inner.y + i as u16,
+            l,
+            theme::bold(*c),
+            right,
+        );
+    }
 
     let selected = selected.min(order.len().saturating_sub(1));
     let sel_row = rows
         .iter()
         .position(|r| matches!(r, Row::Item(p) if *p == selected))
         .unwrap_or(0);
-    let list_y = inner.y + 3;
-    let list_rows = inner.height.saturating_sub(8) as usize;
+    let list_y = inner.y + head.len() as u16 + 1;
+    let list_rows = inner.height.saturating_sub(chrome - 2) as usize;
     let scroll = (sel_row + 1).saturating_sub(list_rows);
     for (n, row) in rows.iter().enumerate().skip(scroll).take(list_rows) {
         let y = list_y + (n - scroll) as u16;
         match row {
             Row::Header(title) => {
-                draw::text(
-                    buf,
-                    inner.x + 1,
-                    y,
-                    &draw::truncate(title, max),
-                    theme::bold(theme::MUTED),
-                    right,
-                );
+                draw::text(buf, inner.x + 1, y, title, theme::bold(theme::MUTED), right);
             }
             Row::Item(pos) => {
                 let Some(v) = order.get(*pos).and_then(|&i| snap.lab.get(i)) else {
@@ -255,14 +221,15 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, selected: 
                 } else {
                     theme::bold(theme::TEXT)
                 };
-                draw::text(buf, x, y, def.name, name_style, right);
+                let st_x = right.saturating_sub(1 + st.chars().count() as u16);
+                draw::text(buf, x, y, def.name, name_style, st_x.saturating_sub(1));
                 draw::text_right(buf, right - 1, y, &st, theme::bold(color), inner.x);
             }
         }
     }
 
     // Détail de la sélection.
-    let sep_y = inner.bottom() - 4;
+    let sep_y = inner.bottom() - 2 - detail_h;
     let sep: String = "─".repeat(inner.width.saturating_sub(2) as usize);
     draw::text(
         buf,
@@ -272,85 +239,137 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, selected: 
         theme::fg(theme::BORDER),
         right,
     );
-    if let Some(v) = order.get(selected).and_then(|&i| snap.lab.get(i)) {
-        if let Some(def) = ctx.catalog.lab_node(v.id) {
-            draw::text(
-                buf,
-                inner.x + 1,
-                sep_y + 1,
-                &draw::truncate(def.description, max),
-                theme::fg(theme::CYAN),
-                right,
-            );
-            let researching = snap.research.is_some_and(|r| r.id == v.id);
-            let (hint, color) = if researching {
-                ("Recherche en cours…".to_string(), theme::CYAN)
-            } else if v.done && def.effect.is_toggleable() {
-                let what = if v.paused {
-                    "relancer"
-                } else {
-                    "mettre en pause"
-                };
-                (format!("[Entrée] {what}"), theme::MUTED)
-            } else if v.done {
-                (
-                    "Recherche terminée : effet permanent.".to_string(),
-                    theme::GREEN,
-                )
-            } else if v.blocked {
-                let prereq = def
-                    .requires
-                    .and_then(|k| ctx.catalog.lab_by_key(k))
-                    .and_then(|id| ctx.catalog.lab_node(id))
-                    .map(|d| d.name)
-                    .unwrap_or("?");
-                (format!("Termine d'abord « {prereq} »."), theme::GREY)
-            } else if snap.research.is_some() {
-                (
-                    "Une recherche à la fois : attends la fin de la recherche en cours."
-                        .to_string(),
-                    theme::GREY,
-                )
-            } else if v.available {
-                (
-                    format!(
-                        "[Entrée] lancer : {} ✶, {} de recherche",
-                        def.cost,
-                        fmt::duration(def.research_secs)
-                    ),
-                    theme::GOLD,
-                )
-            } else {
-                (
-                    format!(
-                        "Il faut {} ✶ de matière noire libre : déclenche des Big Crunch [U].",
-                        def.cost
-                    ),
-                    theme::GREY,
-                )
-            };
-            draw::text(
-                buf,
-                inner.x + 1,
-                sep_y + 2,
-                &draw::truncate(&hint, max),
-                theme::bold(color),
-                right,
-            );
-        }
+    for (i, (l, style)) in detail_lines(ctx, &order, selected, text_w)
+        .iter()
+        .enumerate()
+    {
+        draw::text(buf, inner.x + 1, sep_y + 1 + i as u16, l, *style, right);
     }
 
-    let footer = draw::truncate(
-        "[↑↓] choisir   [Entrée] lancer / activer   [L] / [Échap] fermer",
-        max,
-    );
+    let long = "[↑↓] choisir   [Entrée] lancer / activer   [L] / [Échap] fermer";
+    let footer = if long.chars().count() <= inner.width as usize {
+        long
+    } else {
+        "[↑↓] choisir  [Entrée] valider  [Échap] fermer"
+    };
     let fw = footer.chars().count() as u16;
     draw::text(
         buf,
         inner.x + inner.width.saturating_sub(fw) / 2,
         inner.bottom() - 1,
-        &footer,
+        footer,
         theme::fg(theme::GREY),
         right,
     );
+}
+
+/// En-tête : matière noire et recherche en cours, renvoyées à la ligne.
+fn head_lines(ctx: &Ctx, width: usize) -> Vec<(String, Rgb)> {
+    let snap = ctx.snap;
+    let violet = Rgb(170, 90, 255);
+    let head = format!(
+        "Matière noire libre : {} sur {}   ·   bonus ×{} conservé après achat",
+        snap.dark_matter_spendable,
+        snap.crunches,
+        fmt::short(snap.crunch_production)
+    );
+    let research_line = match snap.research {
+        Some(r) => {
+            let name = ctx.catalog.lab_node(r.id).map(|d| d.name).unwrap_or("?");
+            let p = if r.total > 0.0 {
+                1.0 - r.remaining / r.total
+            } else {
+                1.0
+            };
+            let bar_w = 20usize;
+            let filled = (p.clamp(0.0, 1.0) * bar_w as f64).round() as usize;
+            format!(
+                "En cours : {name} {}{} encore {} (avance même jeu fermé)",
+                "█".repeat(filled),
+                "░".repeat(bar_w - filled),
+                fmt::duration(r.remaining)
+            )
+        }
+        None => "Aucune recherche en cours : choisis-en une.".to_string(),
+    };
+    let mut out: Vec<(String, Rgb)> = draw::wrap(&head, width)
+        .into_iter()
+        .map(|l| (l, theme::CYAN))
+        .collect();
+    out.extend(
+        draw::wrap(&research_line, width)
+            .into_iter()
+            .map(|l| (l, violet.glow(0.3))),
+    );
+    out
+}
+
+/// Détail de la recherche n° `selected` (description et action), renvoyé à la ligne.
+fn detail_lines(
+    ctx: &Ctx,
+    order: &[usize],
+    selected: usize,
+    width: usize,
+) -> Vec<(String, ratatui::style::Style)> {
+    let snap = ctx.snap;
+    let mut out = Vec::new();
+    let Some(v) = order.get(selected).and_then(|&i| snap.lab.get(i)) else {
+        return out;
+    };
+    let Some(def) = ctx.catalog.lab_node(v.id) else {
+        return out;
+    };
+    for l in draw::wrap(def.description, width) {
+        out.push((l, theme::fg(theme::CYAN)));
+    }
+    let researching = snap.research.is_some_and(|r| r.id == v.id);
+    let (hint, color) = if researching {
+        ("Recherche en cours…".to_string(), theme::CYAN)
+    } else if v.done && def.effect.is_toggleable() {
+        let what = if v.paused {
+            "relancer"
+        } else {
+            "mettre en pause"
+        };
+        (format!("[Entrée] {what}"), theme::MUTED)
+    } else if v.done {
+        (
+            "Recherche terminée : effet permanent.".to_string(),
+            theme::GREEN,
+        )
+    } else if v.blocked {
+        let prereq = def
+            .requires
+            .and_then(|k| ctx.catalog.lab_by_key(k))
+            .and_then(|id| ctx.catalog.lab_node(id))
+            .map(|d| d.name)
+            .unwrap_or("?");
+        (format!("Termine d'abord « {prereq} »."), theme::GREY)
+    } else if snap.research.is_some() {
+        (
+            "Une recherche à la fois : attends la fin de la recherche en cours.".to_string(),
+            theme::GREY,
+        )
+    } else if v.available {
+        (
+            format!(
+                "[Entrée] lancer : {} ✶, {} de recherche",
+                def.cost,
+                fmt::duration(def.research_secs)
+            ),
+            theme::GOLD,
+        )
+    } else {
+        (
+            format!(
+                "Il faut {} ✶ de matière noire libre : déclenche des Big Crunch [U].",
+                def.cost
+            ),
+            theme::GREY,
+        )
+    };
+    for l in draw::wrap(&hint, width) {
+        out.push((l, theme::bold(color)));
+    }
+    out
 }

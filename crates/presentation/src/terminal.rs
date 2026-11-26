@@ -1,6 +1,6 @@
 //! Initialisation et restauration du terminal (garde RAII + panic hook).
 
-use std::io::{self, Stdout};
+use std::io::{self, BufWriter, Stdout};
 use std::sync::Once;
 
 use crossterm::cursor::{Hide, Show};
@@ -11,7 +11,13 @@ use crossterm::terminal::{
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 
-pub type Term = Terminal<CrosstermBackend<Stdout>>;
+/// La sortie passe par un tampon : chaque image part en une seule écriture
+/// (au lieu d'une écriture par ligne), ce qui évite les images à moitié
+/// dessinées sur les terminaux lents.
+pub type Term = Terminal<CrosstermBackend<BufWriter<Stdout>>>;
+
+/// Taille du tampon de sortie (une image plein écran très animée fait ~10 Ko).
+const OUTPUT_BUFFER: usize = 64 * 1024;
 
 static PANIC_HOOK: Once = Once::new();
 
@@ -47,7 +53,8 @@ impl TerminalGuard {
             let _ = restore();
             return Err(e);
         }
-        match Terminal::new(CrosstermBackend::new(stdout)) {
+        let out = BufWriter::with_capacity(OUTPUT_BUFFER, stdout);
+        match Terminal::new(CrosstermBackend::new(out)) {
             Ok(mut terminal) => {
                 let _ = terminal.clear();
                 Ok(TerminalGuard { terminal })

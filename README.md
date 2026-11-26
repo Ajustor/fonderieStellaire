@@ -167,6 +167,7 @@ cargo run --release -- --reset
 | `U` | Big Crunch (après 15 Supernovas) |
 | `L` | Laboratoire de matière noire (après 10 Big Crunch) |
 | `V` | Univers parallèles et leurs Clés (après 10 Big Crunch) |
+| `G` | Cosmogonie : Big Bang, forge primordiale, Grand Attracteur (après 10 Big Crunch) |
 | `T` | Activer / arrêter l'automate (une fois acheté à l'Atelier) |
 | `I` | Infos : progression, succès et fonctionnement de chaque mécanique |
 | `PgUp` / `PgDn` | Remonter / redescendre dans le journal |
@@ -214,7 +215,12 @@ Majuscules et minuscules sont acceptées.
   écran de portails pour choisir les règles du cycle suivant (Gravité forte,
   Temps dilaté, Nuée, Désert, Entropie). Atteindre l'objectif d'un univers
   rapporte sa **Clé**, un bonus permanent.
-- **Succès** : 39 succès, **+1 %** de production chacun.
+- **Big Bang** (30 Big Crunch) : les Big Crunch repartent de zéro contre des
+  particules primordiales (+100 % de production, +25 % de fragments chacune).
+  Elles servent à forger 3 générateurs primordiaux et à bâtir le **Grand
+  Attracteur**, étape par étape et en temps réel. Sa dernière étape clôt
+  l'Acte II.
+- **Succès** : 42 succès, **+1 %** de production chacun.
 - **Progression** : le pourcentage dans l'en-tête et l'écran `I` indiquent où tu
   en es (générateurs, succès, Atelier, poussière avant le prochain fragment).
 - **Hors-ligne** : ta fonderie produit à 50 % pendant ton absence (12 h max).
@@ -223,9 +229,10 @@ Majuscules et minuscules sont acceptées.
 
 Au lancement, le jeu vérifie en arrière-plan (sans jamais le ralentir) s'il
 existe une version plus récente sur GitHub. Si oui, il la télécharge, vérifie sa
-somme SHA-256 et remplace l'exécutable : la nouvelle version est utilisée au
-**prochain lancement**. L'état s'affiche en bas à droite de l'écran titre
-(`v0.1.0 · à jour`), et un message apparaît dans le journal.
+somme SHA-256 et remplace l'exécutable, puis le jeu **redémarre tout seul**
+sur la nouvelle version (après un compte à rebours de 5 s, et jamais au milieu
+d'une Supernova ou d'un Big Bang). L'état s'affiche en bas à droite de l'écran
+titre (`v0.9.0 · à jour`), et un message apparaît dans le journal.
 
 - Pas de droits d'écriture sur le dossier du jeu, ou version compilée avec
   `cargo` : le jeu signale simplement qu'une nouvelle version existe.
@@ -245,6 +252,10 @@ Sauvegarde automatique toutes les 30 s et à la fermeture, dans :
 
 L'écriture est atomique (fichier `.tmp` puis renommage). Une sauvegarde
 corrompue est renommée en `save.json.bak` et une nouvelle partie démarre.
+
+Quand l'équilibrage change trop (comme en v0.9.0), les sauvegardes d'un
+format plus ancien (`SAVE_RESET_BELOW`) sont effacées au lancement, et un
+message sur l'écran titre l'explique au joueur.
 
 ## Développement
 

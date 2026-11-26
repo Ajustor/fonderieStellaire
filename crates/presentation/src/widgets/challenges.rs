@@ -56,8 +56,23 @@ pub fn render(
     }
     let snap = ctx.snap;
     effects::fade(buf, area, 0.6 * s);
-    let height = (snap.challenges.len() as u16 + 10).min(area.height.saturating_sub(2));
-    let width = area.width.saturating_sub(4).min(84);
+    let width = area.width.saturating_sub(4).min(92);
+    let text_w = width.saturating_sub(4) as usize;
+    let intro = draw::wrap(
+        "Un Défi relance le cycle avec une contrainte. Réussis l'objectif : récompense pour toujours.",
+        text_w,
+    );
+    let selected = selected.min(snap.challenges.len().saturating_sub(1));
+    // Hauteur fixe : celle du détail le plus long, pour que la fenêtre ne
+    // saute pas quand on change de sélection.
+    let detail_h = (0..snap.challenges.len())
+        .map(|i| detail_lines(ctx, i, armed, text_w).len())
+        .max()
+        .unwrap_or(0) as u16;
+    let list_h = snap.challenges.len() as u16;
+    // intro + blanc + liste + séparateur + détail + blanc + pied + bordures
+    let height = (intro.len() as u16 + 1 + list_h + 1 + detail_h + 1 + 1 + 2)
+        .min(area.height.saturating_sub(2));
     let w = ((width as f64 * s).round() as u16).max(2);
     let h = ((height as f64 * s).round() as u16).max(2);
     let rect = centered(area, w, h);
@@ -73,25 +88,14 @@ pub fn render(
         return;
     }
     let right = inner.right();
-    let max = inner.width.saturating_sub(2) as usize;
-    draw::text(
-        buf,
-        inner.x + 1,
-        inner.y,
-        &draw::truncate(
-            "Un Défi relance le cycle avec une contrainte. Réussis l'objectif : récompense pour toujours.",
-            max,
-        ),
-        theme::fg(theme::MUTED),
-        right,
-    );
+    let mut y = inner.y;
+    for l in &intro {
+        draw::text(buf, inner.x + 1, y, l, theme::fg(theme::MUTED), right);
+        y += 1;
+    }
+    y += 1;
 
-    let selected = selected.min(snap.challenges.len().saturating_sub(1));
     for (i, v) in snap.challenges.iter().enumerate() {
-        let y = inner.y + 2 + i as u16;
-        if y >= inner.bottom().saturating_sub(5) {
-            break;
-        }
         let Some(def) = ctx.catalog.challenge(v.id) else {
             continue;
         };
@@ -121,108 +125,118 @@ pub fn render(
         } else {
             theme::fg(theme::GREY)
         };
-        draw::text(buf, x, y, def.name, name_style, right);
+        let st_x = right.saturating_sub(1 + st.chars().count() as u16);
+        draw::text(buf, x, y, def.name, name_style, st_x.saturating_sub(1));
         draw::text_right(buf, right - 1, y, &st, theme::bold(color), inner.x);
+        y += 1;
     }
 
     // Détail : contrainte, objectif, récompense, action.
-    let sep_y = inner.bottom() - 5;
     let sep: String = "─".repeat(inner.width.saturating_sub(2) as usize);
-    draw::text(
-        buf,
-        inner.x + 1,
-        sep_y,
-        &sep,
-        theme::fg(theme::BORDER),
-        right,
-    );
-    if let Some((v, def)) = snap
-        .challenges
-        .get(selected)
-        .and_then(|v| ctx.catalog.challenge(v.id).map(|d| (v, d)))
-    {
-        let rule = format!(
-            "Contrainte : {} · Objectif : {} ✦ récoltés dans le cycle",
-            def.rule,
-            fmt::short(def.goal)
-        );
-        draw::text(
-            buf,
-            inner.x + 1,
-            sep_y + 1,
-            &draw::truncate(&rule, max),
-            theme::fg(theme::CYAN),
-            right,
-        );
-        let reward = format!("Récompense : {}", def.reward_text);
-        draw::text(
-            buf,
-            inner.x + 1,
-            sep_y + 2,
-            &draw::truncate(&reward, max),
-            theme::bold(theme::GOLD),
-            right,
-        );
-        let busy = snap.active_challenge.is_some();
-        let (hint, color) = if v.done {
-            (
-                "Déjà réussi : la récompense est acquise.".to_string(),
-                theme::GREEN,
-            )
-        } else if v.active {
-            let time = snap
-                .active_challenge
-                .and_then(|a| a.time_left)
-                .map(|t| format!(" · il reste {}", fmt::countdown(t)))
-                .unwrap_or_default();
-            if armed {
-                (
-                    "Entrée de nouveau pour ABANDONNER (le cycle continue sans contrainte)".into(),
-                    theme::ORANGE,
-                )
-            } else {
-                (format!("En cours{time} · [Entrée] abandonner"), theme::CYAN)
-            }
-        } else if !v.unlocked {
-            (
-                format!("Débloqué après {} Supernovas.", def.unlock_supernovas),
-                theme::GREY,
-            )
-        } else if busy {
-            ("Un autre Défi est en cours.".to_string(), theme::GREY)
-        } else if armed {
-            (
-                "Entrée de nouveau pour LANCER : le cycle repart de zéro !".to_string(),
-                theme::ORANGE,
-            )
-        } else {
-            (
-                "[Entrée] lancer (une Supernova a lieu d'abord si elle rapporte des fragments)"
-                    .to_string(),
-                theme::MUTED,
-            )
-        };
-        draw::text(
-            buf,
-            inner.x + 1,
-            sep_y + 3,
-            &draw::truncate(&hint, max),
-            theme::bold(color),
-            right,
-        );
+    draw::text(buf, inner.x + 1, y, &sep, theme::fg(theme::BORDER), right);
+    y += 1;
+    let footer_y = inner.bottom() - 1;
+    for (text, style) in detail_lines(ctx, selected, armed, text_w) {
+        if y >= footer_y {
+            draw::audit::record(&text, 0);
+            continue;
+        }
+        draw::text(buf, inner.x + 1, y, &text, style, right);
+        y += 1;
     }
 
-    let footer = draw::truncate(
-        "[↑↓] choisir   [Entrée] lancer / abandonner   [D] / [Échap] fermer",
-        max,
-    );
+    let footer = "[↑↓] choisir   [Entrée] lancer / abandonner   [D] / [Échap] fermer";
+    let footer = if footer.chars().count() <= inner.width as usize {
+        footer
+    } else {
+        "[↑↓] choisir  [Entrée] valider  [Échap] fermer"
+    };
     let fw = footer.chars().count() as u16;
     draw::text(
         buf,
         inner.x + inner.width.saturating_sub(fw) / 2,
-        inner.bottom() - 1,
-        &footer,
+        footer_y,
+        footer,
         theme::fg(theme::GREY),
         right,
     );
+}
+
+/// Lignes du détail du Défi `index` (renvoyées à la ligne à `width`).
+fn detail_lines(
+    ctx: &Ctx,
+    index: usize,
+    armed: bool,
+    width: usize,
+) -> Vec<(String, ratatui::style::Style)> {
+    let snap = ctx.snap;
+    let Some((v, def)) = snap
+        .challenges
+        .get(index)
+        .and_then(|v| ctx.catalog.challenge(v.id).map(|d| (v, d)))
+    else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut push = |text: &str, style| {
+        for l in draw::wrap(text, width) {
+            out.push((l, style));
+        }
+    };
+    push(
+        &format!("Contrainte : {}", def.rule),
+        theme::fg(theme::CYAN),
+    );
+    push(
+        &format!(
+            "Objectif : {} ✦ récoltés dans le cycle",
+            fmt::short(def.goal)
+        ),
+        theme::fg(theme::CYAN),
+    );
+    push(
+        &format!("Récompense : {}", def.reward_text),
+        theme::bold(theme::GOLD),
+    );
+    let busy = snap.active_challenge.is_some();
+    let (hint, color) = if v.done {
+        (
+            "Déjà réussi : la récompense est acquise.".to_string(),
+            theme::GREEN,
+        )
+    } else if v.active {
+        let time = snap
+            .active_challenge
+            .and_then(|a| a.time_left)
+            .map(|t| format!(" · il reste {}", fmt::countdown(t)))
+            .unwrap_or_default();
+        if armed {
+            (
+                "Entrée de nouveau pour ABANDONNER (le cycle continue sans contrainte)".into(),
+                theme::ORANGE,
+            )
+        } else {
+            (format!("En cours{time} · [Entrée] abandonner"), theme::CYAN)
+        }
+    } else if !v.unlocked {
+        (
+            format!("Débloqué après {} Supernovas.", def.unlock_supernovas),
+            theme::GREY,
+        )
+    } else if busy {
+        ("Un autre Défi est en cours.".to_string(), theme::GREY)
+    } else if armed {
+        (
+            "Entrée de nouveau pour LANCER : le cycle repart de zéro !".to_string(),
+            theme::ORANGE,
+        )
+    } else {
+        (
+            "[Entrée] lancer (une Supernova a lieu d'abord si elle rapporte des fragments)"
+                .to_string(),
+            theme::MUTED,
+        )
+    };
+    push(&hint, theme::bold(color));
+    out
 }

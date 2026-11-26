@@ -134,6 +134,12 @@ pub struct Visuals {
     /// Dernier niveau de Constellation acheté (étoile qui s'allume).
     pub constellation_pop: f64,
     pub nova: Option<NovaSequence>,
+    /// Séquence du Big Bang en cours.
+    pub bang: Option<crate::screens::bigbang::BangSequence>,
+    /// Générique de fin de l'Acte II.
+    pub ending: Option<crate::screens::ending::EndingSequence>,
+    /// Étape du Grand Attracteur qui vient d'être achevée : (instant, étape).
+    pub attractor_pop: Option<(f64, usize)>,
     pub sun_scale: f64,
 }
 
@@ -176,6 +182,9 @@ impl Visuals {
             key_ceremony: None,
             constellation_pop: NEVER,
             nova: None,
+            bang: None,
+            ending: None,
+            attractor_pop: None,
             sun_scale: 1.0,
         }
     }

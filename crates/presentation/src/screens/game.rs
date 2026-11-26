@@ -15,8 +15,8 @@ use crate::visuals::Visuals;
 use crate::widgets::journal::Journal;
 use crate::widgets::toast::Toasts;
 use crate::widgets::{
-    ceremony, challenges, codex, generators, header, help_bar, journal, lab, modal, portals, shop,
-    sky, sparkline, upgrades, Ctx,
+    ceremony, challenges, codex, cosmos, generators, header, help_bar, journal, lab, modal,
+    portals, shop, sky, sparkline, upgrades, Ctx,
 };
 
 /// Décalage entre deux panneaux de la cascade.
@@ -37,7 +37,15 @@ pub fn render(
     ui: &mut Ui,
     view: GameView,
 ) {
-    let layout = game_layout(area);
+    // Le panneau des améliorations s'agrandit (en douceur) quand il a le focus.
+    let t = ((ctx.now - ui.focus_changed_at) / 0.3).clamp(0.0, 1.0);
+    let k = crate::fx::easing::ease_in_out_sine(t);
+    let expand = if ui.focus == Panel::Upgrades {
+        k
+    } else {
+        1.0 - k
+    };
+    let layout = game_layout(area, expand);
     ui.layout = layout;
 
     header::render(buf, layout.header, ctx, vis);
@@ -84,6 +92,9 @@ pub fn render(
     }
     if let Some(popup) = ui.lab {
         lab::render(buf, area, ctx, &popup, ui.lab_sel);
+    }
+    if let Some(popup) = ui.cosmos {
+        cosmos::render(buf, area, ctx, &popup, ui.cosmos_sel, ui.cosmos_armed);
     }
     if let Some(popup) = ui.challenges {
         challenges::render(

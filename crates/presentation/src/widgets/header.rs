@@ -39,6 +39,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
         area.right().saturating_sub(1),
     );
     // Badge de l'univers en cours (hors univers d'origine), qui scintille.
+    let mut badge_w = 0u16;
     if let Some(def) = ctx
         .catalog
         .universe(ctx.snap.universe)
@@ -47,6 +48,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
         let color =
             theme::universe_color(def.id.index()).glow(0.2 * (0.5 + 0.5 * (ctx.now * 2.5).sin()));
         let badge = format!(" {} {} ", def.symbol, def.name);
+        badge_w = badge.chars().count() as u16;
         draw::text(
             buf,
             area.x + 2 + TITLE.chars().count() as u16,
@@ -77,22 +79,52 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
             )
         }
         None => {
-            // Recherche en cours au Laboratoire : affichée devant la progression.
-            let research = snap
-                .research
-                .and_then(|r| {
-                    ctx.catalog
-                        .lab_node(r.id)
-                        .map(|d| format!(" ✶ {} {} [L] ·", d.name, fmt::duration(r.remaining)))
-                })
+            // Chantiers en cours (Laboratoire, Grand Attracteur) devant la
+            // progression : du plus détaillé au plus court, selon la place.
+            let research = snap.research.and_then(|r| {
+                ctx.catalog
+                    .lab_node(r.id)
+                    .map(|d| (d.name, fmt::duration(r.remaining)))
+            });
+            let build = snap.attractor_build.and_then(|b| {
+                ctx.catalog
+                    .attractor_stage(b.stage)
+                    .map(|s| (s.name, fmt::duration(b.remaining)))
+            });
+            let pct = fmt::percent(snap.progress.completion);
+            let room = area
+                .width
+                .saturating_sub(TITLE.chars().count() as u16 + 6)
+                .saturating_sub(badge_w) as usize;
+            let mut variants = Vec::new();
+            let full = |named: bool| {
+                let mut s = String::new();
+                if let Some((n, d)) = &research {
+                    if named {
+                        s.push_str(&format!(" ✶ {n} {d} [L] ·"));
+                    } else {
+                        s.push_str(&format!(" ✶ {d} ·"));
+                    }
+                }
+                if let Some((n, d)) = &build {
+                    if named {
+                        s.push_str(&format!(" ◇ {n} {d} [G] ·"));
+                    } else {
+                        s.push_str(&format!(" ◇ {d} ·"));
+                    }
+                }
+                s
+            };
+            variants.push(format!("{} progression {pct} [I] ", full(true)));
+            variants.push(format!("{} progression {pct} [I] ", full(false)));
+            variants.push(format!("{} {pct} ", full(false)));
+            variants.push(format!(" {pct} "));
+            let text = variants
+                .iter()
+                .find(|v| v.chars().count() <= room)
+                .cloned()
                 .unwrap_or_default();
-            (
-                format!(
-                    "{research} progression {} [I] ",
-                    fmt::percent(snap.progress.completion)
-                ),
-                theme::GOLD,
-            )
+            (text, theme::GOLD)
         }
     };
     draw::text_right(
@@ -161,33 +193,63 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
         inner.x,
     );
     row_limit[1] = x;
-    let auto = if snap.autobuy { "▲ auto   " } else { "" };
-    let dark = if snap.crunches > 0 {
-        format!(
-            "✶ {} (×{}){}   ",
-            snap.crunches,
-            fmt::short(snap.crunch_production),
-            if snap.lab_unlocked && snap.dark_matter_spendable > 0 {
-                format!(" · {} libres [L]", snap.dark_matter_spendable)
-            } else {
-                String::new()
+    // Ressources de prestige : de la version la plus détaillée à la plus
+    // compacte, selon la place laissée au gros compteur (jamais coupée).
+    let frag = {
+        // level 0 : tout · 1 : sans les « libres » · 2 : sans les bonus · 3 : minimal
+        let line = |level: u8| {
+            let sep = if level >= 2 { "  " } else { "   " };
+            let mut s = String::new();
+            if snap.particles > 0 {
+                s.push_str(&format!(
+                    "{} {}",
+                    crate::widgets::cosmos::PARTICLE,
+                    snap.particles
+                ));
+                if level < 2 {
+                    s.push_str(&format!(" (×{})", fmt::short(snap.particle_production)));
+                }
+                s.push_str(sep);
             }
-        )
-    } else {
-        String::new()
+            if snap.crunches > 0 {
+                s.push_str(&format!("✶ {}", snap.crunches));
+                if level < 2 {
+                    s.push_str(&format!(" (×{})", fmt::short(snap.crunch_production)));
+                }
+                if level == 0 && snap.lab_unlocked && snap.dark_matter_spendable > 0 {
+                    s.push_str(&format!(" · {} libres [L]", snap.dark_matter_spendable));
+                }
+                s.push_str(sep);
+            }
+            if snap.autobuy && level < 3 {
+                s.push_str("▲ auto");
+                s.push_str(sep);
+            }
+            s.push_str(&format!("◆ {}", fmt::short(snap.fragments)));
+            if level < 2 {
+                s.push_str(&format!(" (+{})", fmt::percent(snap.fragment_bonus)));
+            }
+            if level == 0 && snap.fragments_spendable >= 1.0 {
+                s.push_str(&format!(
+                    " · {} libres [E]",
+                    fmt::short(snap.fragments_spendable)
+                ));
+            }
+            s.push_str(&format!(
+                "{sep}★ {}/{}",
+                snap.achievements_unlocked, snap.achievements_total
+            ));
+            s
+        };
+        // Place réservée au gros compteur et à son mot d'échelle.
+        let (digits, _) = fmt::big(snap.stardust);
+        let counter = bigfont::text_width(&digits) + 16;
+        let room = inner.width.saturating_sub(counter + 2) as usize;
+        (0..4)
+            .map(line)
+            .find(|l| l.chars().count() <= room)
+            .unwrap_or_else(|| line(3))
     };
-    let free = if snap.fragments_spendable >= 1.0 {
-        format!(" · {} libres [E]", fmt::short(snap.fragments_spendable))
-    } else {
-        String::new()
-    };
-    let frag = format!(
-        "{dark}{auto}◆ {} (+{}){free}   ★ {}/{}",
-        fmt::short(snap.fragments),
-        fmt::percent(snap.fragment_bonus),
-        snap.achievements_unlocked,
-        snap.achievements_total
-    );
     let x = draw::text_right(
         buf,
         right,
@@ -238,24 +300,31 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
     let unit_word = word.as_str();
     let is_scale = !unit_word.starts_with("poussi");
     let click = format!("clic : +{}", fmt::short(snap.click_value));
-    let lines: [(&str, Style); 3] = [
-        (&click, theme::fg(theme::MUTED)),
-        (unit_word, theme::bold(theme::GOLD)),
+    // Chaque ligne propose des variantes, de la plus complète à la plus courte :
+    // on prend la première qui tient en entier, sans jamais couper un mot.
+    let unit_short = if is_scale { "de poussière" } else { "" };
+    let unit_long = if is_scale {
+        "de poussières d'étoile"
+    } else {
+        ""
+    };
+    let click_short = format!("+{}", fmt::short(snap.click_value));
+    let lines: [(Vec<&str>, Style); 3] = [
+        (vec![&click, &click_short], theme::fg(theme::MUTED)),
+        (vec![unit_word], theme::bold(theme::GOLD)),
         (
-            if is_scale {
-                "de poussières d'étoile"
-            } else {
-                ""
-            },
+            vec![unit_long, unit_short],
             Style::default().fg(theme::MUTED.color()),
         ),
     ];
-    for (row, (text, style)) in lines.iter().enumerate() {
+    for (row, (variants, style)) in lines.iter().enumerate() {
         let limit = row_limit[row].saturating_sub(2);
-        if text.is_empty() || wx + 6 > limit {
-            continue;
+        let room = limit.saturating_sub(wx) as usize;
+        if let Some(text) = variants
+            .iter()
+            .find(|t| !t.is_empty() && t.chars().count() <= room)
+        {
+            draw::text(buf, wx, inner.y + row as u16, text, *style, limit);
         }
-        let shown = draw::truncate(text, (limit - wx) as usize);
-        draw::text(buf, wx, inner.y + row as u16, &shown, *style, limit);
     }
 }

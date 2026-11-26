@@ -1,6 +1,8 @@
 //! Supernova (prestige) : formule des fragments.
 
-use crate::catalog::balance::{FRAGMENT_BONUS, FRAGMENT_DIVISOR, FRAGMENT_KNEE, FRAGMENT_SCALING};
+use crate::catalog::balance::{
+    FRAGMENT_BONUS, FRAGMENT_DIVISOR, FRAGMENT_EXPONENT, FRAGMENT_KNEE, FRAGMENT_SCALING,
+};
 
 /// Seuil de la formule des fragments après `supernovas` Supernovas :
 /// chaque Supernova rend la suivante 25 % plus exigeante.
@@ -22,14 +24,14 @@ pub fn fragments_available(total_run: f64, supernovas: u32, fragments_this_run: 
 }
 
 /// Multiplicateur de production des fragments : +10 % chacun jusqu'à 5, puis
-/// croissance en racine carrée (courbe continue). Évite l'emballement : plus de
+/// croissance en racine cubique (courbe continue). Évite l'emballement : plus de
 /// fragments rapporte toujours plus, mais de moins en moins vite.
 pub fn fragment_multiplier(fragments: f64) -> f64 {
     let f = fragments.max(0.0);
     if f <= FRAGMENT_KNEE {
         1.0 + FRAGMENT_BONUS * f
     } else {
-        1.0 + FRAGMENT_BONUS * FRAGMENT_KNEE * (f / FRAGMENT_KNEE).sqrt()
+        1.0 + FRAGMENT_BONUS * FRAGMENT_KNEE * (f / FRAGMENT_KNEE).powf(FRAGMENT_EXPONENT)
     }
 }
 
@@ -63,12 +65,13 @@ mod tests {
     }
 
     #[test]
-    fn multiplier_is_linear_then_sqrt() {
+    fn multiplier_is_linear_then_cube_root() {
         assert_eq!(fragment_multiplier(0.0), 1.0);
         assert!((fragment_multiplier(5.0) - 1.5).abs() < 1e-12);
-        assert!((fragment_multiplier(20.0) - 2.0).abs() < 1e-12); // 1 + 0.5 × √4
-        assert!((fragment_multiplier(80.0) - 3.0).abs() < 1e-12); // 1 + 0.5 × √16
-                                                                  // Continue et croissante.
+        assert!((fragment_multiplier(40.0) - 2.0).abs() < 1e-9); // 1 + 0.5 × ∛8
+        assert!((fragment_multiplier(625.0) - 3.5).abs() < 1e-9); // 1 + 0.5 × ∛125
+        assert!(fragment_multiplier(123_456.0) < 16.0, "plus d'emballement");
+        // Continue et croissante.
         assert!(fragment_multiplier(5.01) > fragment_multiplier(5.0));
         assert!(fragment_multiplier(1e6) > fragment_multiplier(1e5));
     }

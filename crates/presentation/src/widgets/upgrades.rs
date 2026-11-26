@@ -2,6 +2,7 @@
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
 use super::Ctx;
@@ -45,11 +46,16 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
         return;
     }
     ui.upg_sel = ui.upg_sel.min(n - 1);
-    // Encart de détail : séparateur + effet chiffré (+ texte d'ambiance si la place le permet).
-    let desc_h: u16 = if inner.height >= 7 {
-        3
-    } else if inner.height >= 4 {
-        2
+    // Encart de détail : séparateur + nom complet, effet chiffré et texte
+    // d'ambiance, renvoyés à la ligne. La liste garde au moins 3 lignes.
+    let detail = snap
+        .upgrades
+        .get(ui.upg_sel)
+        .map(|u| detail_lines(ctx, u.id, inner.width.saturating_sub(2) as usize))
+        .unwrap_or_default();
+    let room = inner.height.saturating_sub(n.min(3) as u16);
+    let desc_h: u16 = if room >= 2 {
+        (detail.len() as u16 + 1).min(room)
     } else {
         0
     };
@@ -100,7 +106,8 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
         let cost_x = inner
             .right()
             .saturating_sub(cost.chars().count() as u16 + 1);
-        let name = draw::truncate(&def.name, cost_x.saturating_sub(x + 1) as usize);
+        // Nom complet dans l'encart de détail quand la ligne est sélectionnée.
+        let name = draw::fit(&def.name, cost_x.saturating_sub(x + 1) as usize);
         let name_style = if selected {
             theme::bold(theme::TEXT)
         } else {
@@ -134,9 +141,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
     }
 
     if desc_h > 0 {
-        if let Some(u) = snap.upgrades.get(ui.upg_sel) {
-            render_detail(buf, inner, desc_h, ctx, u.id);
-        }
+        render_detail(buf, inner, desc_h, &detail, focused);
     }
 }
 
@@ -163,11 +168,38 @@ pub fn impact(effect: Effect, snap: &GameSnapshot) -> Option<String> {
     }
 }
 
-/// Encart « qui fait quoi » de l'amélioration sélectionnée.
-fn render_detail(buf: &mut Buffer, inner: Rect, desc_h: u16, ctx: &Ctx, id: UpgradeId) {
+/// Lignes de l'encart « qui fait quoi » de l'amélioration sélectionnée.
+fn detail_lines(ctx: &Ctx, id: UpgradeId, width: usize) -> Vec<(String, Style)> {
     let Some(def) = ctx.catalog.upgrade(id) else {
-        return;
+        return Vec::new();
     };
+    let mut out = Vec::new();
+    for l in draw::wrap(&def.name, width) {
+        out.push((l, theme::bold(theme::TEXT)));
+    }
+    // L'effet, puis son gain concret maintenant.
+    let effect = match impact(def.effect, ctx.snap) {
+        Some(g) => format!("{} → {g}", def.description),
+        None => def.description.to_string(),
+    };
+    for l in draw::wrap(&effect, width) {
+        out.push((l, theme::fg(theme::CYAN)));
+    }
+    for l in draw::wrap(&def.flavor, width) {
+        out.push((l, theme::fg(theme::MUTED)));
+    }
+    out
+}
+
+/// Encart de détail : séparateur puis les lignes ; si la place manque, le
+/// texte d'ambiance (en dernier) est sacrifié en premier.
+fn render_detail(
+    buf: &mut Buffer,
+    inner: Rect,
+    desc_h: u16,
+    lines: &[(String, Style)],
+    focused: bool,
+) {
     let sep_y = inner.bottom() - desc_h;
     let sep: String = "─".repeat(inner.width.saturating_sub(2) as usize);
     draw::text(
@@ -178,35 +210,20 @@ fn render_detail(buf: &mut Buffer, inner: Rect, desc_h: u16, ctx: &Ctx, id: Upgr
         theme::fg(theme::BORDER),
         inner.right(),
     );
-    let max = inner.width.saturating_sub(2) as usize;
-
-    // Ligne 1 : l'effet, puis son gain concret maintenant.
-    let y = sep_y + 1;
-    let gain = impact(def.effect, ctx.snap);
-    let gain_w = gain.as_ref().map(|g| g.chars().count() + 3).unwrap_or(0);
-    let desc = draw::truncate(&def.description, max.saturating_sub(gain_w));
-    let x = draw::text(
-        buf,
-        inner.x + 1,
-        y,
-        &desc,
-        theme::fg(theme::CYAN),
-        inner.right(),
-    );
-    if let Some(g) = gain {
-        let x = draw::text(buf, x, y, " → ", theme::fg(theme::MUTED), inner.right());
-        draw::text(buf, x, y, &g, theme::bold(theme::GREEN), inner.right());
+    let rows = (desc_h - 1) as usize;
+    // Sans le focus, l'encart est un aperçu : le panneau s'agrandit dès qu'on y
+    // entre ([Tab]) et montre alors tout le texte.
+    if focused && lines.len() > rows {
+        let lost: Vec<&str> = lines[rows..].iter().map(|(l, _)| l.as_str()).collect();
+        draw::audit::record(&lost.join(" "), 0);
     }
-
-    // Ligne 2 : ce que c'est.
-    if desc_h >= 3 {
-        let flavor = draw::truncate(&def.flavor, max);
+    for (i, (text, style)) in lines.iter().take(rows).enumerate() {
         draw::text(
             buf,
             inner.x + 1,
-            y + 1,
-            &flavor,
-            theme::fg(theme::MUTED),
+            sep_y + 1 + i as u16,
+            text,
+            *style,
             inner.right(),
         );
     }

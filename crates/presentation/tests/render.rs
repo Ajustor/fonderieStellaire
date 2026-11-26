@@ -54,7 +54,7 @@ impl RandomSource for FakeRng {
 /// Partie déjà avancée : plusieurs générateurs, améliorations disponibles.
 fn advanced_save() -> SaveData {
     SaveData {
-        version: 1,
+        version: application::SAVE_VERSION,
         stardust: 123_456_789.0,
         total_run: 4.2e8,
         total_all: 9.9e9,
@@ -125,7 +125,7 @@ fn game_screen_100x30() {
     assert!(text.contains("Production"));
     assert!(text.contains("Journal"));
     assert!(text.contains("Supernova : +6 fragments"));
-    assert!(text.contains("◆ 12 (+77%)"));
+    assert!(text.contains("◆ 12 (+67%)"));
     assert!(text.contains("[Espace] Récolter"));
     assert!(text.contains('▶'));
     // Bordures droites alignées sur la dernière colonne.
@@ -403,7 +403,7 @@ fn descriptions_and_info_screen() {
     app.set_time(101.0);
     let text = render(&mut app, 100, 30);
     println!("{text}");
-    assert!(text.contains("SUCCÈS  2/39"));
+    assert!(text.contains("SUCCÈS  2/42"));
     assert!(text.contains("★ Premier pas"));
     assert!(text.contains("○ Centurion"));
     app.on_intent(Intent::Down);
@@ -428,10 +428,7 @@ fn update_status_is_shown() {
         version: "v0.2.0".into(),
     });
     let text = render(&mut app, 100, 30);
-    assert!(
-        text.contains("v0.2.0 installée, relance le jeu !"),
-        "{text}"
-    );
+    assert!(text.contains("v0.2.0 installée, redémarrage…"), "{text}");
     app.enter_game_now();
     app.set_time(6.0); // le toast a fini de glisser
     app.update(0.033);
@@ -487,7 +484,7 @@ fn v0_2_features_render() {
     app.update(0.033);
     app.on_intent(Intent::JournalUp);
     let text = render(&mut app, 100, 30);
-    assert!(text.contains("plus ancien"), "{text}");
+    assert!(text.contains("↑ ") && text.contains("[PgDn]"), "{text}");
 
     // --- Nouvelle partie : la liste vide annonce la prochaine amélioration.
     let mut fresh = app_with(None);
@@ -531,7 +528,8 @@ fn click_value_and_constant_bar_width() {
                 .map(|l| bar_len(&l))
                 .filter(|&n| n > 0)
                 .collect();
-            assert!(widths.len() >= 4, "{widths:?}\n{text}");
+            // L'encart de détail complet laisse au moins 3 générateurs visibles.
+            assert!(widths.len() >= 3, "{widths:?}\n{text}");
             assert!(
                 widths.windows(2).all(|p| p[0] == p[1]),
                 "barres de tailles différentes {widths:?} (mode {mode_presses}) :\n{text}"
@@ -822,4 +820,165 @@ fn v0_8_portals_universes_and_key_ceremony() {
     app.update(0.033);
     assert_eq!(app.snapshot().crunches, 11);
     app.on_intent(Intent::Escape);
+}
+
+#[test]
+fn installed_update_restarts_the_game_by_itself() {
+    use application::UpdateEvent;
+    let mut app = game_app();
+    let mut t = 200.0;
+    app.set_time(t);
+    app.react_update(UpdateEvent::Installed {
+        version: "v9.9.9".into(),
+    });
+    app.update(0.033);
+    let text = render(&mut app, 100, 30);
+    assert!(
+        text.contains("Mise à jour v9.9.9 installée · redémarrage dans 5 s"),
+        "{text}"
+    );
+    assert!(!app.should_quit());
+    for _ in 0..(4 * 30) {
+        t += 1.0 / 30.0;
+        app.set_time(t);
+        app.update(1.0 / 30.0);
+    }
+    assert!(!app.should_quit());
+    for _ in 0..(2 * 30) {
+        t += 1.0 / 30.0;
+        app.set_time(t);
+        app.update(1.0 / 30.0);
+        let _ = render(&mut app, 100, 30);
+    }
+    assert!(app.should_quit() && app.should_restart());
+}
+
+#[test]
+fn outdated_save_is_wiped_and_the_player_is_told() {
+    let mut old = advanced_save();
+    old.version = application::SAVE_RESET_BELOW - 1;
+    let mut app = app_with(Some(old));
+    app.set_time(8.0); // intro terminée, texte entièrement écrit
+    app.update(0.033);
+    for (w, h) in [(100, 30), (80, 24)] {
+        let text = render(&mut app, w, h);
+        println!("{text}");
+        assert!(text.contains("NOUVEL ÉQUILIBRAGE"), "{text}");
+        assert!(text.contains("ancienne partie"), "{text}");
+        assert!(text.contains("Bonne nouvelle forge !"), "{text}");
+    }
+    assert_eq!(app.snapshot().stardust, 0.0, "nouvelle partie");
+}
+
+#[test]
+fn v0_9_big_bang_forge_attractor_and_ending() {
+    // 34 Big Crunch : la Cosmogonie propose un Big Bang à +3 particules.
+    let mut save = advanced_save();
+    save.crunches = 34;
+    save.lab = vec!["lab_comet_net".into()];
+    let mut app = app_with(Some(save));
+    let mut t = 100.0;
+    app.set_time(t);
+    app.enter_game_now();
+    app.update(0.033);
+    let _ = render(&mut app, 120, 36);
+    app.on_intent(Intent::Cosmos);
+    t += 1.0;
+    app.set_time(t);
+    let text = render(&mut app, 120, 36);
+    println!("{text}");
+    assert!(text.contains("COSMOGONIE"), "{text}");
+    assert!(text.contains("+3 ✷"));
+    assert!(text.contains("Forge à neutrons"));
+    assert!(text.contains("Éveil du Grand Attracteur"));
+
+    // Entrée deux fois : le Big Bang, rendu image par image.
+    app.on_intent(Intent::Buy);
+    let text = render(&mut app, 120, 36);
+    assert!(
+        text.contains("Entrée de nouveau pour déclencher le BIG BANG"),
+        "{text}"
+    );
+    app.on_intent(Intent::Buy);
+    let mut seen_title = false;
+    for i in 0..(9 * 30) {
+        t += 1.0 / 30.0;
+        app.set_time(t);
+        app.update(1.0 / 30.0);
+        let (w, h) = if i % 3 == 0 { (80, 24) } else { (120, 36) };
+        let text = render(&mut app, w, h);
+        seen_title |= text.contains("particules primordiales ✷");
+    }
+    assert!(seen_title, "l'annonce des particules est affichée");
+    let snap = app.snapshot();
+    assert_eq!((snap.big_bangs, snap.particles, snap.crunches), (1, 3, 0));
+    assert_eq!(snap.particle_production, 4.0);
+    let text = render(&mut app, 120, 36);
+    assert!(
+        text.contains("✷ 3 (×4)"),
+        "particules dans l'en-tête :\n{text}"
+    );
+
+    // Forger la Forge à neutrons (1 particule), lancer la 1re étape (2 particules).
+    app.on_intent(Intent::Cosmos);
+    app.on_intent(Intent::Down);
+    app.on_intent(Intent::Buy);
+    app.update(0.033);
+    assert!(app.snapshot().forges[0].forged);
+    for _ in 0..3 {
+        app.on_intent(Intent::Down);
+    }
+    app.on_intent(Intent::Buy);
+    app.update(0.033);
+    assert!(app.snapshot().attractor_build.is_some());
+    assert_eq!(app.snapshot().particles_spendable, 0);
+    app.on_intent(Intent::Escape);
+    t += 1.0;
+    app.set_time(t);
+    app.update(0.033);
+    let text = render(&mut app, 120, 36);
+    assert!(
+        text.contains("◇ Ancrage gravitationnel"),
+        "chantier dans l'en-tête :\n{text}"
+    );
+    app.update(3.0 * 3600.0 + 1.0);
+    assert_eq!(app.snapshot().attractor_stages, 1);
+
+    // Dernière étape : l'éveil, puis le générique de fin.
+    let mut save = advanced_save();
+    save.big_bangs = 3;
+    save.particles = 30;
+    save.attractor = 6;
+    let mut app = app_with(Some(save));
+    let mut t = 100.0;
+    app.set_time(t);
+    app.enter_game_now();
+    app.update(0.033);
+    let _ = render(&mut app, 120, 36);
+    app.on_intent(Intent::Cosmos);
+    for _ in 0..10 {
+        app.on_intent(Intent::Down);
+    }
+    app.on_intent(Intent::Buy);
+    app.update(0.033);
+    app.on_intent(Intent::Escape);
+    app.update(36.0 * 3600.0 + 1.0);
+    assert!(app.snapshot().attractor_awakened);
+    let mut text = String::new();
+    for _ in 0..(30 * 30) {
+        t += 1.0 / 30.0;
+        app.set_time(t);
+        app.update(1.0 / 30.0);
+        text = render(&mut app, 100, 30);
+    }
+    println!("{text}");
+    assert!(text.contains("FIN DE L'ACTE II"), "{text}");
+    assert!(text.contains("Conçu et forgé par Ajustor"));
+    assert!(text.contains("[Entrée] continuer à jouer"));
+    app.on_intent(Intent::Buy);
+    t += 1.0;
+    app.set_time(t);
+    app.update(0.033);
+    let text = render(&mut app, 100, 30);
+    assert!(!text.contains("FIN DE L'ACTE II"), "retour au jeu");
 }

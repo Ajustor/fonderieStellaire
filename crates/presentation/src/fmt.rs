@@ -136,7 +136,12 @@ pub fn clock(secs: f64) -> String {
     } else {
         0
     };
-    format!("{:02}:{:02}", s / 60, s % 60)
+    if s >= 3600 {
+        // Au-delà d'une heure : heures et minutes (« 111h06 »).
+        format!("{}h{:02}", s / 3600, s % 3600 / 60)
+    } else {
+        format!("{:02}:{:02}", s / 60, s % 60)
+    }
 }
 
 /// Compte à rebours `m:ss`.
@@ -215,6 +220,7 @@ mod tests {
         assert_eq!(duration(3720.0), "1h 02m");
         assert_eq!(duration(8040.0), "2h 14m");
         assert_eq!(clock(754.0), "12:34");
+        assert_eq!(clock(400_000.0), "111h06");
         assert_eq!(countdown(24.2), "0:25");
         assert_eq!(percent(0.6), "60%");
     }

@@ -56,6 +56,9 @@ struct Star3 {
     z: f64,
 }
 
+/// Message affiché quand l'ancienne sauvegarde a été effacée.
+const WIPE_NOTICE: &str = "L'équilibrage du jeu a été entièrement revu : ton ancienne partie a été effacée et tout le monde repart de zéro. Bonne nouvelle forge !";
+
 pub struct TitleScreen {
     pub start: f64,
     skipped: bool,
@@ -63,6 +66,8 @@ pub struct TitleScreen {
     rng: FxRng,
     /// (secondes d'absence, poussière gagnée)
     pub offline: Option<(f64, f64)>,
+    /// L'ancienne sauvegarde a été effacée (nouvel équilibrage) : on prévient.
+    pub wiped: bool,
 }
 
 impl TitleScreen {
@@ -81,6 +86,7 @@ impl TitleScreen {
             hyper,
             rng,
             offline: None,
+            wiped: false,
         }
     }
 
@@ -201,7 +207,18 @@ impl TitleScreen {
         let big_logo = area.width >= 72 && area.height >= LOGO.len() as u16 + 10;
         let logo_h = if big_logo { LOGO.len() as u16 } else { 1 };
         let offline_h = if self.offline.is_some() { 4 } else { 0 };
-        let total = logo_h + 2 + 2 + offline_h + 1 + 3;
+        let notice_w = area.width.saturating_sub(6).min(72);
+        let notice = if self.wiped {
+            draw::wrap(WIPE_NOTICE, notice_w.saturating_sub(4) as usize)
+        } else {
+            Vec::new()
+        };
+        let notice_h = if notice.is_empty() {
+            0
+        } else {
+            notice.len() as u16 + 3
+        };
+        let total = logo_h + 2 + 2 + offline_h + notice_h + 1 + 3;
         let mut y = area.y + area.height.saturating_sub(total) / 2;
 
         // Logo qui se décrypte de gauche à droite, puis reflet toutes les ~4 s.
@@ -301,6 +318,49 @@ impl TitleScreen {
                 );
             }
             y += offline_h;
+        }
+
+        // Remise à zéro : cadre qui pulse, texte écrit à la machine.
+        if !notice.is_empty() && sub_alpha > 0.0 {
+            let w = notice_w;
+            let h = notice.len() as u16 + 2;
+            let rect = area.intersection(Rect::new(
+                area.x + area.width.saturating_sub(w) / 2,
+                y,
+                w,
+                h,
+            ));
+            draw::clear(buf, rect);
+            let pulse = 0.5 + 0.5 * (now * 2.5).sin();
+            let border = theme::ORANGE.lerp(theme::PINK, pulse).dim(1.0 - sub_alpha);
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(theme::bold(border))
+                .title(
+                    ratatui::text::Line::from(ratatui::text::Span::styled(
+                        " ✶ NOUVEL ÉQUILIBRAGE ✶ ",
+                        theme::bold(theme::GOLD.dim(1.0 - sub_alpha)),
+                    ))
+                    .centered(),
+                )
+                .render(rect, buf);
+            // Le texte s'écrit à la suite, ligne après ligne.
+            let mut typed = (t - INTRO_END + 0.3) * 60.0;
+            for (i, line) in notice.iter().enumerate() {
+                let n = line.chars().count();
+                let shown: String = line.chars().take(typed.max(0.0) as usize).collect();
+                typed -= n as f64;
+                draw::text(
+                    buf,
+                    rect.x + 2,
+                    rect.y + 1 + i as u16,
+                    &shown,
+                    theme::bold(theme::TEXT.dim(1.0 - sub_alpha)),
+                    rect.right().saturating_sub(1),
+                );
+            }
+            y += notice_h;
         }
 
         // Statistiques.

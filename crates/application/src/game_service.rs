@@ -8,10 +8,11 @@ use domain::{economy, BuyMode, Catalog, DomainEvent, GameState, Requirement};
 use crate::commands::Command;
 use crate::error::AppError;
 use crate::ports::{Clock, LoadOutcome, RandomSource, SaveRepository};
-use crate::save_dto::SaveData;
+use crate::save_dto::{SaveData, SAVE_RESET_BELOW};
 use crate::snapshot::{
-    ActiveChallengeView, ChallengeView, ConstellationView, GameSnapshot, GeneratorView, LabView,
-    NextUpgradeView, PerkView, ProgressView, ResearchView, TeaserView, UniverseView, UpgradeView,
+    ActiveChallengeView, ChallengeView, ConstellationView, ForgeView, GameSnapshot, GeneratorView,
+    LabView, NextUpgradeView, PerkView, ProgressView, ResearchBuildView, ResearchView, TeaserView,
+    UniverseView, UpgradeView,
 };
 
 /// Nombre d'échantillons de production conservés (1 par seconde).
@@ -37,6 +38,8 @@ pub enum GameEvent {
     SaveRecovered {
         backup: String,
     },
+    /// La sauvegarde datait d'un ancien équilibrage : effacée, nouvelle partie.
+    SaveWiped,
 }
 
 pub struct GameService {
@@ -101,6 +104,14 @@ impl GameService {
             LoadOutcome::Corrupted { backup } => {
                 self.state = GameState::new(&self.catalog);
                 out.push(GameEvent::SaveRecovered { backup });
+            }
+            LoadOutcome::Loaded(data) if data.version < SAVE_RESET_BELOW => {
+                // Ancien équilibrage : on repart de zéro et l'ancienne partie
+                // est écrasée tout de suite par la nouvelle.
+                self.state = GameState::new(&self.catalog);
+                self.reduced_effects = data.reduced_effects;
+                self.save()?;
+                out.push(GameEvent::SaveWiped);
             }
             LoadOutcome::Loaded(data) => {
                 self.state = data.to_state(&self.catalog);
@@ -174,6 +185,9 @@ impl GameService {
             Command::BigCrunch(next) => self.state.big_crunch(&self.catalog, next, &mut ev),
             Command::StartResearch(id) => self.state.start_research(&self.catalog, id, &mut ev),
             Command::ToggleLab(id) => self.state.toggle_lab(&self.catalog, id, &mut ev),
+            Command::BigBang => self.state.big_bang(&self.catalog, &mut ev),
+            Command::Forge(id) => self.state.forge(&self.catalog, id, &mut ev),
+            Command::BuildAttractor => self.state.build_attractor(&self.catalog, &mut ev),
             Command::BuyConstellation(id) => {
                 self.state.buy_constellation(&self.catalog, id, &mut ev)
             }
@@ -313,7 +327,7 @@ impl GameService {
         snap.crunches = st.crunches;
         snap.crunch_available = st.can_big_crunch();
         snap.crunch_needed = domain::catalog::balance::CRUNCH_SUPERNOVAS;
-        snap.crunch_production = st.crunch_production();
+        snap.crunch_production = st.crunch_production(c);
         snap.crunch_fragments = st.crunch_fragments();
         snap.lab_unlocked = st.lab_unlocked();
         snap.lab_needed = domain::catalog::balance::LAB_UNLOCK_CRUNCHES;
@@ -341,6 +355,37 @@ impl GameService {
                 key: st.has_universe_key(u.id),
             }));
         snap.entropy = st.entropy_factor(c);
+        snap.big_bangs = st.big_bangs;
+        snap.particles = st.particles;
+        snap.particles_spendable = st.particles_spendable();
+        snap.particles_available = st.particles_available();
+        snap.bigbang_available = st.can_big_bang();
+        snap.bigbang_needed = domain::catalog::balance::BIGBANG_CRUNCHES;
+        snap.particle_production = st.particle_production();
+        snap.particle_fragments = st.particle_fragments();
+        snap.forges.clear();
+        snap.forges.extend(
+            c.generators
+                .iter()
+                .filter(|g| g.is_primordial())
+                .map(|g| ForgeView {
+                    id: g.id,
+                    forged: st.is_forged(g.id),
+                    available: st.can_forge(c, g.id),
+                }),
+        );
+        snap.attractor_stages = st.attractor;
+        snap.attractor_build = st.attractor_build.and_then(|left| {
+            let stage = c.attractor_stage(st.attractor)?;
+            Some(ResearchBuildView {
+                stage: st.attractor,
+                remaining: left,
+                total: stage.build_secs,
+            })
+        });
+        snap.attractor_buildable = st.can_build_attractor(c);
+        snap.attractor_awakened = st.attractor_awakened(c);
+        snap.attractor_production = st.attractor_production(c);
         snap.research = st.research.and_then(|(id, left)| {
             let def = c.lab_node(id)?;
             Some(ResearchView {
@@ -418,6 +463,11 @@ impl GameService {
                         .max(0.0),
                     supernovas_needed: if st.supernovas < g.unlock_supernovas {
                         g.unlock_supernovas
+                    } else {
+                        0
+                    },
+                    particles_needed: if g.is_primordial() && !st.is_forged(g.id) {
+                        g.particle_cost
                     } else {
                         0
                     },
@@ -691,7 +741,7 @@ mod tests {
         assert_eq!(snap.fragments, 6.0);
         assert_eq!(snap.fragments_spendable, 6.0);
         // 6 fragments : 1 + 0.5 × √(6/5) (courbe en racine au-delà de 5).
-        assert!((snap.fragment_bonus - 0.5 * (6.0f64 / 5.0).sqrt()).abs() < 1e-12);
+        assert!((snap.fragment_bonus - 0.5 * (6.0f64 / 5.0).cbrt()).abs() < 1e-12);
         assert_eq!(snap.perks.len(), 8);
         assert!(snap.perks.iter().any(|p| p.affordable));
         // Nouveau cycle, 1 Supernova faite : le seuil passe de 1e7 à 1.25e7.
@@ -733,5 +783,26 @@ mod tests {
         let costs: Vec<f64> = snap.upgrades.iter().map(|u| u.cost).collect();
         assert!(costs.len() >= 3);
         assert!(costs.windows(2).all(|w| w[0] <= w[1]));
+    }
+
+    #[test]
+    fn outdated_saves_are_wiped_with_a_notice() {
+        let (repo, clock) = fixture();
+        let mut s = service(&repo, &clock, vec![0.5]);
+        let mut old = SaveData::from_state(s.state(), s.catalog(), 0, true);
+        old.version = SAVE_RESET_BELOW - 1;
+        old.supernovas = 12;
+        old.fragments = 99.0;
+        *repo.slot.borrow_mut() = Some(old);
+        let ev = s.load().unwrap();
+        assert!(ev.contains(&GameEvent::SaveWiped));
+        assert_eq!(s.snapshot().supernovas, 0);
+        assert!(s.snapshot().reduced_effects, "les réglages sont gardés");
+        // L'ancienne partie est écrasée tout de suite sur le disque.
+        let saved = repo.slot.borrow().clone().unwrap();
+        assert_eq!(saved.version, crate::SAVE_VERSION);
+        assert_eq!(saved.supernovas, 0);
+        // Au lancement suivant, rien n'est effacé.
+        assert!(!s.load().unwrap().contains(&GameEvent::SaveWiped));
     }
 }

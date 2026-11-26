@@ -35,6 +35,8 @@ pub enum Intent {
     Lab,
     /// `V` : univers parallèles (consultation).
     Universes,
+    /// `G` : Cosmogonie (Big Bang, forge primordiale, Grand Attracteur).
+    Cosmos,
     /// `T` : activer / arrêter l'automate.
     ToggleAuto,
     /// `PgUp` / `PgDn` : remonter / redescendre dans le journal.
@@ -157,6 +159,7 @@ pub fn map_key(key: &KeyEvent) -> Option<Intent> {
             'u' => Intent::BigCrunch,
             'l' => Intent::Lab,
             'v' => Intent::Universes,
+            'g' => Intent::Cosmos,
             't' => Intent::ToggleAuto,
             'o' | 'y' => Intent::Yes,
             'n' => Intent::No,

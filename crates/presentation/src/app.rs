@@ -20,9 +20,12 @@ use domain::{
 
 use crate::draw;
 use crate::fmt;
+use crate::fx::effects;
 use crate::fx::Rgb;
 use crate::input::{map_event, HoldDetector, Intent};
 use crate::layout::is_too_small;
+use crate::screens::bigbang::BangSequence;
+use crate::screens::ending::{CreditLine, EndingSequence};
 use crate::screens::game::{self, GameView};
 use crate::screens::supernova::{NovaSequence, WAVE_AT};
 use crate::screens::title::TitleScreen;
@@ -32,11 +35,13 @@ use crate::theme;
 use crate::theme::GEN_SLOTS;
 use crate::ui::{Panel, Popup, Ui};
 use crate::visuals::{Visuals, NEVER};
+use crate::widgets::cosmos::{self, CosmosItem, PARTICLE};
 use crate::widgets::journal::{Journal, Kind};
 use crate::widgets::portals::PortalState;
 use crate::widgets::shop::{self, ShopItem};
 use crate::widgets::toast::Toasts;
 use crate::widgets::{inner, Ctx};
+use crossterm::terminal::{BeginSynchronizedUpdate, EndSynchronizedUpdate};
 
 /// ≈ 30 images par seconde.
 const FRAME: Duration = Duration::from_millis(33);
@@ -73,7 +78,14 @@ impl FrameStats {
 pub struct RunOutcome {
     /// Erreur de la sauvegarde finale, le cas échéant.
     pub save_error: Option<String>,
+    /// Une mise à jour vient d'être installée : relancer le jeu.
+    pub restart: bool,
 }
+
+/// Délai entre l'installation d'une mise à jour et le redémarrage automatique.
+pub const RESTART_DELAY: f64 = 5.0;
+/// Fondu au noir juste avant de redémarrer.
+const RESTART_FADE: f64 = 0.6;
 
 pub struct App {
     service: GameService,
@@ -98,6 +110,10 @@ pub struct App {
     updates: UpdateService,
     /// Dernier état connu de la mise à jour automatique.
     update_status: Option<UpdateEvent>,
+    /// Redémarrage prévu (mise à jour installée) : instant et version.
+    restart_at: Option<(f64, String)>,
+    /// Le jeu se ferme pour redémarrer sur la nouvelle version.
+    restart: bool,
 }
 
 fn seed() -> u64 {
@@ -132,6 +148,8 @@ impl App {
             blocked_hint_at: NEVER,
             updates: UpdateService::disabled(env!("CARGO_PKG_VERSION")),
             update_status: None,
+            restart_at: None,
+            restart: false,
         };
         app.vis.set_reduced(app.snap.reduced_effects);
         app.journal.push(
@@ -167,6 +185,61 @@ impl App {
         self.quit
     }
 
+    /// Vrai si le jeu s'est fermé pour redémarrer sur une nouvelle version.
+    pub fn should_restart(&self) -> bool {
+        self.restart
+    }
+
+    /// Redémarrage automatique : attend la fin des grandes séquences
+    /// (Supernova, portails, cérémonie) pour ne rien couper.
+    fn update_restart(&mut self, now: f64) {
+        let Some((at, _)) = &self.restart_at else {
+            return;
+        };
+        let busy = self.vis.nova.is_some()
+            || self.ui.portal.is_some()
+            || self.vis.key_ceremony.is_some()
+            || self.vis.bang.is_some()
+            || self.vis.ending.is_some();
+        if busy && now > *at - RESTART_FADE {
+            // On repousse : le compte à rebours reprendra à la fin de la séquence.
+            self.restart_at = self.restart_at.take().map(|(_, v)| (now + 2.0, v));
+            return;
+        }
+        if now >= *at {
+            self.restart = true;
+            self.quit = true;
+        }
+    }
+
+    /// Bandeau du redémarrage, puis fondu au noir.
+    fn render_restart(&self, buf: &mut Buffer, area: Rect) {
+        let Some((at, version)) = &self.restart_at else {
+            return;
+        };
+        let left = (at - self.now).max(0.0);
+        if left < RESTART_FADE {
+            effects::fade(buf, area, 1.0 - left / RESTART_FADE);
+        }
+        let text = format!(
+            " ✦ Mise à jour {version} installée · redémarrage dans {} s ✦ ",
+            left.ceil() as u64
+        );
+        let short = format!(" ✦ {version} : redémarrage dans {} s ", left.ceil() as u64);
+        let text = if text.chars().count() + 4 <= area.width as usize {
+            text
+        } else {
+            short
+        };
+        let w = text.chars().count() as u16;
+        let x = area.x + area.width.saturating_sub(w) / 2;
+        let pulse = 0.5 + 0.5 * (self.now * 4.0).sin();
+        let color = theme::GREEN
+            .glow(0.3 * pulse)
+            .dim(1.0 - (left / RESTART_FADE).min(1.0));
+        draw::text(buf, x, area.y, &text, theme::bold(color), area.right());
+    }
+
     /// Passe directement à l'écran de jeu (sans cascade) — utile aux tests.
     pub fn enter_game_now(&mut self) {
         self.screen = Screen::Game;
@@ -198,11 +271,15 @@ impl App {
             self.update(dt);
 
             let mut render_time = Duration::ZERO;
+            // Mise à jour synchronisée : le terminal affiche l'image d'un bloc
+            // (ignoré par les terminaux qui ne la gèrent pas).
+            crossterm::queue!(terminal.backend_mut(), BeginSynchronizedUpdate)?;
             terminal.draw(|f| {
                 let t0 = Instant::now();
                 self.render(f);
                 render_time = t0.elapsed();
             })?;
+            crossterm::execute!(terminal.backend_mut(), EndSynchronizedUpdate)?;
             self.stats.record(dt, render_time, frame_start.elapsed());
 
             let timeout = FRAME.saturating_sub(frame_start.elapsed());
@@ -275,6 +352,13 @@ impl App {
                         self.ui.lab = None;
                     }
                 }
+                if let Some(c) = self.ui.cosmos {
+                    if c.is_closed(now) {
+                        self.ui.cosmos = None;
+                        self.ui.cosmos_armed = false;
+                    }
+                }
+                self.update_bang(now);
                 // Fin de la plongée dans un portail : le Big Crunch commence.
                 if let Some(p) = self.ui.portal {
                     if p.dive_progress(now) == Some(1.0) {
@@ -312,6 +396,27 @@ impl App {
             .is_some_and(|u| u.key == "swarm");
         while let Some(ev) = self.updates.poll() {
             self.react_update(ev);
+        }
+        self.update_restart(now);
+    }
+
+    /// Big Bang : validé à l'éclair, puis retour au jeu en cascade.
+    fn update_bang(&mut self, now: f64) {
+        let Some(bang) = self.vis.bang.as_ref() else {
+            return;
+        };
+        let t = bang.t(now);
+        if !bang.committed && t >= crate::screens::bigbang::COMMIT_AT {
+            if let Some(b) = self.vis.bang.as_mut() {
+                b.committed = true;
+            }
+            self.command(Command::BigBang);
+        }
+        if self.vis.bang.as_ref().is_some_and(|b| b.is_done(now)) {
+            self.vis.bang = None;
+            self.vis.cascade_start = now;
+            self.vis.particles.clear();
+            self.vis.fireworks(now + 0.3);
         }
     }
 
@@ -395,6 +500,23 @@ impl App {
 
     fn on_game_intent(&mut self, intent: Intent) {
         let now = self.now;
+        if let Some(e) = self.vis.ending.as_ref() {
+            if intent == Intent::Quit {
+                self.quit = true;
+            } else if e.can_close(now)
+                && matches!(intent, Intent::Buy | Intent::Escape | Intent::Yes)
+            {
+                self.vis.ending = None;
+                self.vis.cascade_start = now;
+            }
+            return;
+        }
+        if self.vis.bang.is_some() {
+            if intent == Intent::Quit {
+                self.quit = true;
+            }
+            return;
+        }
         if self.vis.nova.is_some() {
             if intent == Intent::Quit {
                 self.quit = true;
@@ -457,6 +579,29 @@ impl App {
                     _ => {}
                 }
                 self.ui.portal = Some(portal);
+            }
+            return;
+        }
+        if let Some(popup) = self.ui.cosmos {
+            if popup.closing_at.is_none() {
+                let count = self.cosmos_count();
+                match intent {
+                    Intent::Up => {
+                        self.ui.cosmos_sel = self.ui.cosmos_sel.saturating_sub(1);
+                        self.ui.cosmos_armed = false;
+                    }
+                    Intent::Down => {
+                        self.ui.cosmos_sel = (self.ui.cosmos_sel + 1).min(count.saturating_sub(1));
+                        self.ui.cosmos_armed = false;
+                    }
+                    Intent::Buy | Intent::Yes => self.cosmos_action(),
+                    Intent::Cosmos | Intent::Escape | Intent::No | Intent::Quit => {
+                        if let Some(c) = self.ui.cosmos.as_mut() {
+                            c.closing_at = Some(now);
+                        }
+                    }
+                    _ => {}
+                }
             }
             return;
         }
@@ -594,6 +739,26 @@ impl App {
                 }
             }
             Intent::Save => self.command(Command::Save),
+            Intent::Cosmos => {
+                if self.snap.lab_unlocked {
+                    self.ui.cosmos = Some(Popup {
+                        opened_at: now,
+                        closing_at: None,
+                    });
+                    self.ui.cosmos_armed = false;
+                } else {
+                    let need = self.snap.bigbang_needed;
+                    self.toasts.push(
+                        now,
+                        theme::GREY,
+                        "Cosmogonie",
+                        format!(
+                            "S'ouvre au 10e Big Crunch ({}/10) · Big Bang au {need}e",
+                            self.snap.crunches
+                        ),
+                    );
+                }
+            }
             Intent::Lab => {
                 if self.snap.lab_unlocked {
                     self.ui.lab = Some(Popup {
@@ -746,6 +911,123 @@ impl App {
         }
     }
 
+    fn cosmos_ctx_item(&self) -> (usize, Option<CosmosItem>) {
+        let ctx = Ctx {
+            snap: &self.snap,
+            catalog: self.service.catalog(),
+            now: self.now,
+            dt: self.dt,
+            reduced: self.snap.reduced_effects,
+        };
+        (
+            cosmos::item_count(&ctx),
+            cosmos::item_at(&ctx, self.ui.cosmos_sel),
+        )
+    }
+
+    fn cosmos_count(&self) -> usize {
+        self.cosmos_ctx_item().0
+    }
+
+    /// Entrée dans la Cosmogonie : Big Bang (confirmé), forge, construction.
+    fn cosmos_action(&mut self) {
+        let now = self.now;
+        match self.cosmos_ctx_item().1 {
+            Some(CosmosItem::BigBang) => {
+                if !self.snap.bigbang_available {
+                    self.command(Command::BigBang);
+                } else if self.ui.cosmos_armed {
+                    self.ui.cosmos_armed = false;
+                    self.ui.cosmos = None;
+                    self.ui.shop = None;
+                    let gained = self.snap.particles_available;
+                    let total = self.snap.particles + gained;
+                    let prod = 1.0 + domain::catalog::balance::PARTICLE_PRODUCTION * total as f64;
+                    self.vis.bang = Some(BangSequence::new(now, gained, total, prod));
+                } else {
+                    self.ui.cosmos_armed = true;
+                }
+            }
+            Some(CosmosItem::Forge(i)) => {
+                if let Some(f) = self.snap.forges.get(i).copied() {
+                    self.command(Command::Forge(f.id));
+                }
+            }
+            Some(CosmosItem::Stage(i)) => {
+                if i == self.snap.attractor_stages {
+                    self.command(Command::BuildAttractor);
+                } else {
+                    self.command_failed_stage(i);
+                }
+            }
+            None => {}
+        }
+    }
+
+    fn command_failed_stage(&mut self, i: usize) {
+        let body = if i < self.snap.attractor_stages {
+            "Étape déjà achevée"
+        } else {
+            "Construis d'abord les étapes précédentes"
+        };
+        self.toasts
+            .push(self.now, theme::GREY, "Grand Attracteur", body);
+    }
+
+    /// Générique de fin : quelques chiffres de la partie.
+    fn credits(&self) -> Vec<CreditLine> {
+        let s = &self.snap;
+        let keys = s.universes.iter().filter(|u| u.key).count();
+        let gold = theme::GOLD;
+        let text = theme::TEXT;
+        let muted = theme::MUTED;
+        let line = |t: &str, c, b| (t.to_string(), c, b);
+        vec![
+            line("✶  LE GRAND ATTRACTEUR S'ÉVEILLE  ✶", gold, true),
+            line("", text, false),
+            line(
+                "Toute la poussière du cosmos converge vers ta fonderie.",
+                text,
+                false,
+            ),
+            line("", text, false),
+            line("FIN DE L'ACTE II", theme::PINK, true),
+            line("", text, false),
+            (
+                format!("Temps de jeu : {}", fmt::duration(s.play_time)),
+                muted,
+                false,
+            ),
+            (
+                format!(
+                    "Big Bang : {} · particules {PARTICLE} : {}",
+                    s.big_bangs, s.particles
+                ),
+                muted,
+                false,
+            ),
+            (
+                format!(
+                    "Clés d'univers : {keys}/5 · succès : {}/{}",
+                    s.achievements_unlocked, s.achievements_total
+                ),
+                muted,
+                false,
+            ),
+            line("", text, false),
+            line("FONDERIE STELLAIRE", theme::CYAN, true),
+            line("Conçu et forgé par Ajustor", text, false),
+            line("", text, false),
+            line("Merci d'avoir joué !", gold, true),
+            line("", text, false),
+            line(
+                "Le jeu continue : ta fonderie produit désormais ×10.",
+                muted,
+                false,
+            ),
+        ]
+    }
+
     fn lab_name(&self, id: domain::LabId) -> &'static str {
         self.service
             .catalog()
@@ -819,6 +1101,13 @@ impl App {
                 self.toasts
                     .push(now, theme::RED, "Sauvegarde impossible", msg);
             }
+            GameEvent::SaveWiped => {
+                self.title.wiped = true;
+                self.log(
+                    Kind::Error,
+                    "Nouvel équilibrage : l'ancienne partie a été effacée, tout le monde repart de zéro.",
+                );
+            }
             GameEvent::SaveRecovered { backup } => {
                 self.log(
                     Kind::Error,
@@ -834,7 +1123,9 @@ impl App {
         match ev {
             DomainEvent::Harvested { amount } => {
                 let (x, y) = if sky.is_empty() {
-                    (0.0, 0.0)
+                    // Ciel replié : les étincelles partent du compteur.
+                    let h = self.ui.layout.header;
+                    (h.x as f64 + h.width as f64 / 3.0, h.y as f64 + 2.0)
                 } else {
                     self.vis.random_point(sky)
                 };
@@ -899,6 +1190,30 @@ impl App {
             DomainEvent::PurchaseFailed { target } => match target {
                 PurchaseTarget::Generator(g) => {
                     self.vis.gen_fail[g.index().min(GEN_SLOTS - 1)] = now
+                }
+                PurchaseTarget::Forge(g) => {
+                    let name = self
+                        .service
+                        .catalog()
+                        .generator(g)
+                        .map(|d| d.name)
+                        .unwrap_or("?");
+                    self.toasts.push(
+                        now,
+                        theme::GREY,
+                        "Forge primordiale",
+                        format!("« {name} » : pas assez de particules {PARTICLE}"),
+                    );
+                }
+                PurchaseTarget::Attractor(_) => {
+                    let body = if self.snap.big_bangs == 0 {
+                        "Le chantier s'ouvre après ton premier Big Bang".to_string()
+                    } else if self.snap.attractor_build.is_some() {
+                        "Une étape à la fois".to_string()
+                    } else {
+                        format!("Pas assez de particules {PARTICLE}")
+                    };
+                    self.toasts.push(now, theme::GREY, "Grand Attracteur", body);
                 }
                 PurchaseTarget::Lab(l) => {
                     let name = self.lab_name(l);
@@ -1294,6 +1609,107 @@ impl App {
                 self.vis.fireworks(now + 0.4);
                 self.vis.fireworks(now + 1.2);
             }
+            DomainEvent::BigBang {
+                particles_gained,
+                total_particles,
+            } => {
+                self.log(
+                    Kind::Supernova,
+                    format!(
+                        "{PARTICLE} BIG BANG : +{particles_gained} particule(s) primordiale(s), {total_particles} au total"
+                    ),
+                );
+            }
+            DomainEvent::BigBangUnavailable { crunches, needed } => {
+                self.toasts.push(
+                    now,
+                    theme::GREY,
+                    "Big Bang",
+                    format!(
+                        "Il faut {needed} Big Crunch ({crunches}/{needed}), sans Défi en cours"
+                    ),
+                );
+            }
+            DomainEvent::GeneratorForged { generator } => {
+                let (name, symbol) = self
+                    .service
+                    .catalog()
+                    .generator(generator)
+                    .map(|d| (d.name, d.symbol))
+                    .unwrap_or(("?", '?'));
+                let color = theme::generator_color(generator.index());
+                self.log(
+                    Kind::Achievement,
+                    format!("{symbol} {name} forgé : il rejoint ta fonderie pour toujours"),
+                );
+                self.toasts.push(
+                    now,
+                    color,
+                    format!("{symbol} {name} forgé !"),
+                    "Présent dans tous les cycles, dès qu'il est abordable",
+                );
+                // Gerbe d'étincelles « de forge » au-dessus des générateurs.
+                let g = self.ui.layout.generators;
+                self.vis.explode(
+                    g.x as f64 + g.width as f64 / 2.0,
+                    g.y as f64 + g.height as f64 / 2.0,
+                    110,
+                    40.0,
+                    &[color, theme::WHITE, theme::GOLD, theme::ORANGE],
+                );
+                self.vis.sky_flash = now;
+                self.vis.sky_flash_color = color;
+            }
+            DomainEvent::AttractorStageStarted { stage } => {
+                let (name, secs) = self
+                    .service
+                    .catalog()
+                    .attractor_stage(stage)
+                    .map(|s| (s.name, s.build_secs))
+                    .unwrap_or(("?", 0.0));
+                self.log(
+                    Kind::Purchase,
+                    format!("◇ Grand Attracteur : chantier « {name} » lancé"),
+                );
+                self.toasts.push(
+                    now,
+                    crate::fx::Rgb(190, 110, 255),
+                    format!("◇ Chantier : {name}"),
+                    format!("Achevé dans {} (même jeu fermé)", fmt::duration(secs)),
+                );
+            }
+            DomainEvent::AttractorStageDone { stage } => {
+                let (name, desc) = self
+                    .service
+                    .catalog()
+                    .attractor_stage(stage)
+                    .map(|s| (s.name, s.description))
+                    .unwrap_or(("?", ""));
+                self.log(
+                    Kind::Achievement,
+                    format!("◆ Grand Attracteur : « {name} » achevé ({desc})"),
+                );
+                self.toasts.push(
+                    now,
+                    theme::GOLD,
+                    format!("◆ {name} : achevé !"),
+                    desc.to_string(),
+                );
+                self.vis.attractor_pop = Some((now, stage));
+                self.vis.fireworks(now);
+                self.vis.fireworks(now + 0.6);
+            }
+            DomainEvent::AttractorAwakened => {
+                self.log(
+                    Kind::Achievement,
+                    "✶ Le Grand Attracteur s'éveille : fin de l'Acte II !",
+                );
+                self.ui.cosmos = None;
+                // Chiffres à jour (succès « Fin de l'Acte II » compris).
+                self.service.fill_snapshot(&mut self.snap);
+                let credits = self.credits();
+                self.vis.ending = Some(EndingSequence::new(now + 1.5, credits));
+            }
             DomainEvent::BigCrunchUnavailable { supernovas, needed } => {
                 self.toasts.push(
                     now,
@@ -1483,7 +1899,12 @@ impl App {
             Screen::Title => title.render(buf, area, now, &vis.stars, snap, ctx.reduced),
             Screen::Game => {
                 let reveal = vis.nova.as_ref().map(|n| n.in_reveal(now)).unwrap_or(false);
-                if reveal {
+                let bang_full = vis.bang.as_ref().is_some_and(|b| b.is_full(now));
+                if bang_full {
+                    if let Some(b) = vis.bang.as_ref() {
+                        b.render_full(buf, area, now, &vis.stars);
+                    }
+                } else if reveal {
                     if let Some(n) = vis.nova.as_ref() {
                         n.render_reveal(buf, area, now, &vis.stars);
                     }
@@ -1504,12 +1925,23 @@ impl App {
                     if let Some(n) = vis.nova.as_ref() {
                         n.render_over_game(buf, area, now, ctx.reduced);
                     }
+                    if let Some(b) = vis.bang.as_ref() {
+                        b.render_collapse(buf, area, now, ctx.reduced);
+                    }
+                }
+            }
+        }
+        if self.screen == Screen::Game {
+            if let Some(e) = self.vis.ending.as_ref() {
+                if e.t(now) >= 0.0 {
+                    e.render(buf, area, now);
                 }
             }
         }
         if self.screen == Screen::Title {
             self.render_update_status(buf, area);
         }
+        self.render_restart(buf, area);
         if self.ui.debug {
             self.render_debug(buf, area);
         }
@@ -1529,14 +1961,15 @@ impl App {
             UpdateEvent::Installed { version } => {
                 self.log(
                     Kind::Purchase,
-                    format!("Mise à jour {version} installée : relance le jeu pour en profiter"),
+                    format!("Mise à jour {version} installée : le jeu redémarre tout seul"),
                 );
                 self.toasts.push(
                     now,
                     theme::GREEN,
                     format!("✦ Mise à jour {version} installée"),
-                    "Relance le jeu pour en profiter",
+                    "Le jeu redémarre tout seul dans quelques secondes",
                 );
+                self.restart_at = Some((now + RESTART_DELAY, version.clone()));
             }
             UpdateEvent::ManualOnly {
                 version,
@@ -1573,10 +2006,9 @@ impl App {
             Some(UpdateEvent::Downloading { version }) => {
                 (format!("téléchargement de {version}…"), theme::CYAN)
             }
-            Some(UpdateEvent::Installed { version }) => (
-                format!("{version} installée, relance le jeu !"),
-                theme::GREEN,
-            ),
+            Some(UpdateEvent::Installed { version }) => {
+                (format!("{version} installée, redémarrage…"), theme::GREEN)
+            }
             Some(UpdateEvent::ManualOnly { version, .. }) => {
                 (format!("{version} disponible sur GitHub"), theme::CYAN)
             }
@@ -1650,5 +2082,9 @@ pub fn run(
     let result = app.run_loop(guard.terminal());
     let save_error = app.service.save().err().map(|e| e.to_string());
     drop(guard);
-    result.map(|_| RunOutcome { save_error })
+    let restart = app.should_restart() && save_error.is_none();
+    result.map(|_| RunOutcome {
+        save_error,
+        restart,
+    })
 }

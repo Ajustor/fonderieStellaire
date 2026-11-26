@@ -28,6 +28,25 @@ pub struct TeaserView {
     pub remaining: f64,
     /// Supernovas requises pour ce générateur (0 si aucune).
     pub supernovas_needed: u32,
+    /// Générateur primordial pas encore forgé : particules nécessaires (0 sinon).
+    pub particles_needed: u32,
+}
+
+/// Un générateur primordial et son état de forge.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ForgeView {
+    pub id: GeneratorId,
+    pub forged: bool,
+    /// Forgeable maintenant (particules suffisantes, précédent forgé).
+    pub available: bool,
+}
+
+/// Étape du Grand Attracteur en construction.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ResearchBuildView {
+    pub stage: usize,
+    pub remaining: f64,
+    pub total: f64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -210,4 +229,22 @@ pub struct GameSnapshot {
     pub autobuy: bool,
     pub next_upgrade: Option<NextUpgradeView>,
     pub progress: ProgressView,
+    /// Big Bang et particules primordiales.
+    pub big_bangs: u32,
+    pub particles: u32,
+    pub particles_spendable: u32,
+    /// Particules que rapporterait un Big Bang maintenant (0 si impossible).
+    pub particles_available: u32,
+    pub bigbang_available: bool,
+    pub bigbang_needed: u32,
+    pub particle_production: f64,
+    pub particle_fragments: f64,
+    /// Générateurs primordiaux.
+    pub forges: Vec<ForgeView>,
+    /// Grand Attracteur : étapes achevées, construction en cours.
+    pub attractor_stages: usize,
+    pub attractor_build: Option<ResearchBuildView>,
+    pub attractor_buildable: bool,
+    pub attractor_awakened: bool,
+    pub attractor_production: f64,
 }

@@ -49,7 +49,9 @@ grep -rlE "serde|std::fs"     crates | grep -v crates/infrastructure # → rien
   (matière noire, dans `GameState`), Laboratoire (`lab.rs` : recherches en temps
   réel, avancées par `tick` et par `apply_offline`), Univers parallèles
   (`universe.rs` : règles appliquées via `GameState::rules`, Clés via
-  `key_product`) et l'agrégat `GameState`
+  `key_product`), Big Bang et Grand Attracteur (`cosmos.rs` : particules,
+  générateurs primordiaux avec `GeneratorDef::particle_cost`, étapes en temps
+  réel avancées comme les recherches) et l'agrégat `GameState`
   (dont l'automate d'achat et « tout acheter »). Le temps (`dt`) et les tirages
   aléatoires (`roll: f64`) arrivent **en paramètre**. Chaque opération pousse des
   `DomainEvent` dans un `Vec`.
@@ -209,6 +211,23 @@ L'identifiant texte (`key`) doit rester **stable** : c'est lui qui est sauvegard
    (couleurs du vortex, du badge, de l'anneau de sa Clé).
 3. Optionnel : un effet sur le ciel dans `widgets/sky.rs` (voir `tnow`).
 
+### Ajouter une étape au Grand Attracteur
+
+1. `crates/domain/src/catalog.rs` : une ligne dans `ATTRACTOR` (nom, effet en
+   clair, coût en particules, heures de construction, `AttractorEffect`).
+   L'ordre du tableau est l'ordre de construction ; la dernière étape déclenche
+   la fin de l'Acte II.
+2. Un nouvel `AttractorEffect` s'applique dans `GameState` (voir
+   `attractor_product`).
+
+### Écrire un texte sans qu'il soit coupé
+
+Utiliser `draw::wrap` / `draw::paragraph` plutôt que `draw::truncate`, et
+dimensionner les fenêtres d'après leur contenu. `draw::fit` coupe sans le
+signaler, à réserver aux listes dont la ligne sélectionnée est montrée en
+entier ailleurs. Le test `tests/readability.rs` rend chaque écran à 4 tailles
+et échoue au moindre texte coupé.
+
 ### Ajouter un événement de domaine
 
 1. Ajouter la variante dans `domain/src/events.rs` et l'émettre depuis
@@ -227,4 +246,6 @@ L'identifiant texte (`key`) doit rester **stable** : c'est lui qui est sauvegard
 - **presentation** : easing, tweens, timeline, particules, bruit, post-effets,
   formatage, et rendu complet dans un `TestBackend` 100×30 / 80×24 / 120×40
   (`tests/render.rs`, avec mesure du temps de rendu et une session complète
-  jusqu'à la Supernova).
+  jusqu'à la Supernova), audit de lisibilité à 4 tailles de terminal
+  (`tests/readability.rs`), et profils ignorés par défaut (`--ignored`) :
+  temps d'image, volume envoyé au terminal, images du Big Bang.

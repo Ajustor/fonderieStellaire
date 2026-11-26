@@ -3,7 +3,7 @@
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::Modifier;
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
 use super::Ctx;
@@ -71,11 +71,17 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
         return;
     }
     ui.gen_sel = ui.gen_sel.min(count - 1);
-    // Encart de détail en bas : séparateur + 2 lignes (ou 1 si peu de place).
-    let detail_h = if inner.height >= 14 {
-        3
-    } else if inner.height >= 10 {
-        2
+    // Encart de détail en bas : séparateur + texte complet, renvoyé à la ligne.
+    // La liste garde au moins 3 générateurs (ou tous s'il y en a moins).
+    let detail = snap
+        .generators
+        .get(ui.gen_sel)
+        .map(|g| detail_lines(ctx, g, inner.width.saturating_sub(2) as usize))
+        .unwrap_or_default();
+    let list_min = (count.min(3) * 2) as u16 + u16::from(snap.teaser.is_some());
+    let room = inner.height.saturating_sub(list_min);
+    let detail_h = if room >= 2 {
+        (detail.len() as u16 + 1).min(room)
     } else {
         0
     };
@@ -285,7 +291,13 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
     // Ligne mystère (teaser).
     if let Some(t) = snap.teaser {
         if y < list.bottom() && ui.gen_scroll + visible >= count {
-            let txt = if t.supernovas_needed > 0 {
+            let txt = if t.particles_needed > 0 {
+                format!(
+                    "   ??? ─ à forger : {} particule{} ✷ [G]",
+                    t.particles_needed,
+                    if t.particles_needed > 1 { "s" } else { "" }
+                )
+            } else if t.supernovas_needed > 0 {
                 format!(
                     "   ??? ─ apparaît après {} Supernova{}",
                     t.supernovas_needed,
@@ -304,45 +316,16 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
     }
 
     if detail_h > 0 {
-        if let Some(g) = snap.generators.get(ui.gen_sel) {
-            render_detail(buf, inner, detail_h, ctx, g);
-        }
+        render_detail(buf, inner, detail_h, &detail);
     }
 }
 
-/// Encart « qui fait quoi » du générateur sélectionné.
-fn render_detail(buf: &mut Buffer, inner: Rect, detail_h: u16, ctx: &Ctx, g: &GeneratorView) {
+/// Lignes de l'encart « qui fait quoi » du générateur sélectionné.
+fn detail_lines(ctx: &Ctx, g: &GeneratorView, width: usize) -> Vec<(String, Style)> {
     let Some(def) = ctx.catalog.generator(g.id) else {
-        return;
+        return Vec::new();
     };
-    let color = theme::generator_color(g.id.index());
-    let sep_y = inner.bottom() - detail_h;
-    let sep: String = "─".repeat(inner.width.saturating_sub(2) as usize);
-    draw::text(
-        buf,
-        inner.x + 1,
-        sep_y,
-        &sep,
-        theme::fg(theme::BORDER),
-        inner.right(),
-    );
-    let max = inner.width.saturating_sub(2) as usize;
-    let mut y = sep_y + 1;
-
-    if detail_h >= 3 {
-        let x = draw::text(
-            buf,
-            inner.x + 1,
-            y,
-            &format!("{} ", def.symbol),
-            theme::bold(color),
-            inner.right(),
-        );
-        let text = draw::truncate(def.description, max.saturating_sub(2));
-        draw::text(buf, x, y, &text, theme::fg(theme::MUTED), inner.right());
-        y += 1;
-    }
-
+    let mut out = Vec::new();
     // Production par unité (bonus compris), part du total, prochain palier.
     let per_unit = if g.owned > 0 {
         g.production / g.owned as f64
@@ -359,13 +342,42 @@ fn render_detail(buf: &mut Buffer, inner: Rect, detail_h: u16, ctx: &Ctx, g: &Ge
         (g.share * 100.0).round() as i64,
         milestone
     );
-    let stats = draw::truncate(&stats, max);
+    for l in draw::wrap(&format!("{} {}", def.symbol, def.description), width) {
+        out.push((l, theme::fg(theme::MUTED)));
+    }
+    for l in draw::wrap(&stats, width) {
+        out.push((l, theme::fg(theme::CYAN)));
+    }
+    out
+}
+
+/// Encart de détail : séparateur puis les lignes (les dernières, les chiffres,
+/// restent visibles en priorité si la place manque).
+fn render_detail(buf: &mut Buffer, inner: Rect, detail_h: u16, lines: &[(String, Style)]) {
+    let sep_y = inner.bottom() - detail_h;
+    let sep: String = "─".repeat(inner.width.saturating_sub(2) as usize);
     draw::text(
         buf,
         inner.x + 1,
-        y,
-        &stats,
-        theme::fg(theme::CYAN),
+        sep_y,
+        &sep,
+        theme::fg(theme::BORDER),
         inner.right(),
     );
+    let rows = (detail_h - 1) as usize;
+    let skip = lines.len().saturating_sub(rows);
+    if skip > 0 {
+        let lost: Vec<&str> = lines[..skip].iter().map(|(l, _)| l.as_str()).collect();
+        draw::audit::record(&lost.join(" "), 0);
+    }
+    for (i, (text, style)) in lines.iter().skip(skip).enumerate() {
+        draw::text(
+            buf,
+            inner.x + 1,
+            sep_y + 1 + i as u16,
+            text,
+            *style,
+            inner.right(),
+        );
+    }
 }

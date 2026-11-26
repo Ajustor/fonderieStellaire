@@ -45,6 +45,12 @@ pub enum AchievementCondition {
     LabResearch(usize),
     /// Clés d'univers obtenues.
     UniverseKeys(usize),
+    /// Big Bang déclenchés.
+    BigBangs(u32),
+    /// Générateurs primordiaux forgés.
+    Forged(usize),
+    /// Étapes du Grand Attracteur achevées.
+    AttractorStages(usize),
 }
 
 /// Données nécessaires pour évaluer une condition de succès.
@@ -66,6 +72,9 @@ pub struct AchievementContext<'a> {
     pub crunches: u32,
     pub lab_done: usize,
     pub universe_keys: usize,
+    pub big_bangs: u32,
+    pub forged: usize,
+    pub attractor_stages: usize,
 }
 
 impl AchievementCondition {
@@ -96,6 +105,9 @@ impl AchievementCondition {
             AchievementCondition::Crunches(n) => ctx.crunches >= n,
             AchievementCondition::LabResearch(n) => ctx.lab_done >= n,
             AchievementCondition::UniverseKeys(n) => ctx.universe_keys >= n,
+            AchievementCondition::BigBangs(n) => ctx.big_bangs >= n,
+            AchievementCondition::Forged(n) => ctx.forged >= n,
+            AchievementCondition::AttractorStages(n) => ctx.attractor_stages >= n,
         }
     }
 }
@@ -132,6 +144,9 @@ mod tests {
             crunches: 0,
             lab_done: 0,
             universe_keys: 0,
+            big_bangs: 0,
+            forged: 0,
+            attractor_stages: 0,
         }
     }
 

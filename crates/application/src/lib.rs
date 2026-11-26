@@ -15,7 +15,7 @@ pub use commands::Command;
 pub use error::AppError;
 pub use game_service::{GameEvent, GameService, AUTOSAVE_INTERVAL, HISTORY_LEN};
 pub use ports::{Clock, LoadOutcome, RandomSource, RepositoryError, SaveRepository};
-pub use save_dto::{SaveData, SAVE_VERSION};
+pub use save_dto::{SaveData, SAVE_RESET_BELOW, SAVE_VERSION};
 pub use snapshot::{
     ActiveChallengeView, ChallengeView, ConstellationView, GameSnapshot, GeneratorView, LabView,
     NextUpgradeView, PerkView, ProgressView, ResearchView, TeaserView, UniverseView, UpgradeView,

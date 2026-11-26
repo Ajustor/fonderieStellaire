@@ -3,6 +3,7 @@
 use crate::achievement::{AchievementCondition, AchievementDef, AchievementId};
 use crate::challenge::{ChallengeDef, ChallengeId, ChallengeReward, Restriction};
 use crate::constellation::{ConstellationDef, ConstellationEffect, ConstellationId};
+use crate::cosmos::{AttractorEffect, AttractorStage};
 use crate::generator::{GeneratorDef, GeneratorId};
 use crate::lab::{LabDef, LabEffect, LabId};
 use crate::perk::{PerkDef, PerkEffect, PerkId};
@@ -21,6 +22,9 @@ pub mod balance {
     pub const FRAGMENT_SCALING: f64 = 0.25;
     /// Au-delà de ce nombre de fragments, leur bonus croît en racine carrée.
     pub const FRAGMENT_KNEE: f64 = 5.0;
+    /// … puis en racine cubique (v0.9 : la racine carrée montait trop haut,
+    /// +7 900 % à 120 000 fragments contre +1 450 % désormais).
+    pub const FRAGMENT_EXPONENT: f64 = 1.0 / 3.0;
     /// Supernovas nécessaires pour un Big Crunch.
     pub const CRUNCH_SUPERNOVAS: u32 = 15;
     /// Chaque Big Crunch ajoute +100 % de production (×2, ×3, ×4…).
@@ -31,6 +35,14 @@ pub mod balance {
     pub const LAB_UNLOCK_CRUNCHES: u32 = 10;
     /// Big Crunch nécessaires pour choisir son univers.
     pub const UNIVERSES_UNLOCK_CRUNCHES: u32 = 10;
+    /// Big Crunch nécessaires pour un Big Bang.
+    pub const BIGBANG_CRUNCHES: u32 = 30;
+    /// Un Big Bang rapporte une particule primordiale par tranche de 10 Big Crunch.
+    pub const PARTICLES_PER_CRUNCHES: u32 = 10;
+    /// Chaque particule primordiale ajoute +100 % de production (×2, ×3…).
+    pub const PARTICLE_PRODUCTION: f64 = 1.0;
+    /// Chaque particule primordiale ajoute +25 % de fragments.
+    pub const PARTICLE_FRAGMENTS: f64 = 0.25;
     /// Plafond du temps hors-ligne pris en compte (12 h).
     pub const OFFLINE_CAP_SECS: f64 = 12.0 * 3600.0;
     /// Rendement de la production hors-ligne.
@@ -44,7 +56,7 @@ pub mod balance {
 }
 
 /// Ligne de la table des générateurs : (nom, pluriel, symbole, coût, prod/s).
-const GENERATORS: [(&str, &str, char, f64, f64); 12] = [
+const GENERATORS: [(&str, &str, char, f64, f64); 15] = [
     ("Sonde", "Sondes", '✧', 15.0, 0.1),
     ("Drone collecteur", "Drones collecteurs", '◇', 100.0, 1.0),
     (
@@ -93,13 +105,32 @@ const GENERATORS: [(&str, &str, char, f64, f64); 12] = [
         1.6e13,
         6.5e7,
     ),
+    // Générateurs primordiaux : forgés avec des particules (Big Bang).
+    ("Forge à neutrons", "Forges à neutrons", '▼', 2.3e14, 4.2e8),
+    (
+        "Tisseur de réalités",
+        "Tisseurs de réalités",
+        '◊',
+        3.4e15,
+        2.7e9,
+    ),
+    (
+        "Conscience cosmique",
+        "Consciences cosmiques",
+        '◉',
+        5.0e16,
+        1.8e10,
+    ),
 ];
 
 /// Nombre de Supernovas nécessaires pour débloquer chaque générateur.
-const GENERATOR_UNLOCKS: [u32; 12] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 5, 15];
+const GENERATOR_UNLOCKS: [u32; 15] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 5, 15, 0, 0, 0];
+
+/// Particules primordiales à dépenser pour forger chaque générateur (0 = aucun).
+const GENERATOR_PARTICLES: [u32; 15] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3];
 
 /// Ce que fait chaque générateur (affiché dans le détail de la sélection).
-const GENERATOR_FLAVORS: [&str; 12] = [
+const GENERATOR_FLAVORS: [&str; 15] = [
     "Petite sonde autonome qui aspire la poussière en orbite basse.",
     "Essaim de drones qui ratissent les ceintures d'astéroïdes.",
     "Vaisseau-usine qui fauche les nuages de poussière interstellaire.",
@@ -112,6 +143,62 @@ const GENERATOR_FLAVORS: [&str; 12] = [
     "Recrache la matière qu'avalent les trous noirs, en poussière d'étoile.",
     "Allume des quasars pour en récolter la lumière condensée.",
     "Puise la poussière dans des univers parallèles.",
+    "Écrase des étoiles à neutrons pour en extraire une poussière d'une densité inouïe.",
+    "Réécrit les lois de la physique pour qu'il pleuve de la poussière d'étoile.",
+    "Un esprit à l'échelle du cosmos, qui rêve la poussière avant qu'elle n'existe.",
+];
+
+/// Grand Attracteur : (nom, description, coût en particules, heures, effet).
+const ATTRACTOR: [(&str, &str, u32, f64, AttractorEffect); 7] = [
+    (
+        "Ancrage gravitationnel",
+        "Production ×2",
+        2,
+        3.0,
+        AttractorEffect::Production(2.0),
+    ),
+    (
+        "Anneau d'accrétion",
+        "Fragments ×2 à chaque Supernova",
+        2,
+        6.0,
+        AttractorEffect::Fragments(2.0),
+    ),
+    (
+        "Lentille cosmique",
+        "Hors-ligne à 100 % de la production",
+        3,
+        9.0,
+        AttractorEffect::Offline(1.0),
+    ),
+    (
+        "Filaments galactiques",
+        "Production ×3",
+        3,
+        12.0,
+        AttractorEffect::Production(3.0),
+    ),
+    (
+        "Cœur de superamas",
+        "Bonus de matière noire ×2",
+        4,
+        18.0,
+        AttractorEffect::DarkMatter(2.0),
+    ),
+    (
+        "Horizon des événements",
+        "Production ×5",
+        4,
+        24.0,
+        AttractorEffect::Production(5.0),
+    ),
+    (
+        "Éveil du Grand Attracteur",
+        "Production ×10 · fin de l'Acte II",
+        5,
+        36.0,
+        AttractorEffect::Awakening(10.0),
+    ),
 ];
 
 /// Textes d'ambiance des niveaux d'amélioration par générateur.
@@ -160,7 +247,7 @@ const CLICK_UPGRADES: [(&str, f64, f64, f64); 3] = [
 /// Amélioration « maintenir Espace pour récolter » : (nom, total_run requis, coût).
 const HOLD_UPGRADE: (&str, f64, f64) = ("Récolte continue", 150.0, 300.0);
 
-const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 39] = [
+const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 42] = [
     (
         "first",
         "Premier pas",
@@ -397,6 +484,24 @@ const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 39] = [
         "Maître du multivers",
         "Obtenir les 5 Clés d'univers",
         AchievementCondition::UniverseKeys(5),
+    ),
+    (
+        "bang1",
+        "Que la lumière soit",
+        "Déclencher un Big Bang",
+        AchievementCondition::BigBangs(1),
+    ),
+    (
+        "forgeall",
+        "Genèse",
+        "Forger les 3 générateurs primordiaux",
+        AchievementCondition::Forged(3),
+    ),
+    (
+        "attractor",
+        "Fin de l'Acte II",
+        "Éveiller le Grand Attracteur",
+        AchievementCondition::AttractorStages(7),
     ),
 ];
 
@@ -886,6 +991,8 @@ pub struct Catalog {
     pub challenges: Vec<ChallengeDef>,
     pub lab: Vec<LabDef>,
     pub universes: Vec<UniverseDef>,
+    /// Étapes du Grand Attracteur, dans l'ordre de construction.
+    pub attractor: Vec<AttractorStage>,
 }
 
 impl Catalog {
@@ -904,6 +1011,7 @@ impl Catalog {
                     base_prod,
                     description: GENERATOR_FLAVORS.get(i).copied().unwrap_or(""),
                     unlock_supernovas: GENERATOR_UNLOCKS.get(i).copied().unwrap_or(0),
+                    particle_cost: GENERATOR_PARTICLES.get(i).copied().unwrap_or(0),
                 },
             )
             .collect();
@@ -1093,6 +1201,20 @@ impl Catalog {
             challenges,
             lab,
             universes: universes(),
+            attractor: ATTRACTOR
+                .iter()
+                .enumerate()
+                .map(
+                    |(index, &(name, description, cost, hours, effect))| AttractorStage {
+                        index,
+                        name,
+                        description,
+                        cost,
+                        build_secs: hours * 3600.0,
+                        effect,
+                    },
+                )
+                .collect(),
         }
     }
 
@@ -1114,6 +1236,10 @@ impl Catalog {
 
     pub fn perk(&self, id: PerkId) -> Option<&PerkDef> {
         self.perks.get(id.index())
+    }
+
+    pub fn attractor_stage(&self, index: usize) -> Option<&AttractorStage> {
+        self.attractor.get(index)
     }
 
     pub fn universe(&self, id: UniverseId) -> Option<&UniverseDef> {
@@ -1178,10 +1304,16 @@ mod tests {
     #[test]
     fn catalog_sizes_and_keys() {
         let c = Catalog::standard();
-        assert_eq!(c.generators.len(), 12);
-        assert_eq!(c.upgrades.len(), 12 * 4 + 4 + 3 + 1);
+        assert_eq!(c.generators.len(), 15);
+        assert_eq!(c.upgrades.len(), 15 * 4 + 4 + 3 + 1);
+        assert_eq!(c.generators.iter().filter(|g| g.is_primordial()).count(), 3);
+        assert_eq!(c.attractor.len(), 7);
+        let hours: f64 = c.attractor.iter().map(|s| s.build_secs).sum::<f64>() / 3600.0;
+        assert_eq!(hours, 108.0, "≈ 4 jours et demi de construction");
+        let cost: u32 = c.attractor.iter().map(|s| s.cost).sum();
+        assert_eq!(cost, 23);
         assert!(c.upgrade_by_key("hold_0").is_some());
-        assert_eq!(c.achievements.len(), 39);
+        assert_eq!(c.achievements.len(), 42);
         assert_eq!(c.universes.len(), 6);
         assert_eq!(
             c.universes

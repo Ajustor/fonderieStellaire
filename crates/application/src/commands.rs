@@ -31,4 +31,10 @@ pub enum Command {
     StartResearch(LabId),
     /// Met en pause / relance un automatisme du Laboratoire.
     ToggleLab(LabId),
+    /// Big Bang : les Big Crunch repartent de zéro contre des particules.
+    BigBang,
+    /// Forge un générateur primordial.
+    Forge(GeneratorId),
+    /// Lance la prochaine étape du Grand Attracteur.
+    BuildAttractor,
 }

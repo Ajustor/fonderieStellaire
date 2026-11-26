@@ -83,8 +83,33 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, selected: 
     ));
     rows.extend((0..snap.constellations.len()).map(|i| Row::Item(ShopItem::Constellation(i))));
 
-    let height = (rows.len() as u16 + 8).min(area.height.saturating_sub(2));
-    let width = area.width.saturating_sub(4).min(84);
+    let width = area.width.saturating_sub(4).min(92);
+    let text_w = width.saturating_sub(4) as usize;
+    // En-tête : fragments libres et rappel que le bonus reste acquis.
+    let mut head = draw::wrap(
+        &format!(
+            "Fragments libres : {} sur {}",
+            fmt::short(snap.fragments_spendable),
+            fmt::short(snap.fragments)
+        ),
+        text_w,
+    );
+    head.extend(draw::wrap(
+        &format!(
+            "Bonus permanent +{} (conservé après achat)",
+            fmt::percent(snap.fragment_bonus)
+        ),
+        text_w,
+    ));
+    // Détail de hauteur fixe (le plus long de tous), pour une fenêtre stable.
+    let detail_h = (0..item_count(snap))
+        .filter_map(|i| item_at(snap, i))
+        .map(|it| detail_lines(ctx, it, text_w).len())
+        .max()
+        .unwrap_or(0) as u16;
+    // bordures + en-tête + blanc + liste + séparateur + détail + pied
+    let chrome = 2 + head.len() as u16 + 1 + 1 + detail_h + 1;
+    let height = (rows.len() as u16 + chrome).min(area.height.saturating_sub(2));
     let w = ((width as f64 * s).round() as u16).max(2);
     let h = ((height as f64 * s).round() as u16).max(2);
     let rect = centered(area, w, h);
@@ -106,23 +131,16 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, selected: 
         return;
     }
     let right = inner.right();
-    let max = inner.width.saturating_sub(2) as usize;
-
-    // En-tête : fragments libres et rappel que le bonus reste acquis.
-    let head = format!(
-        "Fragments libres : {} sur {}   ·   bonus permanent +{} (conservé après achat)",
-        fmt::short(snap.fragments_spendable),
-        fmt::short(snap.fragments),
-        fmt::percent(snap.fragment_bonus)
-    );
-    draw::text(
-        buf,
-        inner.x + 1,
-        inner.y,
-        &draw::truncate(&head, max),
-        theme::bold(theme::CYAN),
-        right,
-    );
+    for (i, l) in head.iter().enumerate() {
+        draw::text(
+            buf,
+            inner.x + 1,
+            inner.y + i as u16,
+            l,
+            theme::bold(theme::CYAN),
+            right,
+        );
+    }
 
     // Liste : en-têtes de section + éléments ; défilement pour garder la sélection visible.
     let selected = selected.min(item_count(snap).saturating_sub(1));
@@ -131,28 +149,21 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, selected: 
         .iter()
         .position(|r| matches!(r, Row::Item(it) if Some(*it) == current))
         .unwrap_or(0);
-    let list_y = inner.y + 2;
-    let list_rows = inner.height.saturating_sub(7) as usize;
+    let list_y = inner.y + head.len() as u16 + 1;
+    let list_rows = inner.height.saturating_sub(chrome - 2) as usize;
     let scroll = (sel_row + 1).saturating_sub(list_rows);
     for (n, row) in rows.iter().enumerate().skip(scroll).take(list_rows) {
         let y = list_y + (n - scroll) as u16;
         match row {
             Row::Header(title) => {
-                draw::text(
-                    buf,
-                    inner.x + 1,
-                    y,
-                    &draw::truncate(title, max),
-                    theme::bold(theme::MUTED),
-                    right,
-                );
+                draw::text(buf, inner.x + 1, y, title, theme::bold(theme::MUTED), right);
             }
             Row::Item(item) => render_item(buf, inner, y, ctx, *item, Some(*item) == current),
         }
     }
 
     // Détail de la sélection.
-    let sep_y = inner.bottom() - 4;
+    let sep_y = inner.bottom() - 2 - detail_h;
     let sep: String = "─".repeat(inner.width.saturating_sub(2) as usize);
     draw::text(
         buf,
@@ -163,34 +174,28 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, selected: 
         right,
     );
     if let Some(item) = current {
-        let (desc, hint) = detail(ctx, item);
-        draw::text(
-            buf,
-            inner.x + 1,
-            sep_y + 1,
-            &draw::truncate(&desc, max),
-            theme::fg(theme::CYAN),
-            right,
-        );
-        draw::text(
-            buf,
-            inner.x + 1,
-            sep_y + 2,
-            &draw::truncate(&hint, max),
-            theme::fg(theme::MUTED),
-            right,
-        );
+        for (i, (l, style)) in detail_lines(ctx, item, text_w).iter().enumerate() {
+            draw::text(buf, inner.x + 1, sep_y + 1 + i as u16, l, *style, right);
+        }
     }
 
-    let mut footer = String::from("[↑↓] choisir   [Entrée] acheter   [E] / [Échap] fermer");
-    if snap.autobuy_unlocked {
-        footer.push_str(if snap.autobuy {
-            "   [T] automate : actif"
-        } else {
-            "   [T] automate : arrêté"
-        });
-    }
-    let footer = draw::truncate(&footer, max);
+    let auto = if !snap.autobuy_unlocked {
+        ""
+    } else if snap.autobuy {
+        "   [T] automate : actif"
+    } else {
+        "   [T] automate : arrêté"
+    };
+    let long = format!("[↑↓] choisir   [Entrée] acheter   [E] / [Échap] fermer{auto}");
+    let short = format!(
+        "[↑↓] [Entrée] acheter  [Échap] fermer{}",
+        auto.replace("   ", "  ")
+    );
+    let footer = if long.chars().count() <= inner.width as usize {
+        long
+    } else {
+        short
+    };
     let fw = footer.chars().count() as u16;
     draw::text(
         buf,
@@ -200,6 +205,21 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, selected: 
         theme::fg(theme::GREY),
         right,
     );
+}
+
+/// Détail de l'élément sélectionné, renvoyé à la ligne.
+fn detail_lines(ctx: &Ctx, item: ShopItem, width: usize) -> Vec<(String, ratatui::style::Style)> {
+    let (desc, hint) = detail(ctx, item);
+    let mut out: Vec<(String, ratatui::style::Style)> = draw::wrap(&desc, width)
+        .into_iter()
+        .map(|l| (l, theme::fg(theme::CYAN)))
+        .collect();
+    out.extend(
+        draw::wrap(&hint, width)
+            .into_iter()
+            .map(|l| (l, theme::fg(theme::MUTED))),
+    );
+    out
 }
 
 fn render_item(buf: &mut Buffer, inner: Rect, y: u16, ctx: &Ctx, item: ShopItem, is_sel: bool) {
@@ -265,7 +285,8 @@ fn render_item(buf: &mut Buffer, inner: Rect, y: u16, ctx: &Ctx, item: ShopItem,
     } else {
         theme::bold(theme::TEXT)
     };
-    draw::text(buf, x, y, name, name_style, right);
+    let st_x = right.saturating_sub(1 + status.chars().count() as u16);
+    draw::text(buf, x, y, name, name_style, st_x.saturating_sub(1));
     draw::text_right(buf, right - 1, y, &status, theme::bold(color), inner.x);
 }
 

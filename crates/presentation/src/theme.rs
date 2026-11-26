@@ -28,7 +28,7 @@ pub const LOGO_GRADIENT: [Rgb; 3] = [Rgb(150, 90, 255), Rgb(255, 100, 190), Rgb(
 /// Nombre d'emplacements d'effets par générateur.
 pub const GEN_SLOTS: usize = 16;
 
-pub const GENERATOR_COLORS: [Rgb; 12] = [
+pub const GENERATOR_COLORS: [Rgb; 15] = [
     Rgb(160, 200, 255),
     Rgb(120, 220, 200),
     Rgb(130, 230, 130),
@@ -41,6 +41,10 @@ pub const GENERATOR_COLORS: [Rgb; 12] = [
     Rgb(200, 235, 255),
     Rgb(255, 235, 110),
     Rgb(255, 90, 150),
+    // Primordiaux : bleu glacé des étoiles à neutrons, iridescence, or blanc.
+    Rgb(150, 220, 255),
+    Rgb(210, 140, 255),
+    Rgb(255, 240, 200),
 ];
 
 pub const NEBULA: [Rgb; 3] = [Rgb(22, 12, 42), Rgb(40, 22, 70), Rgb(28, 30, 80)];

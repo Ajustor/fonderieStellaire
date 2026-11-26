@@ -2,7 +2,10 @@
 
 use domain::{Catalog, GameState, Stardust};
 
-pub const SAVE_VERSION: u32 = 1;
+pub const SAVE_VERSION: u32 = 2;
+/// Les sauvegardes d'un format plus ancien sont effacées au chargement :
+/// l'équilibrage a trop changé pour les garder (v0.9). Le joueur est prévenu.
+pub const SAVE_RESET_BELOW: u32 = 2;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SaveData {
@@ -53,6 +56,14 @@ pub struct SaveData {
     pub universe: String,
     pub universe_keys: Vec<String>,
     pub run_started: f64,
+    /// Big Bang, particules, forges (index des générateurs) et Grand Attracteur.
+    pub big_bangs: u32,
+    pub particles: u32,
+    pub particles_spent: u32,
+    pub forged: Vec<usize>,
+    pub attractor: usize,
+    /// Secondes restantes de l'étape en construction (0 ou négatif : aucune).
+    pub attractor_left: f64,
 }
 
 impl SaveData {
@@ -147,6 +158,18 @@ impl SaveData {
                 .map(|u| u.key.to_string())
                 .collect(),
             run_started: state.run_started,
+            big_bangs: state.big_bangs,
+            particles: state.particles,
+            particles_spent: state.particles_spent,
+            forged: state
+                .forged
+                .iter()
+                .enumerate()
+                .filter(|(_, &f)| f)
+                .map(|(i, _)| i)
+                .collect(),
+            attractor: state.attractor,
+            attractor_left: state.attractor_build.unwrap_or(-1.0),
         }
     }
 
@@ -215,6 +238,18 @@ impl SaveData {
             }
         }
         s.run_started = self.run_started.min(self.play_time);
+        s.big_bangs = self.big_bangs;
+        s.particles = self.particles;
+        s.particles_spent = self.particles_spent;
+        s.forged.resize(catalog.generators.len(), false);
+        for &i in &self.forged {
+            if let Some(f) = s.forged.get_mut(i) {
+                *f = true;
+            }
+        }
+        s.attractor = self.attractor;
+        // 0 (valeur par défaut) ou négatif : aucun chantier en cours.
+        s.attractor_build = (self.attractor_left > 0.0).then_some(self.attractor_left);
         s.research = catalog
             .lab_by_key(&self.research)
             .map(|id| (id, self.research_left.max(0.0)));
@@ -266,8 +301,32 @@ mod tests {
             ..SaveData::default()
         };
         let s = dto.to_state(&c);
-        assert_eq!(s.owned.len(), 12);
+        assert_eq!(s.owned.len(), 15);
         assert_eq!(s.stardust.value(), 0.0);
         assert!(s.upgrades.iter().all(|&u| !u));
+    }
+
+    #[test]
+    fn big_bang_and_attractor_round_trip() {
+        let c = Catalog::standard();
+        let mut st = GameState::new(&c);
+        st.big_bangs = 2;
+        st.particles = 7;
+        st.particles_spent = 3;
+        st.forged[12] = true;
+        st.attractor = 2;
+        st.attractor_build = Some(1234.0);
+        let back = SaveData::from_state(&st, &c, 0, false).to_state(&c);
+        assert_eq!(back.big_bangs, 2);
+        assert_eq!(back.particles, 7);
+        assert_eq!(back.particles_spent, 3);
+        assert!(back.forged[12] && !back.forged[13]);
+        assert_eq!(back.attractor, 2);
+        assert_eq!(back.attractor_build, Some(1234.0));
+        // Sans chantier : rien n'est inventé au rechargement.
+        st.attractor_build = None;
+        let back = SaveData::from_state(&st, &c, 0, false).to_state(&c);
+        assert_eq!(back.attractor_build, None);
+        assert_eq!(SaveData::default().to_state(&c).attractor_build, None);
     }
 }

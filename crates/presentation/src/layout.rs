@@ -35,7 +35,13 @@ pub fn is_too_small(area: Rect) -> bool {
     area.width < MIN_WIDTH || area.height < MIN_HEIGHT
 }
 
-pub fn game_layout(area: Rect) -> GameLayout {
+/// Hauteur visée pour le panneau des améliorations quand il a le focus : la
+/// liste et l'encart de détail complet tiennent sans rien couper.
+const UPGRADES_FOCUSED_H: u16 = 18;
+
+/// Découpe l'écran. `expand` (0 → 1) fait grandir le panneau des améliorations
+/// aux dépens du ciel quand il a le focus (animé par l'appelant).
+pub fn game_layout(area: Rect, expand: f64) -> GameLayout {
     let header_h = 5u16.min(area.height);
     let help_h = 1u16;
     let bottom_h = if area.height >= 32 {
@@ -53,7 +59,13 @@ pub fn game_layout(area: Rect) -> GameLayout {
     let header = Rect::new(area.x, area.y, area.width, header_h);
     let mid_y = area.y + header_h;
 
-    let sky_h = ((middle_h as u32 * 55 / 100) as u16).clamp(6.min(middle_h), 12);
+    let sky_normal = ((middle_h as u32 * 55 / 100) as u16).clamp(6.min(middle_h), 12);
+    let mut sky_focused = middle_h.saturating_sub(UPGRADES_FOCUSED_H).min(sky_normal);
+    if sky_focused < 4 {
+        sky_focused = 0;
+    }
+    let e = expand.clamp(0.0, 1.0);
+    let sky_h = (sky_normal as f64 + (sky_focused as f64 - sky_normal as f64) * e).round() as u16;
     let upgrades_h = middle_h - sky_h;
 
     let generators = Rect::new(area.x, mid_y, left_w, middle_h);
@@ -94,7 +106,13 @@ mod tests {
 
     fn check(w: u16, h: u16) {
         let area = Rect::new(0, 0, w, h);
-        let l = game_layout(area);
+        let l = game_layout(area, 0.0);
+        let f = game_layout(area, 1.0);
+        assert!(f.upgrades.height >= l.upgrades.height);
+        assert_eq!(
+            f.sky.height + f.upgrades.height,
+            l.sky.height + l.upgrades.height
+        );
         for r in l.panels() {
             assert!(area.contains(r.as_position()) || r.is_empty(), "{r:?}");
             assert!(r.right() <= w && r.bottom() <= h, "{r:?} dans {w}×{h}");

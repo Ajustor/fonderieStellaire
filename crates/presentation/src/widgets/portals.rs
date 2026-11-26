@@ -122,25 +122,6 @@ pub fn draw_vortex(
     }
 }
 
-/// Coupe un texte en lignes de `width` caractères au plus (par mots).
-fn wrap(text: &str, width: usize) -> Vec<String> {
-    let mut lines = Vec::new();
-    let mut line = String::new();
-    for word in text.split_whitespace() {
-        if !line.is_empty() && line.chars().count() + 1 + word.chars().count() > width {
-            lines.push(std::mem::take(&mut line));
-        }
-        if !line.is_empty() {
-            line.push(' ');
-        }
-        line.push_str(word);
-    }
-    if !line.is_empty() {
-        lines.push(line);
-    }
-    lines
-}
-
 /// Bordure arrondie dessinée à la main, découpée par `clip` (les cartes
 /// peuvent dépasser de l'écran pendant le glissement).
 fn card_border(buf: &mut Buffer, clip: Rect, x: i32, y: i32, w: i32, h: i32, color: Rgb) {
@@ -170,7 +151,7 @@ fn text_clipped(buf: &mut Buffer, clip: Rect, x: i32, y: i32, text: &str, color:
 }
 
 fn centered_line(buf: &mut Buffer, area: Rect, y: u16, text: &str, color: Rgb, bold: bool) {
-    let text = draw::truncate(text, area.width as usize);
+    let text = draw::truncate(text, area.width.saturating_sub(2) as usize);
     let w = text.chars().count() as i32;
     let x = area.x as i32 + (area.width as i32 - w) / 2;
     text_clipped(buf, area, x, y as i32, &text, color, bold);
@@ -216,11 +197,16 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, state: &PortalState, star
         .filter(|u| u.key_reward.is_some())
         .count();
     let subtitle = if state.crunch {
-        format!(
-            "Big Crunch n°{} · production ×{} · ses règles s'appliquent jusqu'au prochain Big Crunch",
-            snap.crunches + 1,
-            fmt::short(1.0 + domain::catalog::balance::CRUNCH_PRODUCTION * (snap.crunches + 1) as f64)
-        )
+        let n = snap.crunches + 1;
+        let prod = fmt::short(1.0 + domain::catalog::balance::CRUNCH_PRODUCTION * n as f64);
+        let long = format!(
+            "Big Crunch n°{n} · production ×{prod} · ses règles s'appliquent jusqu'au prochain Big Crunch"
+        );
+        if long.chars().count() + 2 <= area.width as usize {
+            long
+        } else {
+            format!("Big Crunch n°{n} · production ×{prod} · règles valables tout le cycle")
+        }
     } else {
         format!("Clés obtenues : {keys}/{keys_total} · le choix se fait au Big Crunch [U]")
     };
@@ -293,8 +279,36 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, state: &PortalState, star
             );
         }
 
-        // Vortex.
-        let vortex_h = (card_h - 8).max(4);
+        // Textes de la carte, renvoyés à la ligne : nom et règles en haut,
+        // Clé et bonus en bas ; le vortex prend la place qui reste.
+        let text_w = (card_w - 4).max(1) as usize;
+        let has_key = view.is_some_and(|v| v.key);
+        let (key_line, reward_line, key_color) = if def.key_reward.is_none() {
+            (
+                "Aucune Clé ici".to_string(),
+                "Les règles de toujours".to_string(),
+                theme::GREY,
+            )
+        } else if has_key {
+            (
+                format!("★ {} obtenue", def.key_name),
+                def.reward_text.to_string(),
+                theme::GOLD,
+            )
+        } else {
+            (
+                format!("Clé : {} Supernovas", def.key_goal),
+                def.reward_text.to_string(),
+                theme::MUTED,
+            )
+        };
+        let name_lines = draw::wrap(def.name, text_w);
+        let rule_lines = draw::wrap(def.rules_text, text_w);
+        let key_lines = draw::wrap(&key_line, text_w);
+        let reward_lines = draw::wrap(&reward_line, text_w);
+        let top_n = (name_lines.len() + rule_lines.len()) as i32;
+        let bottom_n = (key_lines.len() + reward_lines.len()) as i32;
+        let vortex_h = (card_h - 2 - top_n - bottom_n - 1).max(3);
         let vcx = x as f64 + card_w as f64 / 2.0;
         let vcy = card_y as f64 + 1.0 + vortex_h as f64 / 2.0;
         let radius = ((card_w - 4) as f64 / 2.0).min(vortex_h as f64 - 0.5);
@@ -328,62 +342,31 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, state: &PortalState, star
 
         // Textes : nom, règles, Clé.
         let text_x = x + 2;
-        let text_w = (card_w - 4).max(1) as usize;
         let mut ty = card_y + 1 + vortex_h;
-        text_clipped(
-            buf,
-            area,
-            text_x,
-            ty,
-            &draw::truncate(def.name, text_w),
-            palette[0].dim(dim),
-            true,
-        );
-        ty += 1;
-        for line in wrap(def.rules_text, text_w).iter().take(2) {
+        for line in &name_lines {
+            text_clipped(buf, area, text_x, ty, line, palette[0].dim(dim), true);
+            ty += 1;
+        }
+        for line in &rule_lines {
             text_clipped(buf, area, text_x, ty, line, theme::TEXT.dim(dim), false);
             ty += 1;
         }
-        ty = card_y + card_h - 4;
-        let has_key = view.is_some_and(|v| v.key);
-        let (key_line, reward_line, key_color) = if def.key_reward.is_none() {
-            (
-                "Aucune Clé ici".to_string(),
-                "Les règles de toujours".to_string(),
-                theme::GREY,
-            )
-        } else if has_key {
-            (
-                format!("★ {} obtenue", def.key_name),
-                def.reward_text.to_string(),
-                theme::GOLD,
-            )
-        } else {
-            (
-                format!("Clé : {} Supernovas", def.key_goal),
-                def.reward_text.to_string(),
-                theme::MUTED,
-            )
-        };
-        text_clipped(
-            buf,
-            area,
-            text_x,
-            ty,
-            &draw::truncate(&key_line, text_w),
-            key_color.dim(dim),
-            true,
-        );
-        for (k, line) in wrap(&reward_line, text_w).iter().take(2).enumerate() {
+        let mut ty = card_y + card_h - 1 - bottom_n;
+        for line in &key_lines {
+            text_clipped(buf, area, text_x, ty, line, key_color.dim(dim), true);
+            ty += 1;
+        }
+        for line in &reward_lines {
             text_clipped(
                 buf,
                 area,
                 text_x,
-                ty + 1 + k as i32,
+                ty,
                 line,
                 theme::CYAN.dim(dim.max(0.2)),
                 false,
             );
+            ty += 1;
         }
     }
 
@@ -479,7 +462,6 @@ mod tests {
 
     #[test]
     fn wrapping() {
-        assert_eq!(wrap("aa bb cc", 5), ["aa bb", "cc"]);
-        assert!(wrap("", 5).is_empty());
+        assert_eq!(draw::wrap("aa bb cc", 5), ["aa bb", "cc"]);
     }
 }

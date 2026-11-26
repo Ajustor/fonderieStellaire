@@ -50,6 +50,12 @@ struct SaveFile {
     universe: String,
     universe_keys: Vec<String>,
     run_started: f64,
+    big_bangs: u32,
+    particles: u32,
+    particles_spent: u32,
+    forged: Vec<usize>,
+    attractor: usize,
+    attractor_left: f64,
 }
 
 impl From<&SaveData> for SaveFile {
@@ -88,6 +94,12 @@ impl From<&SaveData> for SaveFile {
             universe: d.universe.clone(),
             universe_keys: d.universe_keys.clone(),
             run_started: d.run_started,
+            big_bangs: d.big_bangs,
+            particles: d.particles,
+            particles_spent: d.particles_spent,
+            forged: d.forged.clone(),
+            attractor: d.attractor,
+            attractor_left: d.attractor_left,
         }
     }
 }
@@ -128,6 +140,12 @@ impl From<SaveFile> for SaveData {
             universe: f.universe,
             universe_keys: f.universe_keys,
             run_started: f.run_started,
+            big_bangs: f.big_bangs,
+            particles: f.particles,
+            particles_spent: f.particles_spent,
+            forged: f.forged,
+            attractor: f.attractor,
+            attractor_left: f.attractor_left,
         }
     }
 }
@@ -247,7 +265,7 @@ mod tests {
     fn save_then_load_round_trip() {
         let (dir, repo) = temp_repo("roundtrip");
         let data = SaveData {
-            version: 1,
+            version: application::SAVE_VERSION,
             stardust: 12.5,
             owned: vec![3, 1],
             upgrades: vec!["gen0_t0".into()],
@@ -299,6 +317,33 @@ mod tests {
         assert!(repo.reset().unwrap());
         assert!(!repo.path().exists());
         assert!(repo.backup_path().exists());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// Durée d'une sauvegarde réelle sur ce disque (antivirus compris).
+    /// `cargo test --release -p infrastructure save_timing -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn save_timing() {
+        let (dir, repo) = temp_repo("timing");
+        let data = SaveData {
+            version: application::SAVE_VERSION,
+            owned: vec![250; 12],
+            upgrades: (0..56).map(|i| format!("u{i}")).collect(),
+            achievements: (0..30).map(|i| format!("a{i}")).collect(),
+            ..SaveData::default()
+        };
+        let mut times = Vec::new();
+        for _ in 0..20 {
+            let t = std::time::Instant::now();
+            repo.save(&data).unwrap();
+            times.push(t.elapsed().as_secs_f64() * 1e3);
+        }
+        times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        println!(
+            "sauvegarde : médiane {:.1} ms, pire {:.1} ms",
+            times[10], times[19]
+        );
         let _ = fs::remove_dir_all(dir);
     }
 }

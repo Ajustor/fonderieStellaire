@@ -28,12 +28,31 @@ fn version() -> &'static str {
     }
 }
 
+/// Relance le jeu (nouvelle version installée) avec les mêmes options, sauf
+/// `--reset`, et attend qu'il se termine pour rendre la main au terminal.
+fn relaunch(exe: &std::path::Path, args: &[String]) -> Result<(), Box<dyn Error>> {
+    let args: Vec<&String> = args.iter().filter(|a| *a != "--reset").collect();
+    let status = std::process::Command::new(exe)
+        .args(args)
+        .status()
+        .map_err(|e| format!("redémarrage impossible ({e}) : relance le jeu à la main"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err("la nouvelle version s'est arrêtée sur une erreur".into())
+    }
+}
+
 fn run() -> Result<(), Box<dyn Error>> {
+    // Chemin de l'exécutable au lancement : la mise à jour remplace le fichier
+    // à cet endroit, c'est donc lui qu'on relance.
+    let exe = std::env::current_exe().ok();
+    let args: Vec<String> = std::env::args().skip(1).collect();
     let mut reset = false;
     let mut no_update = std::env::var("FONDERIE_NO_UPDATE")
         .map(|v| !v.is_empty() && v != "0")
         .unwrap_or(false);
-    for arg in std::env::args().skip(1) {
+    for arg in &args {
         match arg.as_str() {
             "--reset" => reset = true,
             "--no-update" => no_update = true,
@@ -74,6 +93,11 @@ fn run() -> Result<(), Box<dyn Error>> {
     let outcome = presentation::run(service, startup, updates)?;
     if let Some(e) = outcome.save_error {
         return Err(format!("la sauvegarde finale a échoué : {e}").into());
+    }
+    if outcome.restart {
+        if let Some(exe) = exe {
+            return relaunch(&exe, &args);
+        }
     }
     Ok(())
 }

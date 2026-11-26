@@ -28,6 +28,15 @@ pub struct GeneratorDef {
     pub description: &'static str,
     /// Supernovas nécessaires pour qu'il apparaisse (0 = dès le début).
     pub unlock_supernovas: u32,
+    /// Générateur primordial : particules à dépenser pour le forger (0 = aucun).
+    pub particle_cost: u32,
+}
+
+impl GeneratorDef {
+    /// Vrai pour les générateurs primordiaux (forgés avec des particules).
+    pub fn is_primordial(&self) -> bool {
+        self.particle_cost > 0
+    }
 }
 
 impl GeneratorDef {
@@ -133,6 +142,7 @@ mod tests {
             base_prod: 0.1,
             description: "",
             unlock_supernovas: 0,
+            particle_cost: 0,
         }
     }
 

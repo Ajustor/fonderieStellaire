@@ -69,6 +69,10 @@ pub struct Ui {
     /// Laboratoire (touche L) et sa sélection.
     pub lab: Option<Popup>,
     pub lab_sel: usize,
+    /// Cosmogonie (touche G), sélection, et confirmation armée du Big Bang.
+    pub cosmos: Option<Popup>,
+    pub cosmos_sel: usize,
+    pub cosmos_armed: bool,
     /// Écran des portails (choix d'univers au Big Crunch, ou consultation).
     pub portal: Option<crate::widgets::portals::PortalState>,
     /// Lignes remontées dans le journal (0 = dernières entrées).

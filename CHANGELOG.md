@@ -1,5 +1,74 @@
 # Journal des versions
 
+## v0.9.0 — Acte II, fin : le Big Bang et le Grand Attracteur
+
+> **Remise à zéro des sauvegardes.** L'équilibrage a trop changé pour garder
+> les parties en cours : au premier lancement, un message prévient le joueur
+> et l'ancienne partie est effacée (les réglages, comme les effets réduits,
+> sont conservés).
+
+### Nouveautés
+- **Cosmogonie** (touche `G`, dès le 10e Big Crunch) : un écran qui réunit le
+  Big Bang, la forge primordiale et le Grand Attracteur.
+- **Big Bang** (30 Big Crunch) : 3e niveau de prestige. Les Big Crunch et tout
+  le niveau Supernova repartent de zéro contre des **particules
+  primordiales ✷** (une par tranche de 10 Big Crunch). Chaque particule donne
+  **+100 % de production** et **+25 % de fragments**, pour toujours, même une
+  fois dépensée. Le Laboratoire, les Clés d'univers, les forges et le Grand
+  Attracteur sont conservés.
+- **Forge primordiale** : 3 générateurs de fin de jeu à forger avec des
+  particules (1, 2 puis 3) : Forge à neutrons, Tisseur de réalités, Conscience
+  cosmique. Une fois forgés, ils sont présents dans tous les cycles.
+- **Grand Attracteur** : 7 étapes payées en particules (23 au total) et
+  construites **en temps réel**, même jeu fermé (108 h au total). Elles
+  multiplient la production, les fragments, le hors-ligne (100 %) et la
+  matière noire. La dernière étape, **l'Éveil**, clôt l'Acte II.
+- **3 nouveaux succès** (42 au total).
+
+### Équilibrage
+- **Bonus des Supernovas revu à la baisse** : toujours +10 % par fragment
+  jusqu'à 5, puis une croissance en racine cubique au lieu de la racine
+  carrée. Exemples : 40 fragments donnent +100 % (au lieu de +141 %),
+  625 fragments +250 % (au lieu de +559 %), 120 000 fragments +1 450 %
+  (au lieu de +7 900 %).
+
+### Animations
+- **Big Bang** : l'écran entier est aspiré en spirale vers un point, un
+  silence où ce point palpite de plus en plus vite, puis un éclair blanc. Des
+  ondes de choc partent ensuite aux couleurs du spectre, des débris filent dans
+  toutes les directions, et une nébuleuse et des étoiles naissent. Enfin,
+  « BIG BANG » se décrypte en arc-en-ciel avant l'annonce des particules.
+- **Fin de l'Acte II** : les étoiles convergent en spirale, un éclair doré
+  annonce une galaxie immense qui s'ouvre et tourne, puis le générique défile
+  avec les chiffres de ta partie.
+- **Le Grand Attracteur dans le ciel** : une galaxie à deux bras autour d'un
+  cœur doré, qui grandit à chaque étape. L'étape en chantier se dessine en
+  pointillés qui se remplissent, et une onde lumineuse salue chaque étape
+  achevée.
+- **Forge** : gerbe d'étincelles aux couleurs du générateur forgé.
+
+### Lisibilité
+- **Plus aucun texte coupé** : les descriptions, détails, notifications, le
+  journal et toutes les fenêtres passent à la ligne au lieu d'être tronqués.
+  Les fenêtres s'adaptent à leur contenu et gardent une taille fixe quand on
+  change de sélection. Un test parcourt chaque écran à 4 tailles de terminal
+  (de 80×24 à 160×48) et échoue au moindre texte coupé.
+- Le panneau des améliorations **s'agrandit en douceur** quand il a le focus,
+  pour afficher le détail complet.
+- L'en-tête passe à une version plus compacte quand la place manque, au lieu
+  de couper.
+- Journal : les heures au-delà d'une heure de jeu s'affichent `111h06`.
+
+### Confort
+- **Redémarrage automatique après une mise à jour** : un bandeau compte à
+  rebours (5 s), le jeu attend la fin d'une Supernova ou d'un Big Bang en
+  cours, sauvegarde, puis se relance tout seul sur la nouvelle version.
+- **Moins de saccades** : chaque image part en une seule écriture vers le
+  terminal (au lieu de plusieurs), avec la mise à jour synchronisée quand le
+  terminal la gère. Les mesures montrent moins de 2 ms par image : les
+  ralentissements restants viennent du terminal, pas du jeu (`F3` affiche les
+  temps d'image).
+
 ## v0.8.0 — Acte II, partie 2 : les Univers parallèles
 
 ### Nouveautés
