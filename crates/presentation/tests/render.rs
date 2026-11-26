@@ -1304,3 +1304,44 @@ fn v0_13_absence_report_stats_and_colors() {
     assert!(text.contains("Record de production"));
     assert!(text.contains("1re Supernova : 1h 00m"));
 }
+
+#[test]
+fn v0_14_megastructures_grid() {
+    let mut save = advanced_save();
+    save.big_bangs = 1;
+    save.attractor = 7;
+    save.map_seed = 42;
+    save.converged = true;
+    save.exotic = 200.0;
+    let mut app = app_with(Some(save));
+    let mut t = 100.0;
+    app.set_time(t);
+    app.enter_game_now();
+    app.update(0.033);
+    app.on_intent(Intent::Megastructures);
+    t += 1.0;
+    app.set_time(t);
+    // Un Collecteur, un Relais à droite, une Forge-monde dessous, le Cœur.
+    app.on_intent(Intent::Down);
+    app.on_intent(Intent::NextPanel);
+    app.on_intent(Intent::QuickBuy(0));
+    app.on_intent(Intent::NextPanel);
+    app.on_intent(Intent::QuickBuy(1));
+    app.on_intent(Intent::Down);
+    app.on_intent(Intent::QuickBuy(2));
+    app.on_intent(Intent::PrevPanel);
+    app.on_intent(Intent::QuickBuy(5));
+    app.update(0.033);
+    let snap = app.snapshot();
+    assert_eq!(snap.grid.iter().filter(|c| c.is_some()).count(), 4);
+    assert!(snap.grid_effects.production > 1.0);
+    t += 1.5;
+    app.set_time(t);
+    let text = render(&mut app, 120, 40);
+    println!("{text}");
+    assert!(text.contains("MÉGASTRUCTURES"), "{text}");
+    assert!(text.contains("Cœur stellaire"));
+    assert!(text.contains("[1] ◇ Collecteur"));
+    let text = render(&mut app, 80, 24);
+    assert!(text.contains("MÉGASTRUCTURES"), "{text}");
+}

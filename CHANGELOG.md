@@ -1,5 +1,35 @@
 # Journal des versions
 
+## v0.14.0 — Acte IV, partie 1 : les Mégastructures
+
+### Nouveautés
+- **Acte IV** : après la Convergence, la **matière exotique** ◈ afflue, en
+  temps réel et même jeu fermé.
+- **Mégastructures** (touche `W`) : une grille de 9×5 où bâtir six
+  structures. **Les voisines comptent** :
+
+  | Structure | Effet | Voisinage |
+  |---|---|---|
+  | ◇ Collecteur | +1 matière exotique par heure | renforcé par les Relais |
+  | ◆ Relais | — | +25 % pour chaque structure voisine |
+  | ▲ Forge-monde | +25 % de production | ×1,5 à côté d'un Collecteur |
+  | ★ Archive | +20 % de fragments | ×1,5 à côté d'une Forge-monde |
+  | ◎ Phare | expéditions plus rapides et plus sûres | ×2 au bord de la grille |
+  | ✶ Cœur stellaire (unique) | production ×1,5 par type voisin différent | — |
+
+  Chaque exemplaire coûte plus cher que le précédent ; `D` démolit une
+  structure (sans remboursement) pour réorganiser la grille.
+- **3 nouveaux succès** (54 au total).
+
+### Animations
+- Grille animée : les liaisons entre structures voisines brillent (celles des
+  Relais pulsent), la case visée palpite, une nouvelle structure apparaît
+  avec un balayage lumineux et une onde ; feux d'artifice pour le Cœur.
+
+### Rythme (simulateur, 3 h de jeu par jour)
+- Cœur stellaire vers le 43e jour, 20 structures vers le 44e, grille complète
+  vers le 53e.
+
 ## v0.13.0 — Bon retour, forgeron
 
 ### Nouveautés

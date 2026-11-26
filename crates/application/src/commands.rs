@@ -53,4 +53,8 @@ pub enum Command {
     ToggleAutoFleets,
     /// Couleurs : normales → daltonien → contraste élevé.
     CycleColorMode,
+    /// Bâtit une mégastructure sur une case.
+    PlaceStructure(usize, domain::StructureKind),
+    /// Démolit la mégastructure d'une case.
+    Demolish(usize),
 }

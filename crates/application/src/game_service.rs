@@ -226,6 +226,11 @@ impl GameService {
             }
             Command::StartConvergence => self.state.start_convergence(&self.catalog, &mut ev),
             Command::ToggleAutoFleets => self.state.toggle_auto_fleets(&mut ev),
+            Command::PlaceStructure(cell, kind) => {
+                self.state
+                    .place_structure(&self.catalog, cell, kind, &mut ev)
+            }
+            Command::Demolish(cell) => self.state.demolish(cell, &mut ev),
             Command::CycleColorMode => {
                 self.color_mode = (self.color_mode + 1) % 3;
                 out.push(GameEvent::ColorModeChanged(self.color_mode));
@@ -504,6 +509,12 @@ impl GameService {
         snap.best_production = st.best_production;
         snap.milestones = st.milestones;
         snap.color_mode = self.color_mode;
+        snap.megastructures_unlocked = st.megastructures_unlocked();
+        snap.exotic = st.exotic;
+        snap.grid.clear();
+        snap.grid.extend(st.grid.iter().copied());
+        snap.grid_effects = st.grid_effects();
+        snap.structure_costs = domain::StructureKind::ALL.map(|k| st.structure_cost(k));
         snap.relic_sets = domain::RelicSet::ALL
             .iter()
             .map(|&s| {

@@ -141,6 +141,8 @@ pub struct Visuals {
     /// Reliques trouvées : la carte affichée et celles qui attendent leur tour.
     pub relic_card: Option<crate::widgets::relics::RelicCard>,
     pub relic_queue: std::collections::VecDeque<crate::widgets::relics::RelicCard>,
+    /// Dernière mégastructure bâtie : (instant, case).
+    pub mega_pop: Option<(f64, usize)>,
     /// Touches affichées dans la barre d'aide et depuis quand.
     pub help_seen: Vec<(&'static str, f64)>,
     /// Systèmes tout juste explorés : (instant, système), pour l'onde sur la carte.
@@ -194,6 +196,7 @@ impl Visuals {
             attractor_pop: None,
             map_pops: Vec::new(),
             help_seen: Vec::new(),
+            mega_pop: None,
             relic_card: None,
             relic_queue: std::collections::VecDeque::new(),
             sun_scale: 1.0,

@@ -31,6 +31,8 @@ pub enum PurchaseTarget {
     Relic(crate::relic::RelicId),
     /// Lancer la Convergence.
     Convergence,
+    /// Bâtir sur une case de la grille des Mégastructures.
+    Structure(usize),
 }
 
 /// Ce que devient une relique trouvée.
@@ -210,6 +212,17 @@ pub enum DomainEvent {
     ConvergenceStarted,
     /// Fin de l'Acte III.
     ConvergenceDone,
+    /// Acte IV : les Mégastructures s'ouvrent.
+    MegastructuresOpened,
+    /// Une structure est bâtie.
+    StructurePlaced {
+        cell: usize,
+        kind: crate::megastructure::StructureKind,
+    },
+    /// Une structure est démolie.
+    StructureRemoved {
+        cell: usize,
+    },
     /// Pilote automatique des flottes activé ou coupé.
     AutoFleetsToggled {
         enabled: bool,

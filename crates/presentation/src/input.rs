@@ -45,6 +45,8 @@ pub enum Intent {
     Relics,
     /// `Z` : revenir à l'événement cosmique en attente.
     Event,
+    /// `W` : Mégastructures (Acte IV).
+    Megastructures,
     /// `T` : activer / arrêter l'automate.
     ToggleAuto,
     /// `PgUp` / `PgDn` : remonter / redescendre dans le journal.
@@ -172,6 +174,7 @@ pub fn map_key(key: &KeyEvent) -> Option<Intent> {
             'x' => Intent::StarMap,
             'h' => Intent::Relics,
             'z' => Intent::Event,
+            'w' => Intent::Megastructures,
             't' => Intent::ToggleAuto,
             'o' | 'y' => Intent::Yes,
             'n' => Intent::No,

@@ -22,6 +22,7 @@ use crate::events::RelicOutcome;
 use crate::events::{DomainEvent, PurchaseTarget};
 use crate::generator::{milestones_crossed, BuyMode, GeneratorId};
 use crate::lab::{LabEffect, LabId};
+use crate::megastructure::{self, GridEffects, StructureKind};
 use crate::perk::{PerkEffect, PerkId};
 use crate::prestige::{fragment_divisor, fragments_for};
 use crate::relic::{roll_rarity, RelicEffect, RelicId, RelicSet};
@@ -138,6 +139,11 @@ pub struct GameState {
     /// Convergence : secondes restantes si elle est en cours, et achevée ou non.
     pub convergence: Option<f64>,
     pub converged: bool,
+    /// Acte IV : matière exotique (disponible, gagnée au total) et grille des
+    /// Mégastructures (une case = une structure ou rien).
+    pub exotic: f64,
+    pub exotic_total: f64,
+    pub grid: Vec<Option<StructureKind>>,
     /// Pilote automatique des flottes (après 10 systèmes explorés).
     pub auto_fleets: bool,
     /// Historique de la production (temps de jeu, log10 de la prod/s), un
@@ -211,6 +217,9 @@ impl GameState {
             events_resolved: 0,
             convergence: None,
             converged: false,
+            exotic: 0.0,
+            exotic_total: 0.0,
+            grid: Vec::new(),
             auto_fleets: false,
             history: Vec::new(),
             best_production: 0.0,
@@ -289,6 +298,21 @@ impl GameState {
             }
         }
         self.auto_fleets &= self.auto_fleets_unlocked();
+        self.grid.resize(megastructure::CELLS, None);
+        let mut core = false;
+        for c in self.grid.iter_mut() {
+            if *c == Some(StructureKind::Core) {
+                if core {
+                    *c = None;
+                }
+                core = true;
+            }
+        }
+        for v in [&mut self.exotic, &mut self.exotic_total] {
+            if !v.is_finite() || *v < 0.0 {
+                *v = 0.0;
+            }
+        }
         // Carte stellaire : reconstruite depuis sa graine.
         if self.map_seed != 0 && self.map.systems.is_empty() {
             self.map = starmap::generate(self.map_seed);
@@ -520,6 +544,7 @@ impl GameState {
             * self.particle_fragments()
             * self.map_bonus(SystemKind::Cluster, 0.10)
             * self.boost_factor(BoostKind::Fragments)
+            * self.grid_effects().fragments
             * (1.0
                 + self.relic_sum(catalog, |e| match e {
                     RelicEffect::Fragments(x) => Some(x),
@@ -958,6 +983,7 @@ impl GameState {
         self.advance_convergence(catalog, dt, events);
         self.advance_boosts(dt);
         self.advance_cosmic_events(catalog, dt, roll, events);
+        self.accrue_exotic(dt);
 
         // Filet à comètes : capture les comètes normales après 2 s de passage.
         if self.lab_active(catalog, LabEffect::CometNet)
@@ -1128,6 +1154,7 @@ impl GameState {
         self.advance_research(catalog, elapsed_secs, events);
         self.advance_attractor(catalog, elapsed_secs, events);
         self.advance_fleets_offline(catalog, elapsed_secs, events);
+        self.accrue_exotic(elapsed_secs);
         self.advance_convergence(catalog, elapsed_secs, events);
         self.advance_boosts(elapsed_secs);
         if let Some((event, left)) = self.pending_event {
@@ -1504,7 +1531,8 @@ impl GameState {
                 }
             })
             .unwrap_or(0.0);
-        (1.10 - 0.15 * danger + 0.02 * self.explored_count() as f64 + prospect + relics)
+        let beacons = self.grid_effects().expedition_luck;
+        (1.10 - 0.15 * danger + 0.02 * self.explored_count() as f64 + prospect + relics + beacons)
             .clamp(0.30, 0.95)
     }
 
@@ -1525,7 +1553,7 @@ impl GameState {
         } else {
             1.0
         };
-        sys.duration() * prospect * speed * set
+        sys.duration() * prospect * speed * set * (1.0 - self.grid_effects().expedition_speed)
     }
 
     /// Une flotte peut partir : vers un système à portée pas encore exploré,
@@ -1716,8 +1744,78 @@ impl GameState {
         self.convergence = None;
         self.converged = true;
         self.mark_milestone(4);
+        events.push(DomainEvent::MegastructuresOpened);
         self.check_achievements(catalog, events);
         events.push(DomainEvent::ConvergenceDone);
+    }
+
+    // ------------------------------------------------------------------
+    // Acte IV : Mégastructures
+    // ------------------------------------------------------------------
+
+    /// Les Mégastructures s'ouvrent après la Convergence.
+    pub fn megastructures_unlocked(&self) -> bool {
+        self.converged
+    }
+
+    pub fn grid_effects(&self) -> GridEffects {
+        megastructure::effects(&self.grid)
+    }
+
+    pub fn structures_built(&self) -> usize {
+        self.grid.iter().filter(|c| c.is_some()).count()
+    }
+
+    pub fn structure_count(&self, kind: StructureKind) -> usize {
+        self.grid.iter().filter(|&&c| c == Some(kind)).count()
+    }
+
+    pub fn structure_cost(&self, kind: StructureKind) -> f64 {
+        kind.cost(self.structure_count(kind))
+    }
+
+    pub fn can_place_structure(&self, cell: usize, kind: StructureKind) -> bool {
+        self.megastructures_unlocked()
+            && self.grid.get(cell).is_some_and(|c| c.is_none())
+            && !(kind.unique() && self.structure_count(kind) > 0)
+            && self.exotic + 1e-9 >= self.structure_cost(kind)
+    }
+
+    pub fn place_structure(
+        &mut self,
+        catalog: &Catalog,
+        cell: usize,
+        kind: StructureKind,
+        events: &mut Vec<DomainEvent>,
+    ) {
+        if !self.can_place_structure(cell, kind) {
+            events.push(DomainEvent::PurchaseFailed {
+                target: PurchaseTarget::Structure(cell),
+            });
+            return;
+        }
+        self.exotic -= self.structure_cost(kind);
+        self.grid[cell] = Some(kind);
+        events.push(DomainEvent::StructurePlaced { cell, kind });
+        self.check_achievements(catalog, events);
+    }
+
+    /// Démolit une structure (sans remboursement) pour réorganiser la grille.
+    pub fn demolish(&mut self, cell: usize, events: &mut Vec<DomainEvent>) {
+        if self.grid.get(cell).is_some_and(|c| c.is_some()) {
+            self.grid[cell] = None;
+            events.push(DomainEvent::StructureRemoved { cell });
+        }
+    }
+
+    /// La matière exotique s'accumule en temps réel, même jeu fermé.
+    fn accrue_exotic(&mut self, secs: f64) {
+        if !self.megastructures_unlocked() || secs <= 0.0 {
+            return;
+        }
+        let gained = self.grid_effects().exotic_per_hour * secs / 3600.0;
+        self.exotic += gained;
+        self.exotic_total += gained;
     }
 
     // ------------------------------------------------------------------
@@ -2482,6 +2580,8 @@ impl GameState {
                     .any(|&s| self.relic_set_active(catalog, s)),
                 cosmic_events: self.events_resolved,
                 converged: self.converged,
+                structures: self.structures_built(),
+                core_built: self.structure_count(StructureKind::Core) > 0,
             };
             for a in &catalog.achievements {
                 if !self.has_achievement(a.id) && a.condition.is_met(&ctx) {
@@ -3786,5 +3886,35 @@ mod tests {
         s.total_run = 1e14;
         s.supernova(&c, &mut ev);
         assert_eq!(s.milestones[0], first, "la première seulement");
+    }
+
+    #[test]
+    fn megastructures_are_built_with_exotic_matter_after_the_convergence() {
+        let (c, mut s, mut ev) = setup();
+        s.normalize(&c);
+        s.place_structure(&c, 0, StructureKind::Collector, &mut ev);
+        assert_eq!(s.structures_built(), 0, "pas avant la Convergence");
+        s.converged = true;
+        // Une heure, même jeu fermé : 1 matière exotique.
+        s.apply_offline(&c, 3600.0, &mut ev);
+        assert!((s.exotic - 1.0).abs() < 1e-9);
+        s.exotic = 100.0;
+        s.place_structure(&c, 10, StructureKind::Collector, &mut ev);
+        assert_eq!(s.exotic, 97.0);
+        assert_eq!(s.structure_cost(StructureKind::Collector), 4.5);
+        s.place_structure(&c, 10, StructureKind::Relay, &mut ev);
+        assert!(
+            matches!(ev.last(), Some(DomainEvent::PurchaseFailed { .. })),
+            "case occupée"
+        );
+        s.place_structure(&c, 11, StructureKind::WorldForge, &mut ev);
+        let prod = economy::permanent_multiplier(&c, &s);
+        s.place_structure(&c, 20, StructureKind::Core, &mut ev);
+        s.place_structure(&c, 30, StructureKind::Core, &mut ev);
+        assert_eq!(s.structure_count(StructureKind::Core), 1, "unique");
+        assert!(economy::permanent_multiplier(&c, &s) > prod);
+        assert!(s.has_achievement(c.achievement_by_key("core").unwrap()));
+        s.demolish(11, &mut ev);
+        assert_eq!(s.grid[11], None);
     }
 }

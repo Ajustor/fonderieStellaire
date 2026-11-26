@@ -16,7 +16,7 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
 name = "application"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "domain",
 ]
@@ -218,7 +218,7 @@ dependencies = [
 
 [[package]]
 name = "domain"
-version = "0.13.0"
+version = "0.14.0"
 
 [[package]]
 name = "either"
@@ -267,7 +267,7 @@ checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 
 [[package]]
 name = "fonderie-stellaire"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "application",
  "domain",
@@ -443,7 +443,7 @@ dependencies = [
 
 [[package]]
 name = "infrastructure"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "application",
  "dirs",
@@ -619,7 +619,7 @@ dependencies = [
 
 [[package]]
 name = "presentation"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "application",
  "crossterm",

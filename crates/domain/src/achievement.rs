@@ -63,6 +63,10 @@ pub enum AchievementCondition {
     CosmicEvents(u32),
     /// Convergence achevée (fin de l'Acte III).
     Converged,
+    /// Mégastructures bâties.
+    Structures(usize),
+    /// Cœur stellaire bâti.
+    CoreBuilt,
 }
 
 /// Données nécessaires pour évaluer une condition de succès.
@@ -93,6 +97,8 @@ pub struct AchievementContext<'a> {
     pub relic_set_active: bool,
     pub cosmic_events: u32,
     pub converged: bool,
+    pub structures: usize,
+    pub core_built: bool,
 }
 
 impl AchievementCondition {
@@ -132,6 +138,8 @@ impl AchievementCondition {
             AchievementCondition::RelicSet => ctx.relic_set_active,
             AchievementCondition::CosmicEvents(n) => ctx.cosmic_events >= n,
             AchievementCondition::Converged => ctx.converged,
+            AchievementCondition::Structures(n) => ctx.structures >= n,
+            AchievementCondition::CoreBuilt => ctx.core_built,
         }
     }
 }
@@ -177,6 +185,8 @@ mod tests {
             relic_set_active: false,
             cosmic_events: 0,
             converged: false,
+            structures: 0,
+            core_built: false,
         }
     }
 

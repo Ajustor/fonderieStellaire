@@ -224,6 +224,14 @@ fn no_text_is_cut_anywhere() {
     relics.equipped = vec!["r_hammer".into()];
     relics.shards = 12;
     report.extend(audit("reliques", relics, &[Intent::Relics], 8));
+    let mut mega = act3.clone();
+    mega.map_seed = 42;
+    mega.converged = true;
+    mega.exotic = 12345.0;
+    mega.grid = (0..45)
+        .map(|i| if i % 3 == 0 { (i % 6) as i8 } else { -1 })
+        .collect();
+    report.extend(audit("mégastructures", mega, &[Intent::Megastructures], 10));
     for key in ["civ_signal", "plasma_storm", "merchant", "nearby_nova"] {
         let mut ev = act3.clone();
         ev.map_seed = 42;

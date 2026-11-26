@@ -15,8 +15,8 @@ use crate::visuals::Visuals;
 use crate::widgets::journal::Journal;
 use crate::widgets::toast::Toasts;
 use crate::widgets::{
-    ceremony, challenges, codex, cosmos, event, generators, header, help_bar, journal, lab, modal,
-    options, portals, relics, shop, sky, sparkline, starmap, upgrades, Ctx,
+    ceremony, challenges, codex, cosmos, event, generators, header, help_bar, journal, lab, mega,
+    modal, options, portals, relics, shop, sky, sparkline, starmap, upgrades, Ctx,
 };
 
 /// Décalage entre deux panneaux de la cascade.
@@ -112,6 +112,9 @@ pub fn render(
             ui.options_armed,
             &info,
         );
+    }
+    if let Some(popup) = ui.mega {
+        mega::render(buf, area, ctx, &popup, ui.mega_sel, vis.mega_pop);
     }
     if let Some(popup) = ui.relics {
         relics::render(buf, area, ctx, &popup, ui.relics_sel);

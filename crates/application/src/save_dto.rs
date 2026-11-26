@@ -95,6 +95,10 @@ pub struct SaveData {
     pub milestones: Vec<f64>,
     /// Couleurs : 0 normales, 1 daltonien, 2 contraste élevé.
     pub color_mode: u8,
+    /// Acte IV : matière exotique et grille (−1 vide, sinon le type).
+    pub exotic: f64,
+    pub exotic_total: f64,
+    pub grid: Vec<i8>,
 }
 
 impl SaveData {
@@ -254,6 +258,13 @@ impl SaveData {
             best_production: state.best_production,
             milestones: state.milestones.to_vec(),
             color_mode: 0,
+            exotic: state.exotic,
+            exotic_total: state.exotic_total,
+            grid: state
+                .grid
+                .iter()
+                .map(|c| c.map(|k| k.index() as i8).unwrap_or(-1))
+                .collect(),
         }
     }
 
@@ -393,6 +404,19 @@ impl SaveData {
         s.convergence = (self.convergence_left > 0.0).then_some(self.convergence_left);
         s.converged = self.converged;
         s.auto_fleets = self.auto_fleets;
+        s.exotic = self.exotic;
+        s.exotic_total = self.exotic_total;
+        s.grid = self
+            .grid
+            .iter()
+            .map(|&k| {
+                if k < 0 {
+                    None
+                } else {
+                    domain::StructureKind::from_index(k as usize)
+                }
+            })
+            .collect();
         s.history = self.history.clone();
         s.best_production = self.best_production;
         for (m, v) in s.milestones.iter_mut().zip(&self.milestones) {

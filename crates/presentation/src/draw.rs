@@ -209,6 +209,27 @@ pub fn paragraph(
     n
 }
 
+/// Cadre arrondi d'une couleur, découpé par `clip`.
+pub fn card(buf: &mut Buffer, clip: Rect, r: Rect, color: Rgb) {
+    if r.width < 2 || r.height < 2 {
+        return;
+    }
+    let (x0, y0) = (r.x as i32, r.y as i32);
+    let (x1, y1) = (r.right() as i32 - 1, r.bottom() as i32 - 1);
+    for x in x0 + 1..x1 {
+        put(buf, clip, x, y0, '─', color);
+        put(buf, clip, x, y1, '─', color);
+    }
+    for y in y0 + 1..y1 {
+        put(buf, clip, x0, y, '│', color);
+        put(buf, clip, x1, y, '│', color);
+    }
+    put(buf, clip, x0, y0, '╭', color);
+    put(buf, clip, x1, y0, '╮', color);
+    put(buf, clip, x0, y1, '╰', color);
+    put(buf, clip, x1, y1, '╯', color);
+}
+
 /// Dessine un panneau arrondi et renvoie sa zone intérieure.
 pub fn panel<'a>(buf: &mut Buffer, area: Rect, title: impl Into<Line<'a>>, focused: bool) -> Rect {
     let block = Block::default()

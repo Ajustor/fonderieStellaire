@@ -111,6 +111,11 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
             } else {
                 ""
             };
+            let exotic = if snap.megastructures_unlocked {
+                format!(" ◈ {} [W] ·", fmt::short(snap.exotic))
+            } else {
+                String::new()
+            };
             let converge = snap
                 .convergence
                 .map(|(l, _)| format!(" ✶ Convergence {} ·", fmt::duration(l)))
@@ -147,7 +152,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
                 s
             };
             variants.push(format!(
-                "{event}{converge}{boost}{} progression {pct} [I] ",
+                "{event}{converge}{boost}{exotic}{} progression {pct} [I] ",
                 full(true)
             ));
             variants.push(format!(

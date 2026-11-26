@@ -367,7 +367,7 @@ const HOLD_UPGRADE: (&str, f64, f64) = ("Récolte continue", 150.0, 300.0);
 
 /// Succès, du plus facile au plus difficile (ordre mesuré par le simulateur
 /// sur une partie à 3 h de jeu par jour).
-const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 51] = [
+const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 54] = [
     (
         "first",
         "Premier pas",
@@ -676,6 +676,24 @@ const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 51] = [
         "Convergence",
         "Achever la Convergence et terminer l'Acte III",
         AchievementCondition::Converged,
+    ),
+    (
+        "mega1",
+        "Premier chantier cosmique",
+        "Bâtir une mégastructure",
+        AchievementCondition::Structures(1),
+    ),
+    (
+        "core",
+        "Cœur battant",
+        "Bâtir le Cœur stellaire",
+        AchievementCondition::CoreBuilt,
+    ),
+    (
+        "mega20",
+        "Architecte des mondes",
+        "Bâtir 20 mégastructures",
+        AchievementCondition::Structures(20),
     ),
 ];
 
@@ -1512,7 +1530,7 @@ mod tests {
         let cost: u32 = c.attractor.iter().map(|s| s.cost).sum();
         assert_eq!(cost, 23);
         assert!(c.upgrade_by_key("hold_0").is_some());
-        assert_eq!(c.achievements.len(), 51);
+        assert_eq!(c.achievements.len(), 54);
         assert_eq!(c.events.len(), 8);
         assert_eq!(c.relics.len(), 16);
         assert_eq!(c.universes.len(), 6);

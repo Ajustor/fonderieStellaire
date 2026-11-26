@@ -222,6 +222,11 @@ pub fn simulate(catalog: &Catalog, cfg: &SimConfig, mut progress: impl FnMut(f64
             s.start_convergence(catalog, &mut ev);
         }
 
+        // Mégastructures : chaque heure, la meilleure construction abordable.
+        if s.megastructures_unlocked() && (t / 3600.0).fract() < dt / 3600.0 + 1e-9 {
+            build_megastructures(catalog, &mut s, &mut ev);
+        }
+
         // Reliques : on équipe les plus rares, en privilégiant la production.
         if ev
             .iter()
@@ -342,7 +347,22 @@ pub fn simulate(catalog: &Catalog, cfg: &SimConfig, mut progress: impl FnMut(f64
                 }
                 DomainEvent::ConvergenceDone => {
                     mark(&mut report, "Fin de l'Acte III (Convergence)".into(), t);
-                    report.finished = true;
+                }
+                DomainEvent::StructurePlaced { kind, .. } => {
+                    let n = s.structures_built();
+                    if n == 1 {
+                        mark(&mut report, "1re mégastructure".into(), t);
+                    }
+                    if *kind == domain::StructureKind::Core {
+                        mark(&mut report, "Cœur stellaire".into(), t);
+                    }
+                    if n >= 20 {
+                        mark(&mut report, "20 mégastructures".into(), t);
+                    }
+                    if n >= domain::megastructure::CELLS {
+                        mark(&mut report, "Grille complète".into(), t);
+                        report.finished = true;
+                    }
                 }
                 _ => {}
             }
@@ -357,6 +377,45 @@ pub fn simulate(catalog: &Catalog, cfg: &SimConfig, mut progress: impl FnMut(f64
     }
     report.simulated = t;
     report
+}
+
+/// Note d'une grille, pour le bâtisseur du simulateur.
+fn grid_score(g: &[Option<domain::StructureKind>]) -> f64 {
+    let e = domain::megastructure::effects(g);
+    e.exotic_per_hour * 2.0
+        + e.production.ln() * 30.0
+        + e.fragments.ln() * 10.0
+        + e.expedition_speed * 10.0
+}
+
+/// Bâtit, tant que c'est abordable, la structure qui améliore le plus la grille
+/// (par matière exotique dépensée).
+fn build_megastructures(catalog: &Catalog, s: &mut GameState, ev: &mut Vec<DomainEvent>) {
+    for _ in 0..10 {
+        let base = grid_score(&s.grid);
+        let mut best: Option<(f64, usize, domain::StructureKind)> = None;
+        for kind in domain::StructureKind::ALL {
+            let cost = s.structure_cost(kind);
+            if s.exotic < cost || (kind.unique() && s.structure_count(kind) > 0) {
+                continue;
+            }
+            for cell in 0..s.grid.len() {
+                if s.grid[cell].is_some() {
+                    continue;
+                }
+                let mut g = s.grid.clone();
+                g[cell] = Some(kind);
+                let gain = (grid_score(&g) - base) / cost;
+                if best.is_none_or(|(b, _, _)| gain > b) {
+                    best = Some((gain, cell, kind));
+                }
+            }
+        }
+        match best {
+            Some((gain, cell, kind)) if gain > 0.0 => s.place_structure(catalog, cell, kind, ev),
+            _ => break,
+        }
+    }
 }
 
 /// Générateurs au meilleur rapport production / coût, tant que c'est abordable.

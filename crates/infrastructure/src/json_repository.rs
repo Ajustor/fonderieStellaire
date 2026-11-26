@@ -81,6 +81,9 @@ struct SaveFile {
     best_production: f64,
     milestones: Vec<f64>,
     color_mode: u8,
+    exotic: f64,
+    exotic_total: f64,
+    grid: Vec<i8>,
 }
 
 impl From<&SaveData> for SaveFile {
@@ -146,6 +149,9 @@ impl From<&SaveData> for SaveFile {
             best_production: d.best_production,
             milestones: d.milestones.clone(),
             color_mode: d.color_mode,
+            exotic: d.exotic,
+            exotic_total: d.exotic_total,
+            grid: d.grid.clone(),
         }
     }
 }
@@ -213,6 +219,9 @@ impl From<SaveFile> for SaveData {
             best_production: f.best_production,
             milestones: f.milestones,
             color_mode: f.color_mode,
+            exotic: f.exotic,
+            exotic_total: f.exotic_total,
+            grid: f.grid,
         }
     }
 }

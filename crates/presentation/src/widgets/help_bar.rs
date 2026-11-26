@@ -67,6 +67,9 @@ fn items(snap: &GameSnapshot) -> Vec<Item> {
     if snap.universes_unlocked {
         v.push(it("V", "Univers", 9));
     }
+    if snap.megastructures_unlocked {
+        v.push(it("W", "Méga", 6));
+    }
     if snap.starmap_unlocked {
         v.push(it("X", "Carte", 7));
         v.push(it("H", "Reliques", 8));

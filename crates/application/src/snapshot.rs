@@ -324,4 +324,11 @@ pub struct GameSnapshot {
     pub milestones: [f64; 5],
     /// Couleurs : 0 normales, 1 daltonien, 2 contraste élevé.
     pub color_mode: u8,
+    /// Acte IV : Mégastructures.
+    pub megastructures_unlocked: bool,
+    pub exotic: f64,
+    pub grid: Vec<Option<domain::StructureKind>>,
+    pub grid_effects: domain::GridEffects,
+    /// Coût actuel de chaque type (dans l'ordre de `StructureKind::ALL`).
+    pub structure_costs: [f64; 6],
 }

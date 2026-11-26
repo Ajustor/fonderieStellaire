@@ -376,6 +376,11 @@ impl App {
                         self.ui.relics = None;
                     }
                 }
+                if let Some(m) = self.ui.mega {
+                    if m.is_closed(now) {
+                        self.ui.mega = None;
+                    }
+                }
                 // Cartes des reliques trouvées, l'une après l'autre.
                 if self
                     .vis
@@ -578,6 +583,31 @@ impl App {
                 _ => {}
             }
             self.ui.event = Some(popup);
+            return;
+        }
+        if let Some(popup) = self.ui.mega {
+            if popup.closing_at.is_none() {
+                let sel = self.ui.mega_sel;
+                use crate::widgets::mega::navigate;
+                match intent {
+                    Intent::PrevPanel => self.ui.mega_sel = navigate(sel, -1, 0),
+                    Intent::NextPanel => self.ui.mega_sel = navigate(sel, 1, 0),
+                    Intent::Up => self.ui.mega_sel = navigate(sel, 0, -1),
+                    Intent::Down => self.ui.mega_sel = navigate(sel, 0, 1),
+                    Intent::QuickBuy(n) => {
+                        if let Some(kind) = domain::StructureKind::from_index(n) {
+                            self.command(Command::PlaceStructure(sel, kind));
+                        }
+                    }
+                    Intent::Challenges => self.command(Command::Demolish(sel)),
+                    Intent::Megastructures | Intent::Escape | Intent::No | Intent::Quit => {
+                        if let Some(p) = self.ui.mega.as_mut() {
+                            p.closing_at = Some(now);
+                        }
+                    }
+                    _ => {}
+                }
+            }
             return;
         }
         if let Some(popup) = self.ui.relics {
@@ -893,6 +923,21 @@ impl App {
                 }
             }
             Intent::Save => self.command(Command::Save),
+            Intent::Megastructures => {
+                if self.snap.megastructures_unlocked {
+                    self.ui.mega = Some(Popup {
+                        opened_at: now,
+                        closing_at: None,
+                    });
+                } else {
+                    self.toasts.push(
+                        now,
+                        theme::GREY,
+                        "Mégastructures",
+                        "S'ouvrent après la Convergence (Acte IV)",
+                    );
+                }
+            }
             Intent::Event => {
                 if self.snap.pending_event.is_some() {
                     self.ui.event = Some(EventPopup {
@@ -1612,6 +1657,14 @@ impl App {
                         format!("Pas assez de particules {PARTICLE}")
                     };
                     self.toasts.push(now, theme::GREY, "Grand Attracteur", body);
+                }
+                PurchaseTarget::Structure(cell) => {
+                    let body = if self.snap.grid.get(cell).is_some_and(|c| c.is_some()) {
+                        "Case occupée : démolis d'abord [D]".to_string()
+                    } else {
+                        "Pas assez de matière exotique (ou Cœur déjà bâti)".to_string()
+                    };
+                    self.toasts.push(now, theme::GREY, "Mégastructures", body);
                 }
                 PurchaseTarget::Convergence => {
                     self.toasts.push(
@@ -2366,6 +2419,33 @@ impl App {
                     .unwrap_or("?");
                 let what = if equipped { "équipée" } else { "rangée" };
                 self.log(Kind::Info, format!("◆ {name} {what}"));
+            }
+            DomainEvent::MegastructuresOpened => {
+                self.log(
+                    Kind::Achievement,
+                    "◈ Acte IV : la matière exotique afflue. Bâtis des mégastructures [W] !",
+                );
+                self.toasts.push(
+                    now,
+                    theme::GOLD,
+                    "◈ ACTE IV : LES ARCHITECTES",
+                    "Les Mégastructures s'ouvrent [W]",
+                );
+                self.vis.fireworks(now + 8.0);
+            }
+            DomainEvent::StructurePlaced { cell, kind } => {
+                self.vis.mega_pop = Some((now, cell));
+                self.log(
+                    Kind::Purchase,
+                    format!("{} {} bâti(e)", kind.symbol(), kind.name()),
+                );
+                if kind == domain::StructureKind::Core {
+                    self.vis.fireworks(now);
+                    self.vis.fireworks(now + 0.6);
+                }
+            }
+            DomainEvent::StructureRemoved { .. } => {
+                self.log(Kind::Info, "◈ Structure démolie".to_string());
             }
             DomainEvent::AutoFleetsToggled { enabled } => {
                 let (title, body) = if enabled {
