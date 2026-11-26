@@ -11,11 +11,18 @@ COPY crates/application/Cargo.toml crates/application/
 COPY crates/infrastructure/Cargo.toml crates/infrastructure/
 COPY crates/presentation/Cargo.toml crates/presentation/
 COPY crates/bin/Cargo.toml crates/bin/
-RUN for c in domain application infrastructure presentation; do \
+# Les autres membres du workspace (Android, bindgen, relais) ne sont pas
+# compilés ici, mais Cargo a besoin de leurs manifestes.
+COPY crates/android/Cargo.toml crates/android/
+COPY crates/uniffi-bindgen/Cargo.toml crates/uniffi-bindgen/
+COPY crates/relay/Cargo.toml crates/relay/
+RUN for c in domain application infrastructure presentation android; do \
         mkdir -p crates/$c/src && echo "" > crates/$c/src/lib.rs; \
     done \
-    && mkdir -p crates/bin/src && echo "fn main() {}" > crates/bin/src/main.rs \
-    && cargo build --release --locked \
+    && for c in bin uniffi-bindgen relay; do \
+        mkdir -p crates/$c/src && echo "fn main() {}" > crates/$c/src/main.rs; \
+    done \
+    && cargo build --release --locked -p fonderie-stellaire \
     && rm -rf crates/*/src
 COPY crates crates
 # Autre relais de synchronisation (vide : relais officiel).

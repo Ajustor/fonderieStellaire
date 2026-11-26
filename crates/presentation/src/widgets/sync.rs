@@ -172,7 +172,7 @@ pub fn render(
         .border_style(theme::bold(border))
         .title(
             Line::from(Span::styled(
-                " ⇅ SYNCHRONISATION ",
+                " ↕ SYNCHRONISATION ",
                 theme::bold(theme::GOLD),
             ))
             .centered(),

@@ -491,7 +491,7 @@ impl App {
                 self.toasts.push(
                     now,
                     theme::CYAN,
-                    "⇅ Partie synchronisée",
+                    "↕ Partie synchronisée",
                     "Reprise depuis ton autre appareil (l'ancienne est gardée en .bak)",
                 );
             }
@@ -547,13 +547,13 @@ impl App {
             SyncEvent::Linked { .. } => self.toasts.push(
                 now,
                 theme::GREEN,
-                "⇅ Lien créé",
+                "↕ Lien créé",
                 "Scanne le QR code avec ton autre appareil",
             ),
             SyncEvent::Joined { .. } => self.toasts.push(
                 now,
                 theme::GREEN,
-                "⇅ Appareils liés",
+                "↕ Appareils liés",
                 "La partie la plus jouée est gardée sur les deux",
             ),
             SyncEvent::Unlinked => {
@@ -561,7 +561,7 @@ impl App {
                 self.toasts.push(
                     now,
                     theme::GREY,
-                    "⇅ Appareil délié",
+                    "↕ Appareil délié",
                     "Ta partie reste sur cet appareil",
                 );
             }
@@ -2002,7 +2002,7 @@ impl App {
                         0.0,
                         now,
                         Kind::Info,
-                        "⇅ Cet appareil n'est plus synchronisé : ton ancienne partie reste sur les autres.",
+                        "↕ Cet appareil n'est plus synchronisé : ton ancienne partie reste sur les autres.",
                     );
                 }
             }
