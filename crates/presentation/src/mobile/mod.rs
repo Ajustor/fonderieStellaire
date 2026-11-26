@@ -128,6 +128,7 @@ pub enum Detail {
     Perk(usize),
     Constellation(usize),
     Relic(usize),
+    Achievement(usize),
 }
 
 /// Écrans ouverts depuis le menu Cosmos.
@@ -243,7 +244,74 @@ pub struct MobileUi {
     pub mega_sel: usize,
 }
 
+/// Version tactile d'un message qui cite des touches : « [Z] pour décider »
+/// devient « (Cosmos) pour décider », « [C] vite ! » devient « touche-la vite ! ».
+pub fn touch_text(s: &str) -> String {
+    if !s.contains('[') {
+        return s.to_string();
+    }
+    let s = screens::touchify(s)
+        .replace("Capture-la [C]", "Touche-la")
+        .replace("[C]", "touche-la");
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s.as_str();
+    while let Some(start) = rest.find('[') {
+        let Some(len) = rest[start..].find(']') else {
+            break;
+        };
+        let key = &rest[start + 1..start + len];
+        let label = match key {
+            "E" => "(Améliorer)",
+            "D" | "U" | "L" | "V" | "G" | "X" | "H" | "Z" | "W" | "Y" => "(Cosmos)",
+            "P" => "(Fonderie)",
+            "A" | "T" | "M" => "(Usines)",
+            "I" | "R" => "(Plus)",
+            k if k.chars().count() <= 8 && !k.contains(' ') => "",
+            _ => {
+                out.push_str(&rest[..start + len + 1]);
+                rest = &rest[start + len + 1..];
+                continue;
+            }
+        };
+        out.push_str(&rest[..start]);
+        out.push_str(label);
+        rest = &rest[start + len + 1..];
+    }
+    out.push_str(rest);
+    let mut tidy = out.split_whitespace().collect::<Vec<_>>().join(" ");
+    for (a, b) in [(" )", ")"), ("( ", "("), (" ,", ","), (" .", ".")] {
+        tidy = tidy.replace(a, b);
+    }
+    tidy.trim_end_matches([' ', ':']).to_string()
+}
+
 /// Délai d'un appui long (fiche détail) puis cadence des achats en rafale.
 pub const LONG_PRESS: f64 = 0.45;
 pub const REPEAT_START: f64 = 0.35;
 pub const REPEAT_EVERY: f64 = 0.09;
+
+#[cfg(test)]
+mod tests {
+    use super::touch_text;
+
+    #[test]
+    fn keys_become_touch_hints() {
+        assert_eq!(
+            touch_text("● Une comète approche ! [C] pour la capturer"),
+            "● Une comète approche ! touche-la pour la capturer"
+        );
+        assert_eq!(
+            touch_text("Orage : [Z] pour décider"),
+            "Orage : (Cosmos) pour décider"
+        );
+        assert_eq!(
+            touch_text("Achète-le à l'Atelier stellaire [E] avec des fragments"),
+            "Achète-le à l'Atelier stellaire (Améliorer) avec des fragments"
+        );
+        assert_eq!(
+            touch_text("La Carte stellaire s'ouvre [X]"),
+            "La Carte stellaire s'ouvre (Cosmos)"
+        );
+        assert_eq!(touch_text("rien à changer"), "rien à changer");
+    }
+}

@@ -33,6 +33,7 @@ pub const INFOS: usize = 6;
 pub const OPTIONS: usize = 7;
 pub const SAVE: usize = 8;
 pub const FOUNDRY: usize = 9;
+pub const ACHIEVEMENTS: usize = 18;
 
 /// Hauteur de l'en-tête commun (titre, compteur, ressources, progression).
 pub const HEADER_H: u16 = 6;
@@ -70,7 +71,7 @@ pub fn sub_tabs(snap: &GameSnapshot, tab: Option<Tab>) -> Vec<&'static str> {
             }
             v
         }
-        Some(Tab::More) => vec!["Journal", "Infos", "Options", "Sauvegarde"],
+        Some(Tab::More) => vec!["Journal", "Progrès", "Succès", "Options", "Sauver"],
         _ => Vec::new(),
     }
 }
@@ -82,6 +83,7 @@ fn atelier_unlocked(snap: &GameSnapshot) -> bool {
 /// Les textes du jeu citent des touches : version tactile.
 pub fn touchify(s: &str) -> String {
     s.replace("avec [1] à [6]", "dans la palette en bas")
+        .replace("[C] pour la capturer", "touche-la pour la capturer")
         .replace("[D] démolir", "Démolir")
         .replace("Maintenir [Espace]", "Maintenir le doigt")
         .replace("maintenir [Espace]", "maintenir le doigt")
@@ -140,7 +142,8 @@ pub fn render(
         (Tab::Cosmos, _) => COSMOS,
         (Tab::More, 0) => JOURNAL,
         (Tab::More, 1) => INFOS,
-        (Tab::More, 2) => OPTIONS,
+        (Tab::More, 2) => ACHIEVEMENTS,
+        (Tab::More, 3) => OPTIONS,
         (Tab::More, _) => SAVE,
     };
     m.screen = screen;
@@ -160,6 +163,7 @@ pub fn render(
             retitle(buf, content, " Journal ", "glisser pour remonter ");
         }
         INFOS => render_infos(buf, content, ctx, m),
+        ACHIEVEMENTS => render_achievements(buf, content, ctx, m),
         OPTIONS => render_options(buf, content, ctx, m),
         _ => render_save(buf, content, m, view.version),
     }
@@ -233,7 +237,11 @@ fn render_sub_tabs(
 ) {
     // Largeur selon le libellé, l'espace restant réparti également.
     let n = subs.len() as u16;
-    let natural: Vec<u16> = subs.iter().map(|s| s.chars().count() as u16 + 4).collect();
+    let mut natural: Vec<u16> = subs.iter().map(|s| s.chars().count() as u16 + 4).collect();
+    if natural.iter().sum::<u16>() > row.width {
+        // Serré : libellé collé à la bordure.
+        natural = subs.iter().map(|s| s.chars().count() as u16 + 2).collect();
+    }
     let sum: u16 = natural.iter().sum();
     let widths: Vec<u16> = if sum <= row.width {
         let extra = row.width - sum;
@@ -1405,16 +1413,35 @@ fn render_cosmos(buf: &mut Buffer, area: Rect, ctx: &Ctx, m: &mut MobileUi) {
 // Plus : Infos, Options, Sauvegarde
 // ----------------------------------------------------------------------
 
+/// Une ligne de courbe (blocs ▁…█) ne se renvoie pas à la ligne : on la coupe.
+fn is_chart(l: &str) -> bool {
+    l.chars().any(|c| ('\u{2581}'..='\u{2588}').contains(&c))
+}
+
 fn render_infos(buf: &mut Buffer, area: Rect, ctx: &Ctx, m: &mut MobileUi) {
     let width = area.width.saturating_sub(3) as usize;
+    let all = codex::lines(ctx);
+    // Progression, statistiques et mécaniques ; les succès ont leur écran.
+    let achievements = all.iter().position(|(l, _)| l.starts_with("SUCCÈS"));
+    let mechanics = all.iter().position(|(l, _)| l.starts_with("COMMENT"));
     let mut lines: Vec<(String, Style)> = Vec::new();
-    for (text, style) in codex::lines(ctx) {
-        if text.is_empty() {
-            lines.push((String::new(), style));
+    for (k, (text, style)) in all.iter().enumerate() {
+        let in_achievements = match (achievements, mechanics) {
+            (Some(a), Some(c)) => k >= a && k < c,
+            (Some(a), None) => k >= a,
+            _ => false,
+        };
+        if in_achievements || text.contains("Raccourcis") {
             continue;
         }
-        for l in draw::wrap(&touchify(&text), width) {
-            lines.push((l, style));
+        if text.is_empty() {
+            lines.push((String::new(), *style));
+        } else if is_chart(text) {
+            lines.push((draw::truncate(text, width), *style));
+        } else if let Some(t) = super::cosmos::strip_keys(text) {
+            for l in draw::wrap(&t, width) {
+                lines.push((l, *style));
+            }
         }
     }
     set_scroll_max(m, INFOS, lines.len() as u16, area.height);
@@ -1435,6 +1462,63 @@ fn render_infos(buf: &mut Buffer, area: Rect, ctx: &Ctx, m: &mut MobileUi) {
         );
     }
     scrollbar(buf, area, scroll, m.scroll_max[INFOS]);
+}
+
+/// Succès : une grille de badges, toucher un badge montre sa condition.
+fn render_achievements(buf: &mut Buffer, area: Rect, ctx: &Ctx, m: &mut MobileUi) {
+    let snap = ctx.snap;
+    let head = format!(
+        "★ {}/{} · +{} de production",
+        snap.achievements_unlocked,
+        snap.achievements_total,
+        fmt::percent(
+            snap.achievements_unlocked as f64 * domain::catalog::balance::ACHIEVEMENT_BONUS
+        )
+    );
+    draw::text(
+        buf,
+        area.x + 1,
+        area.y,
+        &head,
+        theme::bold(theme::GOLD),
+        area.right(),
+    );
+    let list = Rect::new(
+        area.x,
+        area.y + 2,
+        area.width,
+        area.height.saturating_sub(2),
+    );
+    let per_row = 6u16;
+    let tile_w = list.width.saturating_sub(2) / per_row;
+    let n = ctx.catalog.achievements.len() as u16;
+    let rows = n.div_ceil(per_row);
+    set_scroll_max(m, ACHIEVEMENTS, rows * BUTTON_H, list.height);
+    let scroll = m.scroll[ACHIEVEMENTS];
+    for i in 0..n {
+        let Some(r) = place(list, scroll, (i / per_row) * BUTTON_H, BUTTON_H) else {
+            continue;
+        };
+        let x = r.x + 1 + (i % per_row) * tile_w;
+        let tile = Rect::new(x, r.y, tile_w, BUTTON_H);
+        let done = snap.achievements.get(i as usize).copied().unwrap_or(false);
+        let (mark, color) = if done {
+            ("★", theme::GOLD)
+        } else {
+            ("○", theme::BAR_EMPTY)
+        };
+        button(
+            buf,
+            &mut m.hits,
+            m.press,
+            tile,
+            "",
+            mark,
+            color,
+            Some(Hit::Details(Detail::Achievement(i as usize))),
+        );
+    }
+    scrollbar(buf, list, scroll, m.scroll_max[ACHIEVEMENTS]);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1573,6 +1657,23 @@ fn render_save(buf: &mut Buffer, area: Rect, m: &mut MobileUi, version: &str) {
 
 fn detail_lines(ctx: &Ctx, d: Detail, width: usize) -> (String, Vec<(String, Style)>) {
     match d {
+        Detail::Achievement(i) => {
+            let Some(a) = ctx.catalog.achievements.get(i) else {
+                return ("Succès".into(), Vec::new());
+            };
+            let done = ctx.snap.achievements.get(i).copied().unwrap_or(false);
+            let mut lines: Vec<(String, Style)> = draw::wrap(&touchify(a.description), width)
+                .into_iter()
+                .map(|l| (l, theme::fg(theme::TEXT)))
+                .collect();
+            lines.push((String::new(), Style::default()));
+            lines.push(if done {
+                ("★ Obtenu".into(), theme::bold(theme::GOLD))
+            } else {
+                ("○ Pas encore".into(), theme::fg(theme::GREY))
+            });
+            (a.name.to_string(), lines)
+        }
         Detail::Relic(i) => {
             let name = ctx.catalog.relics.get(i).map(|r| r.name).unwrap_or("?");
             let shown = if ctx.snap.relics.get(i).is_some_and(|v| v.rarity.is_some()) {

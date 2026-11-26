@@ -99,6 +99,8 @@ pub struct CometVisual {
 }
 
 pub struct Visuals {
+    /// Mode mobile : textes tactiles (bannière de comète…).
+    pub touch: bool,
     pub rng: FxRng,
     pub particles: ParticleSystem,
     pub floaters: Vec<Floater>,
@@ -158,6 +160,7 @@ pub struct Visuals {
 impl Visuals {
     pub fn new(upgrade_count: usize, seed: u64) -> Self {
         Visuals {
+            touch: false,
             rng: FxRng::new(seed),
             particles: ParticleSystem::new(MAX_PARTICLES, seed ^ 0xABCD),
             floaters: Vec::with_capacity(MAX_FLOATERS),

@@ -325,6 +325,9 @@ impl App {
     /// Désactive l'écran « terminal trop petit » (mode mobile : la taille est connue).
     pub fn set_mobile(&mut self, mobile: bool) {
         self.mobile = mobile.then(crate::mobile::MobileUi::default);
+        self.journal.touch = mobile;
+        self.toasts.touch = mobile;
+        self.vis.touch = mobile;
     }
 
     #[cfg(feature = "terminal")]

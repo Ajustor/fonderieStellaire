@@ -163,12 +163,16 @@ fn sub_tabs_render() {
     assert!(screen.contains("libres"), "bandeau des fragments");
 
     app.mobile_select_tab(Tab::More);
-    for i in 0..4 {
+    for i in 0..5 {
         let r = find(&app, |h| *h == Hit::SubTab(i)).expect("sous-onglet");
         tap(&mut app, r);
         let screen = settle(&mut app, 44, 43);
-        if i == 3 {
-            assert!(screen.contains("Exporter"));
+        println!("{screen}");
+        match i {
+            1 => assert!(screen.contains("PROGRESSION")),
+            2 => assert!(screen.contains("★ 2/55") || screen.contains("2/55")),
+            4 => assert!(screen.contains("Exporter")),
+            _ => {}
         }
     }
 }
