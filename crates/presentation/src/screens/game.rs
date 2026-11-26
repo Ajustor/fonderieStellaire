@@ -65,8 +65,8 @@ pub fn render(
     help_bar::render(
         buf,
         layout.help,
-        ctx.snap.buy_mode,
-        ctx.snap.hold_harvest,
+        ctx.snap,
+        &mut vis.help_seen,
         vis.mode_flash,
         ctx.now,
     );

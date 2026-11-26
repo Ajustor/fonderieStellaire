@@ -141,6 +141,8 @@ pub struct Visuals {
     /// Reliques trouvées : la carte affichée et celles qui attendent leur tour.
     pub relic_card: Option<crate::widgets::relics::RelicCard>,
     pub relic_queue: std::collections::VecDeque<crate::widgets::relics::RelicCard>,
+    /// Touches affichées dans la barre d'aide et depuis quand.
+    pub help_seen: Vec<(&'static str, f64)>,
     /// Systèmes tout juste explorés : (instant, système), pour l'onde sur la carte.
     pub map_pops: Vec<(f64, usize)>,
     /// Étape du Grand Attracteur qui vient d'être achevée : (instant, étape).
@@ -191,6 +193,7 @@ impl Visuals {
             ending: None,
             attractor_pop: None,
             map_pops: Vec::new(),
+            help_seen: Vec::new(),
             relic_card: None,
             relic_queue: std::collections::VecDeque::new(),
             sun_scale: 1.0,

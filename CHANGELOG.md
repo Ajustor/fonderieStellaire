@@ -1,5 +1,18 @@
 # Journal des versions
 
+## v0.12.1 — Barre d'aide contextuelle
+
+- La barre du bas **n'affiche plus que les actions possibles maintenant** :
+  `[C] Comète !` quand une comète passe, `[Z] Événement !` quand un dilemme
+  attend, `[P] Nova` quand une Supernova rapporte, `[U] Crunch` quand le Big
+  Crunch est possible, `[A] Tout` quand une amélioration est abordable, et
+  l'Atelier, les Défis, le Labo, les univers, la carte ou les reliques une fois
+  débloqués. Les autres touches marchent toujours.
+- Une action qui vient d'apparaître **brille un instant** ; les urgences
+  (comète, événement) restent mises en évidence.
+- `[S] Sauver` et `[F] Effets` quittent la barre (sauvegarde automatique,
+  effets dans les Options `[R]`) : les touches restent actives.
+
 ## v0.12.0 — Acte III, fin : Événements cosmiques et Convergence
 
 ### Nouveautés
