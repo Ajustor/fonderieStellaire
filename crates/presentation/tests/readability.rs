@@ -194,7 +194,13 @@ fn no_text_is_cut_anywhere() {
     report.extend(audit("atelier", late.clone(), &[Intent::Shop], 20));
     report.extend(audit("défis", late.clone(), &[Intent::Challenges], 6));
     report.extend(audit("labo", late.clone(), &[Intent::Lab], 13));
-    report.extend(audit("infos", late.clone(), &[Intent::Info], 60));
+    let mut stats = late.clone();
+    stats.history = (0..2000)
+        .map(|i| (i as f64 * 900.0, 1.0 + i as f32 * 0.01))
+        .collect();
+    stats.best_production = 9.9e21;
+    stats.milestones = vec![3600.0, 90_000.0, 900_000.0, 2_000_000.0, 3_000_000.0];
+    report.extend(audit("infos", stats, &[Intent::Info], 60));
     report.extend(audit("supernova", late.clone(), &[Intent::Supernova], 0));
     report.extend(audit("big crunch", late.clone(), &[Intent::BigCrunch], 0));
     report.extend(audit("univers", late.clone(), &[Intent::Universes], 0));

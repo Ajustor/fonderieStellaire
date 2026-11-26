@@ -47,6 +47,8 @@ pub enum GameEvent {
     /// Le joueur a effacé sa partie pour recommencer.
     NewGame,
     FrameRateChanged(u32),
+    /// 0 : normales, 1 : daltonien, 2 : contraste élevé.
+    ColorModeChanged(u8),
 }
 
 pub struct GameService {
@@ -56,6 +58,8 @@ pub struct GameService {
     reduced_effects: bool,
     /// Images par seconde choisies (0 : par défaut, 30).
     frame_rate: u32,
+    /// Couleurs : 0 normales, 1 daltonien, 2 contraste élevé.
+    color_mode: u8,
     repo: Box<dyn SaveRepository>,
     clock: Box<dyn Clock>,
     rng: Box<dyn RandomSource>,
@@ -81,6 +85,7 @@ impl GameService {
             buy_mode: BuyMode::One,
             reduced_effects: false,
             frame_rate: 0,
+            color_mode: 0,
             repo,
             clock,
             rng,
@@ -125,6 +130,7 @@ impl GameService {
                 self.state = GameState::new(&self.catalog);
                 self.reduced_effects = data.reduced_effects;
                 self.frame_rate = data.frame_rate;
+                self.color_mode = data.color_mode.min(2);
                 self.save()?;
                 out.push(GameEvent::SaveWiped);
             }
@@ -132,6 +138,7 @@ impl GameService {
                 self.state = data.to_state(&self.catalog);
                 self.reduced_effects = data.reduced_effects;
                 self.frame_rate = data.frame_rate;
+                self.color_mode = data.color_mode.min(2);
                 let now = self.clock.now_unix_secs();
                 let elapsed = now.saturating_sub(data.last_saved);
                 if data.last_saved > 0 && elapsed >= MIN_OFFLINE_SECS {
@@ -158,6 +165,7 @@ impl GameService {
             self.reduced_effects,
         );
         data.frame_rate = self.frame_rate;
+        data.color_mode = self.color_mode;
         self.repo.save(&data)?;
         self.autosave_timer = 0.0;
         Ok(())
@@ -217,6 +225,11 @@ impl GameService {
                     .resolve_event(&self.catalog, choice, roll, &mut ev)
             }
             Command::StartConvergence => self.state.start_convergence(&self.catalog, &mut ev),
+            Command::ToggleAutoFleets => self.state.toggle_auto_fleets(&mut ev),
+            Command::CycleColorMode => {
+                self.color_mode = (self.color_mode + 1) % 3;
+                out.push(GameEvent::ColorModeChanged(self.color_mode));
+            }
             Command::CycleFrameRate => {
                 self.frame_rate = match self.frame_rate {
                     0 | 30 => 60,
@@ -484,6 +497,13 @@ impl GameService {
             .convergence
             .map(|left| (left, domain::cosmic::CONVERGENCE_SECS));
         snap.converged = st.converged;
+        snap.auto_fleets = st.auto_fleets;
+        snap.auto_fleets_unlocked = st.auto_fleets_unlocked();
+        snap.history_long.clear();
+        snap.history_long.extend(st.history.iter().copied());
+        snap.best_production = st.best_production;
+        snap.milestones = st.milestones;
+        snap.color_mode = self.color_mode;
         snap.relic_sets = domain::RelicSet::ALL
             .iter()
             .map(|&s| {

@@ -163,6 +163,7 @@ impl App {
             Kind::Info,
             "✦ Bienvenue dans la Fonderie Stellaire !",
         );
+        app.title.report = app.absence_report(&startup);
         for ev in startup {
             app.react(ev);
         }
@@ -623,6 +624,11 @@ impl App {
                     self.command(Command::StartConvergence);
                     return;
                 }
+                Intent::BuyAll => {
+                    self.ui.starmap = Some(map);
+                    self.command(Command::ToggleAutoFleets);
+                    return;
+                }
                 Intent::StarMap | Intent::Escape | Intent::No | Intent::Quit => {
                     self.ui.starmap = None;
                     return;
@@ -645,8 +651,9 @@ impl App {
                         self.ui.options_armed = false;
                     }
                     Intent::Buy | Intent::Yes => match self.ui.options_sel {
-                        0 => self.command(Command::CycleFrameRate),
-                        1 => self.command(Command::ToggleReducedEffects),
+                        0 => self.command(Command::CycleColorMode),
+                        1 => self.command(Command::CycleFrameRate),
+                        2 => self.command(Command::ToggleReducedEffects),
                         _ if self.ui.options_armed => {
                             self.ui.options = None;
                             self.ui.options_armed = false;
@@ -1230,6 +1237,105 @@ impl App {
         ]
     }
 
+    /// Ce qui s'est passé jeu fermé, résumé pour l'écran titre.
+    fn absence_report(&self, startup: &[GameEvent]) -> Vec<(char, String, crate::fx::Rgb)> {
+        use domain::RelicOutcome;
+        let catalog = self.service.catalog();
+        let mut out: Vec<(char, String, crate::fx::Rgb)> = Vec::new();
+        let (mut ok, mut failed, mut relics, mut achievements) = (0, 0, Vec::new(), 0);
+        for ev in startup {
+            let GameEvent::Domain(d) = ev else { continue };
+            match d {
+                DomainEvent::ExpeditionReturned { success: true, .. } => ok += 1,
+                DomainEvent::ExpeditionReturned { success: false, .. } => failed += 1,
+                DomainEvent::RelicFound {
+                    relic,
+                    rarity,
+                    outcome,
+                } => {
+                    let name = catalog.relic(*relic).map(|r| r.name).unwrap_or("?");
+                    let what = match outcome {
+                        RelicOutcome::New => "nouvelle",
+                        RelicOutcome::Upgraded => "améliorée",
+                        RelicOutcome::Shard => "Éclat",
+                    };
+                    relics.push((
+                        format!(
+                            "Relique : {name} ({}, {what})",
+                            domain::relic::RARITY_NAMES[(*rarity as usize).min(3)]
+                        ),
+                        crate::widgets::relics::rarity_color(*rarity),
+                    ));
+                }
+                DomainEvent::LabResearchDone { node } => out.push((
+                    '✶',
+                    format!(
+                        "Recherche terminée : {}",
+                        catalog.lab_node(*node).map(|l| l.name).unwrap_or("?")
+                    ),
+                    crate::fx::Rgb(170, 90, 255),
+                )),
+                DomainEvent::AttractorStageDone { stage } => out.push((
+                    '◆',
+                    format!(
+                        "Grand Attracteur : {} achevé",
+                        catalog
+                            .attractor_stage(*stage)
+                            .map(|s| s.name)
+                            .unwrap_or("?")
+                    ),
+                    theme::GOLD,
+                )),
+                DomainEvent::ConvergenceDone => {
+                    out.push(('✶', "La Convergence est accomplie !".into(), theme::GOLD))
+                }
+                DomainEvent::StarMapCompleted => {
+                    out.push(('▸', "Toute la carte est explorée !".into(), theme::GOLD))
+                }
+                DomainEvent::CosmicEventExpired { .. } => out.push((
+                    '✹',
+                    "Un événement cosmique est passé sans réponse".into(),
+                    theme::GREY,
+                )),
+                DomainEvent::AchievementUnlocked { .. } => achievements += 1,
+                _ => {}
+            }
+        }
+        if ok + failed > 0 {
+            out.insert(
+                0,
+                (
+                    '▸',
+                    format!(
+                        "{} expédition(s) rentrée(s) : {ok} réussie(s), {failed} échec(s)",
+                        ok + failed
+                    ),
+                    theme::CYAN,
+                ),
+            );
+        }
+        let n = relics.len();
+        for (text, color) in relics.into_iter().take(3) {
+            out.push(('◆', text, color));
+        }
+        if n > 3 {
+            out.push((
+                '◆',
+                format!("… et {} autre(s) relique(s)", n - 3),
+                theme::MUTED,
+            ));
+        }
+        if achievements > 0 {
+            out.push((
+                '★',
+                format!("{achievements} succès débloqué(s)"),
+                theme::GOLD,
+            ));
+        }
+        out.truncate(8);
+        out
+    }
+
     /// Générique de la fin de l'Acte III.
     fn credits_act_three(&self) -> Vec<CreditLine> {
         let s = &self.snap;
@@ -1362,6 +1468,14 @@ impl App {
                 self.ui = crate::ui::Ui::default();
                 self.title = TitleScreen::new(now, seed() ^ 0x7177);
                 self.screen = Screen::Title;
+            }
+            GameEvent::ColorModeChanged(mode) => {
+                self.toasts.push(
+                    self.now,
+                    theme::CYAN,
+                    "Options",
+                    format!("Couleurs : {}", crate::fx::palette::mode_name(mode)),
+                );
             }
             GameEvent::FrameRateChanged(fps) => {
                 self.toasts.push(
@@ -1514,6 +1628,19 @@ impl App {
                         "Pas encore trouvée"
                     };
                     self.toasts.push(now, theme::GREY, "Reliques", body);
+                }
+                PurchaseTarget::Expedition(0) => {
+                    self.toasts.push(
+                        now,
+                        theme::GREY,
+                        "Pilote automatique",
+                        format!(
+                            "Se débloque à {} systèmes explorés ({}/{})",
+                            domain::state::AUTO_FLEETS_EXPLORED,
+                            self.snap.explored,
+                            domain::state::AUTO_FLEETS_EXPLORED
+                        ),
+                    );
                 }
                 PurchaseTarget::Expedition(system) => {
                     let body = if self.snap.fleets.len() >= self.snap.fleets_max {
@@ -2240,6 +2367,19 @@ impl App {
                 let what = if equipped { "équipée" } else { "rangée" };
                 self.log(Kind::Info, format!("◆ {name} {what}"));
             }
+            DomainEvent::AutoFleetsToggled { enabled } => {
+                let (title, body) = if enabled {
+                    (
+                        "▸ Pilote automatique activé",
+                        "Les flottes repartent toutes seules, même jeu fermé",
+                    )
+                } else {
+                    ("▸ Pilote automatique coupé", "Tu reprends les commandes")
+                };
+                self.toasts
+                    .push(now, crate::fx::Rgb(120, 230, 255), title, body);
+                self.log(Kind::Info, title.to_string());
+            }
             DomainEvent::StarMapCompleted => {
                 self.log(
                     Kind::Achievement,
@@ -2491,6 +2631,8 @@ impl App {
             self.render_update_status(buf, area);
         }
         self.render_restart(buf, area);
+        // Accessibilité : couleurs adaptées, appliquées à tout l'écran.
+        crate::fx::palette::apply(buf, self.snap.color_mode);
         if self.ui.debug {
             self.render_debug(buf, area);
         }

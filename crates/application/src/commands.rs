@@ -49,4 +49,8 @@ pub enum Command {
     ResolveEvent(usize),
     /// Lance la Convergence.
     StartConvergence,
+    /// Active / coupe le pilote automatique des flottes.
+    ToggleAutoFleets,
+    /// Couleurs : normales → daltonien → contraste élevé.
+    CycleColorMode,
 }

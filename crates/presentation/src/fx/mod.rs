@@ -5,6 +5,7 @@ pub mod color;
 pub mod easing;
 pub mod effects;
 pub mod noise;
+pub mod palette;
 pub mod particles;
 pub mod rng;
 pub mod timeline;

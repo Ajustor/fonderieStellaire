@@ -177,7 +177,8 @@ fn title_screen_renders_logo_and_offline_gains() {
     let text = render(&mut app, 100, 30);
     println!("{text}");
     assert!(text.contains("███████╗"));
-    assert!(text.contains("Pendant ton absence (2h 14m)"));
+    assert!(text.contains("PENDANT TON ABSENCE (2h 14m)"), "{text}");
+    assert!(text.contains("Ta fonderie a produit"));
     assert!(text.contains("Appuie sur une touche pour commencer"));
 }
 
@@ -1001,14 +1002,20 @@ fn options_and_new_game_with_double_confirmation() {
     assert!(text.contains("Images par seconde"));
     assert!(text.contains("Recommencer une nouvelle partie"));
     assert!(text.contains("mises à jour automatiques"));
+    // Couleurs : normales → daltonien.
+    assert!(text.contains("Couleurs"));
+    app.on_intent(Intent::Buy);
+    app.update(0.033);
+    assert_eq!(app.snapshot().color_mode, 1);
     // Images par seconde : 30 → 60 → 20.
+    app.on_intent(Intent::Down);
     app.on_intent(Intent::Buy);
     app.update(0.033);
     assert_eq!(app.snapshot().frame_rate, 60);
     app.on_intent(Intent::Buy);
     app.update(0.033);
     assert_eq!(app.snapshot().frame_rate, 20);
-    // Recommencer : une première Entrée arme, Échap annule.
+    // Recommencer : une première Entrée arme, changer de ligne désarme.
     app.on_intent(Intent::Down);
     app.on_intent(Intent::Down);
     app.on_intent(Intent::Buy);
@@ -1252,4 +1259,48 @@ fn help_bar_only_shows_what_is_possible_now() {
         "{bar}"
     );
     assert!(!bar.contains("[U]") && !bar.contains("[X]"));
+}
+
+#[test]
+fn v0_13_absence_report_stats_and_colors() {
+    // Dix heures d'absence : recherche, chantier et flottes ont avancé.
+    let mut save = advanced_save();
+    save.last_saved -= 10 * 3600;
+    save.big_bangs = 1;
+    save.attractor = 7;
+    save.map_seed = 42;
+    save.crunches = 10;
+    save.research = "lab_comet_net".into();
+    save.research_left = 600.0;
+    save.explored = (0..12).collect();
+    save.auto_fleets = true;
+    save.history = (0..300)
+        .map(|i| (i as f64 * 900.0, 2.0 + i as f32 * 0.04))
+        .collect();
+    save.best_production = 1e14;
+    save.milestones = vec![3600.0, 20000.0, 0.0, 0.0, 0.0];
+    let mut app = app_with(Some(save));
+    app.set_time(1.0);
+    app.on_intent(Intent::Other);
+    app.set_time(9.0);
+    let text = render(&mut app, 100, 30);
+    println!("{text}");
+    assert!(text.contains("PENDANT TON ABSENCE (10h"), "{text}");
+    assert!(
+        text.contains("Recherche terminée : Filet à comètes"),
+        "{text}"
+    );
+    assert!(text.contains("expédition(s) rentrée(s)"), "{text}");
+
+    // Infos : la courbe de production et les étapes.
+    app.on_intent(Intent::Other);
+    app.set_time(10.0);
+    app.on_intent(Intent::Info);
+    app.set_time(11.0);
+    let text = render(&mut app, 100, 30);
+    println!("{text}");
+    assert!(text.contains("STATISTIQUES"));
+    assert!(text.contains('█'), "courbe dessinée");
+    assert!(text.contains("Record de production"));
+    assert!(text.contains("1re Supernova : 1h 00m"));
 }

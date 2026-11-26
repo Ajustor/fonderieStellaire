@@ -314,4 +314,14 @@ pub struct GameSnapshot {
     pub convergence_ready: bool,
     pub convergence: Option<(f64, f64)>,
     pub converged: bool,
+    /// Pilote automatique des flottes.
+    pub auto_fleets: bool,
+    pub auto_fleets_unlocked: bool,
+    /// Historique de production sur toute la partie (temps de jeu, log10).
+    pub history_long: Vec<(f64, f32)>,
+    pub best_production: f64,
+    /// Temps de jeu des grandes étapes (0 : pas encore).
+    pub milestones: [f64; 5],
+    /// Couleurs : 0 normales, 1 daltonien, 2 contraste élevé.
+    pub color_mode: u8,
 }

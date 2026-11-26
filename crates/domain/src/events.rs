@@ -210,6 +210,10 @@ pub enum DomainEvent {
     ConvergenceStarted,
     /// Fin de l'Acte III.
     ConvergenceDone,
+    /// Pilote automatique des flottes activé ou coupé.
+    AutoFleetsToggled {
+        enabled: bool,
+    },
     /// Relique équipée ou rangée.
     RelicToggled {
         relic: crate::relic::RelicId,

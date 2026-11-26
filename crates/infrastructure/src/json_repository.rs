@@ -76,6 +76,11 @@ struct SaveFile {
     events_resolved: u32,
     convergence_left: f64,
     converged: bool,
+    auto_fleets: bool,
+    history: Vec<(f64, f32)>,
+    best_production: f64,
+    milestones: Vec<f64>,
+    color_mode: u8,
 }
 
 impl From<&SaveData> for SaveFile {
@@ -136,6 +141,11 @@ impl From<&SaveData> for SaveFile {
             events_resolved: d.events_resolved,
             convergence_left: d.convergence_left,
             converged: d.converged,
+            auto_fleets: d.auto_fleets,
+            history: d.history.clone(),
+            best_production: d.best_production,
+            milestones: d.milestones.clone(),
+            color_mode: d.color_mode,
         }
     }
 }
@@ -198,6 +208,11 @@ impl From<SaveFile> for SaveData {
             events_resolved: f.events_resolved,
             convergence_left: f.convergence_left,
             converged: f.converged,
+            auto_fleets: f.auto_fleets,
+            history: f.history,
+            best_production: f.best_production,
+            milestones: f.milestones,
+            color_mode: f.color_mode,
         }
     }
 }

@@ -88,6 +88,13 @@ pub struct SaveData {
     /// Convergence : secondes restantes (0 : aucune), achevée.
     pub convergence_left: f64,
     pub converged: bool,
+    /// Pilote automatique, historique de production, record, grandes étapes.
+    pub auto_fleets: bool,
+    pub history: Vec<(f64, f32)>,
+    pub best_production: f64,
+    pub milestones: Vec<f64>,
+    /// Couleurs : 0 normales, 1 daltonien, 2 contraste élevé.
+    pub color_mode: u8,
 }
 
 impl SaveData {
@@ -242,6 +249,11 @@ impl SaveData {
             events_resolved: state.events_resolved,
             convergence_left: state.convergence.unwrap_or(0.0),
             converged: state.converged,
+            auto_fleets: state.auto_fleets,
+            history: state.history.clone(),
+            best_production: state.best_production,
+            milestones: state.milestones.to_vec(),
+            color_mode: 0,
         }
     }
 
@@ -380,6 +392,12 @@ impl SaveData {
         s.events_resolved = self.events_resolved;
         s.convergence = (self.convergence_left > 0.0).then_some(self.convergence_left);
         s.converged = self.converged;
+        s.auto_fleets = self.auto_fleets;
+        s.history = self.history.clone();
+        s.best_production = self.best_production;
+        for (m, v) in s.milestones.iter_mut().zip(&self.milestones) {
+            *m = *v;
+        }
         s.expeditions_launched = self.expeditions_launched;
         // 0 (valeur par défaut) ou négatif : aucun chantier en cours.
         s.attractor_build = (self.attractor_left > 0.0).then_some(self.attractor_left);

@@ -34,6 +34,11 @@ use crate::upgrade::{Effect, UpgradeId};
 const ACHIEVEMENT_CHECK_INTERVAL: f64 = 1.0;
 /// Intervalle entre deux passages de l'automate d'achat.
 const AUTOBUY_INTERVAL: f64 = 1.0;
+/// Historique de production : un point par quart d'heure de jeu, au plus 2000.
+const HISTORY_STEP: f64 = 15.0 * 60.0;
+const HISTORY_MAX: usize = 2000;
+/// Systèmes explorés pour débloquer le pilote automatique des flottes.
+pub const AUTO_FLEETS_EXPLORED: usize = 10;
 /// Nombre maximal de générateurs achetés par passage de l'automate.
 const AUTOBUY_MAX_PER_TICK: usize = 10;
 
@@ -133,6 +138,15 @@ pub struct GameState {
     /// Convergence : secondes restantes si elle est en cours, et achevée ou non.
     pub convergence: Option<f64>,
     pub converged: bool,
+    /// Pilote automatique des flottes (après 10 systèmes explorés).
+    pub auto_fleets: bool,
+    /// Historique de la production (temps de jeu, log10 de la prod/s), un
+    /// point tous les quarts d'heure, et record de production.
+    pub history: Vec<(f64, f32)>,
+    pub best_production: f64,
+    /// Temps de jeu des grandes étapes (0 : pas encore) : 1re Supernova,
+    /// 1er Big Crunch, 1er Big Bang, fin de l'Acte II, fin de l'Acte III.
+    pub milestones: [f64; 5],
     /// Niveau de chaque Constellation.
     pub constellations: Vec<u32>,
     revealed: Vec<bool>,
@@ -197,6 +211,10 @@ impl GameState {
             events_resolved: 0,
             convergence: None,
             converged: false,
+            auto_fleets: false,
+            history: Vec::new(),
+            best_production: 0.0,
+            milestones: [0.0; 5],
             constellations: Vec::new(),
             revealed: Vec::new(),
             autobuy_timer: 0.0,
@@ -257,6 +275,20 @@ impl GameState {
         if self.converged || self.convergence.is_some_and(|l| !l.is_finite()) {
             self.convergence = None;
         }
+        self.history.retain(|(t, p)| t.is_finite() && p.is_finite());
+        if self.history.len() > HISTORY_MAX {
+            let extra = self.history.len() - HISTORY_MAX;
+            self.history.drain(..extra);
+        }
+        if !self.best_production.is_finite() || self.best_production < 0.0 {
+            self.best_production = 0.0;
+        }
+        for m in &mut self.milestones {
+            if !m.is_finite() || *m < 0.0 {
+                *m = 0.0;
+            }
+        }
+        self.auto_fleets &= self.auto_fleets_unlocked();
         // Carte stellaire : reconstruite depuis sa graine.
         if self.map_seed != 0 && self.map.systems.is_empty() {
             self.map = starmap::generate(self.map_seed);
@@ -947,6 +979,16 @@ impl GameState {
         if self.achievement_timer >= ACHIEVEMENT_CHECK_INTERVAL {
             self.achievement_timer = 0.0;
             self.run_lab_automation(catalog, events);
+            if self.auto_fleets {
+                self.run_auto_fleets(catalog, roll, events);
+            }
+            if self
+                .history
+                .last()
+                .is_none_or(|&(t, _)| self.play_time - t >= HISTORY_STEP)
+            {
+                self.record_history(catalog);
+            }
             self.check_achievements(catalog, events);
         }
     }
@@ -1026,6 +1068,7 @@ impl GameState {
         self.fragments += gained;
         self.fragments_this_run = 0.0;
         self.supernovas += 1;
+        self.mark_milestone(0);
         self.reset_run(catalog);
         events.push(DomainEvent::Supernova {
             fragments_gained: gained,
@@ -1084,7 +1127,7 @@ impl GameState {
         // Les recherches et le Grand Attracteur avancent en temps réel, même jeu fermé.
         self.advance_research(catalog, elapsed_secs, events);
         self.advance_attractor(catalog, elapsed_secs, events);
-        self.advance_expeditions(catalog, elapsed_secs, events);
+        self.advance_fleets_offline(catalog, elapsed_secs, events);
         self.advance_convergence(catalog, elapsed_secs, events);
         self.advance_boosts(elapsed_secs);
         if let Some((event, left)) = self.pending_event {
@@ -1106,6 +1149,7 @@ impl GameState {
             seconds: elapsed_secs,
             amount,
         });
+        self.record_history(catalog);
         // Les générateurs dévoilés pendant l'absence apparaissent sans annonce.
         self.revealed = catalog
             .generators
@@ -1222,6 +1266,7 @@ impl GameState {
             UniverseId::ORIGIN
         };
         self.reset_run(catalog);
+        self.mark_milestone(1);
         events.push(DomainEvent::BigCrunch {
             crunches: self.crunches,
         });
@@ -1324,6 +1369,7 @@ impl GameState {
             .unwrap_or(0);
         self.universe = UniverseId::ORIGIN;
         self.reset_run(catalog);
+        self.mark_milestone(2);
         events.push(DomainEvent::BigBang {
             particles_gained: gained,
             total_particles: self.particles,
@@ -1669,8 +1715,130 @@ impl GameState {
         }
         self.convergence = None;
         self.converged = true;
+        self.mark_milestone(4);
         self.check_achievements(catalog, events);
         events.push(DomainEvent::ConvergenceDone);
+    }
+
+    // ------------------------------------------------------------------
+    // Pilote automatique des flottes, historique, jalons
+    // ------------------------------------------------------------------
+
+    /// Le pilote automatique se débloque à 10 systèmes explorés.
+    pub fn auto_fleets_unlocked(&self) -> bool {
+        self.explored_count() >= AUTO_FLEETS_EXPLORED
+    }
+
+    pub fn toggle_auto_fleets(&mut self, events: &mut Vec<DomainEvent>) {
+        if !self.auto_fleets_unlocked() {
+            events.push(DomainEvent::PurchaseFailed {
+                target: PurchaseTarget::Expedition(0),
+            });
+            return;
+        }
+        self.auto_fleets = !self.auto_fleets;
+        events.push(DomainEvent::AutoFleetsToggled {
+            enabled: self.auto_fleets,
+        });
+    }
+
+    /// Cible du pilote : explorer d'abord (le plus sûr), sinon prospecter le
+    /// système exploré le plus dangereux (meilleures reliques).
+    pub fn auto_fleet_target(&self, catalog: &Catalog) -> Option<usize> {
+        let n = self.map.systems.len();
+        let unexplored = (1..n)
+            .filter(|&i| !self.is_explored(i) && self.can_launch_expedition(catalog, i))
+            .max_by(|&a, &b| {
+                self.expedition_chance_in(catalog, a)
+                    .partial_cmp(&self.expedition_chance_in(catalog, b))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+        unexplored.or_else(|| {
+            (1..n)
+                .filter(|&i| self.is_explored(i) && self.can_launch_expedition(catalog, i))
+                .max_by_key(|&i| self.map.systems[i].danger)
+        })
+    }
+
+    fn run_auto_fleets(&mut self, catalog: &Catalog, roll: f64, events: &mut Vec<DomainEvent>) {
+        let mut k = 0.0;
+        while self.fleets.len() < self.fleets_max() {
+            let Some(target) = self.auto_fleet_target(catalog) else {
+                break;
+            };
+            k += 1.0;
+            let r = (roll * 7.77 + k * 0.618_034).fract();
+            self.launch_expedition(catalog, target, r, events);
+        }
+    }
+
+    /// Jeu fermé : les flottes avancent ; en pilote automatique, elles
+    /// repartent à chaque retour, comme si le joueur était là.
+    fn advance_fleets_offline(
+        &mut self,
+        catalog: &Catalog,
+        secs: f64,
+        events: &mut Vec<DomainEvent>,
+    ) {
+        if !self.auto_fleets {
+            self.advance_expeditions(catalog, secs, events);
+            return;
+        }
+        let mut left = secs;
+        for step in 0..1000 {
+            let seed = (self.map_seed
+                ^ (self.expeditions_launched as u64).wrapping_mul(0x9E37_79B9))
+                as f64
+                / u64::MAX as f64;
+            self.run_auto_fleets(catalog, (seed + step as f64 * 0.137).fract(), events);
+            let next = self
+                .fleets
+                .iter()
+                .map(|f| f.left)
+                .fold(f64::INFINITY, f64::min);
+            if !next.is_finite() || next > left {
+                break;
+            }
+            let dt = next.max(1.0).min(left);
+            self.advance_expeditions(catalog, dt, events);
+            left -= dt;
+            if left <= 0.0 {
+                break;
+            }
+        }
+        if left > 0.0 {
+            self.advance_expeditions(catalog, left, events);
+        }
+        // Les flottes rentrées en dernier repartent aussitôt.
+        let seed = (self.map_seed ^ self.expeditions_launched as u64) as f64 / u64::MAX as f64;
+        self.run_auto_fleets(catalog, seed.fract(), events);
+    }
+
+    fn record_history(&mut self, catalog: &Catalog) {
+        let p = economy::steady_production(catalog, self);
+        if !p.is_finite() {
+            return;
+        }
+        self.best_production = self.best_production.max(p);
+        self.history
+            .push((self.play_time, (p.max(1.0)).log10() as f32));
+        if self.history.len() > HISTORY_MAX {
+            // On garde tout le début de la partie en ne gardant qu'un point
+            // sur deux dans la première moitié.
+            let half = self.history.len() / 2;
+            let kept: Vec<(f64, f32)> = self.history[..half].iter().step_by(2).copied().collect();
+            let rest = self.history.split_off(half);
+            self.history = kept;
+            self.history.extend(rest);
+        }
+    }
+
+    fn mark_milestone(&mut self, i: usize) {
+        if let Some(m) = self.milestones.get_mut(i) {
+            if *m <= 0.0 {
+                *m = self.play_time.max(1.0);
+            }
+        }
     }
 
     // ------------------------------------------------------------------
@@ -1964,6 +2132,7 @@ impl GameState {
         events.push(DomainEvent::AttractorStageDone { stage });
         self.check_achievements(catalog, events);
         if self.attractor_awakened(catalog) {
+            self.mark_milestone(3);
             events.push(DomainEvent::AttractorAwakened);
         }
     }
@@ -3569,5 +3738,53 @@ mod tests {
             after / before
         );
         assert!(s.has_achievement(c.achievement_by_key("converge").unwrap()));
+    }
+
+    #[test]
+    fn auto_fleets_relaunch_even_while_away() {
+        let c = Catalog::standard();
+        let (mut s, mut ev) = act_three(&c);
+        s.toggle_auto_fleets(&mut ev);
+        assert!(!s.auto_fleets, "il faut 10 systèmes explorés");
+        s.explored
+            .iter_mut()
+            .skip(1)
+            .take(10)
+            .for_each(|e| *e = true);
+        s.toggle_auto_fleets(&mut ev);
+        assert!(s.auto_fleets);
+        // Douze heures jeu fermé : les flottes enchaînent plusieurs voyages.
+        let before = s.expeditions_launched;
+        ev.clear();
+        s.apply_offline(&c, 12.0 * 3600.0, &mut ev);
+        let returned = ev
+            .iter()
+            .filter(|e| matches!(e, DomainEvent::ExpeditionReturned { .. }))
+            .count();
+        assert!(
+            s.expeditions_launched >= before + 4,
+            "{}",
+            s.expeditions_launched - before
+        );
+        assert!(returned >= 2, "{returned}");
+        assert_eq!(s.fleets.len(), s.fleets_max(), "elles sont reparties");
+    }
+
+    #[test]
+    fn history_and_milestones_are_recorded() {
+        let (c, mut s, mut ev) = setup();
+        s.owned[0] = 10;
+        for _ in 0..(40 * 60) {
+            s.tick(&c, 1.0, 0.5, &mut ev);
+        }
+        assert!(s.history.len() >= 2, "{}", s.history.len());
+        assert!(s.best_production > 0.0);
+        s.total_run = 1e12;
+        s.supernova(&c, &mut ev);
+        assert!(s.milestones[0] > 0.0);
+        let first = s.milestones[0];
+        s.total_run = 1e14;
+        s.supernova(&c, &mut ev);
+        assert_eq!(s.milestones[0], first, "la première seulement");
     }
 }

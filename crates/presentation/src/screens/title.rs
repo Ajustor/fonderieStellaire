@@ -11,6 +11,7 @@ use application::GameSnapshot;
 
 use crate::draw;
 use crate::fmt;
+use crate::fx::easing::ease_out_cubic;
 use crate::fx::effects;
 use crate::fx::rng::hash3;
 use crate::fx::{FxRng, Rgb};
@@ -66,6 +67,8 @@ pub struct TitleScreen {
     rng: FxRng,
     /// (secondes d'absence, poussière gagnée)
     pub offline: Option<(f64, f64)>,
+    /// Rapport d'absence : ce qui s'est passé jeu fermé (symbole, texte, couleur).
+    pub report: Vec<(char, String, crate::fx::Rgb)>,
     /// L'ancienne sauvegarde a été effacée (nouvel équilibrage) : on prévient.
     pub wiped: bool,
 }
@@ -86,6 +89,7 @@ impl TitleScreen {
             hyper,
             rng,
             offline: None,
+            report: Vec::new(),
             wiped: false,
         }
     }
@@ -206,7 +210,12 @@ impl TitleScreen {
 
         let big_logo = area.width >= 72 && area.height >= LOGO.len() as u16 + 10;
         let logo_h = if big_logo { LOGO.len() as u16 } else { 1 };
-        let offline_h = if self.offline.is_some() { 4 } else { 0 };
+        let report_w = area.width.saturating_sub(6).min(76);
+        let offline_h = if self.offline.is_some() {
+            self.report.len() as u16 + 4
+        } else {
+            0
+        };
         let notice_w = area.width.saturating_sub(6).min(72);
         let notice = if self.wiped {
             draw::wrap(WIPE_NOTICE, notice_w.saturating_sub(4) as usize)
@@ -290,32 +299,61 @@ impl TitleScreen {
         );
         y += 2;
 
-        // Gains hors-ligne.
+        // Rapport d'absence : la production défile jusqu'à son total, puis
+        // chaque nouvelle s'écrit à son tour.
         if let Some((secs, amount)) = self.offline {
-            let msg = format!(
-                "Pendant ton absence ({}), ta fonderie a produit {} ✦",
-                fmt::duration(secs),
-                fmt::short(amount)
-            );
-            let msg = draw::truncate(&msg, area.width.saturating_sub(6) as usize);
-            let w = msg.chars().count() as u16 + 4;
-            let rect = Rect::new(area.x + area.width.saturating_sub(w) / 2, y, w, 3);
-            let rect = area.intersection(rect);
             if sub_alpha > 0.0 {
+                let h = self.report.len() as u16 + 3;
+                let rect = area.intersection(Rect::new(
+                    area.x + area.width.saturating_sub(report_w) / 2,
+                    y,
+                    report_w,
+                    h,
+                ));
                 draw::clear(buf, rect);
+                let pulse = 0.5 + 0.5 * (now * 2.0).sin();
                 Block::default()
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded)
-                    .border_style(theme::fg(theme::PINK.dim(1.0 - sub_alpha)))
+                    .border_style(theme::fg(
+                        theme::PINK.lerp(theme::GOLD, pulse).dim(1.0 - sub_alpha),
+                    ))
+                    .title(
+                        ratatui::text::Line::from(ratatui::text::Span::styled(
+                            format!(" ✦ PENDANT TON ABSENCE ({}) ✦ ", fmt::duration(secs)),
+                            theme::bold(theme::GOLD.dim(1.0 - sub_alpha)),
+                        ))
+                        .centered(),
+                    )
                     .render(rect, buf);
+                let inner_w = rect.width.saturating_sub(4) as usize;
+                let since = (t - INTRO_END + 0.2).max(0.0);
+                let count = ease_out_cubic((since / 1.6).clamp(0.0, 1.0));
+                let prod = format!("Ta fonderie a produit {} ✦", fmt::short(amount * count));
                 draw::text(
                     buf,
                     rect.x + 2,
                     rect.y + 1,
-                    &msg,
+                    &draw::truncate(&prod, inner_w),
                     theme::bold(theme::GOLD.dim(1.0 - sub_alpha)),
                     rect.right().saturating_sub(1),
                 );
+                for (i, (symbol, text, color)) in self.report.iter().enumerate() {
+                    let start = 1.0 + i as f64 * 0.35;
+                    let line = format!("{symbol} {text}");
+                    let shown = crate::fx::effects::typewriter(&line, since - start, 60.0);
+                    if shown.is_empty() {
+                        continue;
+                    }
+                    draw::text(
+                        buf,
+                        rect.x + 2,
+                        rect.y + 2 + i as u16,
+                        &draw::truncate(shown, inner_w),
+                        theme::fg(color.dim(1.0 - sub_alpha)),
+                        rect.right().saturating_sub(1),
+                    );
+                }
             }
             y += offline_h;
         }

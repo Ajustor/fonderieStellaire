@@ -1,5 +1,25 @@
 # Journal des versions
 
+## v0.13.0 — Bon retour, forgeron
+
+### Nouveautés
+- **Rapport d'absence** sur l'écran titre : la production de ton absence
+  défile jusqu'à son total, puis chaque nouvelle s'écrit à son tour :
+  expéditions rentrées, reliques trouvées, recherches et chantiers terminés,
+  Convergence, événements manqués, succès débloqués.
+- **Pilote automatique des flottes** (après 10 systèmes explorés, `A` sur la
+  Carte stellaire) : les flottes repartent toutes seules, explorer d'abord puis
+  prospecter. **Jeu fermé aussi** : elles enchaînent leurs voyages pendant
+  ton absence.
+- **Statistiques** en haut de l'écran Infos (`I`) : courbe de ta production
+  sur toute la partie (échelle logarithmique), record de production, et temps
+  de jeu de tes grandes étapes (1re Supernova, 1er Big Crunch, 1er Big Bang,
+  fins d'actes).
+- **Couleurs** dans les Options (`R`) : normales, **daltonien** (les verts
+  deviennent bleus, les rouges orangés : plus de paires rouge/vert à
+  distinguer) ou **contraste élevé** (texte plus clair, fonds plus sombres).
+  Appliqué à tout l'écran, réglage sauvegardé.
+
 ## v0.12.2 — Barre d'aide contextuelle
 
 > La v0.12.1 n'a pas été publiée (échec de la CI) : son contenu est ici.

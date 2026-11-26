@@ -81,6 +81,9 @@ pub fn lines(ctx: &Ctx) -> Vec<(String, Style)> {
     ));
     out.push((String::new(), Style::default()));
 
+    out.extend(stats_lines(ctx));
+    out.push((String::new(), Style::default()));
+
     let unlocked = snap.achievements_unlocked;
     out.push((
         format!(
@@ -138,6 +141,88 @@ pub fn lines(ctx: &Ctx) -> Vec<(String, Style)> {
     ];
     for m in mechanics {
         out.push((format!(" {m}"), text));
+    }
+    out
+}
+
+/// Statistiques : courbe de la production sur toute la partie (échelle
+/// logarithmique), record, et temps de jeu des grandes étapes.
+fn stats_lines(ctx: &Ctx) -> Vec<(String, Style)> {
+    let snap = ctx.snap;
+    let mut out: Vec<(String, Style)> = vec![("STATISTIQUES".into(), theme::bold(theme::GOLD))];
+    let h = &snap.history_long;
+    const COLS: usize = 56;
+    const ROWS: usize = 5;
+    const BLOCKS: [char; 9] = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+    if h.len() >= 2 {
+        // Une colonne = le maximum de sa tranche d'historique.
+        let cols: Vec<f32> = (0..COLS)
+            .map(|c| {
+                let a = c * h.len() / COLS;
+                let b = ((c + 1) * h.len() / COLS).max(a + 1).min(h.len());
+                h[a..b].iter().map(|&(_, p)| p).fold(f32::MIN, f32::max)
+            })
+            .collect();
+        let lo = cols.iter().copied().fold(f32::MAX, f32::min);
+        let hi = cols.iter().copied().fold(f32::MIN, f32::max).max(lo + 1.0);
+        for row in (0..ROWS).rev() {
+            let line: String = cols
+                .iter()
+                .map(|&v| {
+                    let level =
+                        ((v - lo) / (hi - lo) * (ROWS * 8) as f32) as i32 - (row * 8) as i32;
+                    BLOCKS[level.clamp(0, 8) as usize]
+                })
+                .collect();
+            let label = if row == ROWS - 1 {
+                format!(" 1e{}/s", hi.round() as i32)
+            } else if row == 0 {
+                format!(" 1e{}/s", lo.round() as i32)
+            } else {
+                String::new()
+            };
+            let c = theme::CYAN.lerp(theme::GOLD, row as f64 / ROWS as f64);
+            out.push((format!(" {line}{label}"), theme::fg(c)));
+        }
+        let span = h.last().map(|l| l.0).unwrap_or(0.0) - h[0].0;
+        out.push((
+            format!(
+                " Production sur {} de jeu (échelle logarithmique)",
+                fmt::duration(span.max(0.0))
+            ),
+            theme::fg(theme::MUTED),
+        ));
+    } else {
+        out.push((
+            " La courbe de production se dessine au fil des heures de jeu.".into(),
+            theme::fg(theme::MUTED),
+        ));
+    }
+    out.push((
+        format!(
+            " ▲ Record de production : {}/s",
+            fmt::short(snap.best_production)
+        ),
+        theme::fg(theme::TEXT),
+    ));
+    let names = [
+        "1re Supernova",
+        "1er Big Crunch",
+        "1er Big Bang",
+        "Fin de l'Acte II",
+        "Fin de l'Acte III",
+    ];
+    let reached: Vec<String> = names
+        .iter()
+        .zip(snap.milestones.iter())
+        .filter(|(_, &t)| t > 0.0)
+        .map(|(n, &t)| format!("{n} : {}", fmt::duration(t)))
+        .collect();
+    if !reached.is_empty() {
+        out.push((
+            format!(" ◆ Étapes (temps de jeu) : {}", reached.join(" · ")),
+            theme::fg(theme::TEXT),
+        ));
     }
     out
 }

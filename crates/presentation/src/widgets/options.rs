@@ -18,7 +18,7 @@ use crate::theme;
 use crate::ui::Popup;
 
 /// Nombre de lignes réglables.
-pub const ITEMS: usize = 3;
+pub const ITEMS: usize = 4;
 /// Durée de l'effacement ; la nouvelle partie commence à la fin.
 pub const WIPE_DURATION: f64 = 2.6;
 const EMBER: Rgb = Rgb(255, 110, 60);
@@ -53,6 +53,11 @@ pub fn render(
         snap.frame_rate
     };
     let rows: [(&str, String, Rgb); ITEMS] = [
+        (
+            "Couleurs",
+            crate::fx::palette::mode_name(snap.color_mode).to_string(),
+            theme::CYAN,
+        ),
         ("Images par seconde", format!("{fps}"), theme::CYAN),
         (
             "Effets réduits",
@@ -66,8 +71,9 @@ pub fn render(
         ),
     ];
     let help = match selected {
-        0 => "60, 30, 20 ou 15 images par seconde. 60 rend les animations très fluides si ton terminal suit ; baisse-les s'il saccade : le jeu tourne pareil, seules les animations changent.".to_string(),
-        1 => "Moins de secousses, de flashs et de nébuleuses animées. Raccourci : [F].".to_string(),
+        0 => "Normales, daltonien (les verts deviennent bleus et les rouges orangés : plus de rouge et de vert à distinguer) ou contraste élevé (texte plus clair, fonds plus sombres).".to_string(),
+        1 => "60, 30, 20 ou 15 images par seconde. 60 rend les animations très fluides si ton terminal suit ; baisse-les s'il saccade : le jeu tourne pareil, seules les animations changent.".to_string(),
+        2 => "Moins de secousses, de flashs et de nébuleuses animées. Raccourci : [F].".to_string(),
         _ if armed => "ATTENTION : Entrée de nouveau pour TOUT effacer (fragments, Big Crunch, Laboratoire, Clés, particules, succès). C'est définitif. [Échap] pour annuler.".to_string(),
         _ => "Efface ta sauvegarde et repart de zéro. Pour en garder une copie avant : fonderie-stellaire --export fichier".to_string(),
     };
@@ -76,7 +82,7 @@ pub fn render(
         .map(|l| {
             (
                 l,
-                if selected == 2 && armed {
+                if selected == 3 && armed {
                     theme::ORANGE
                 } else {
                     theme::MUTED
@@ -107,7 +113,7 @@ pub fn render(
     let h = ((height as f64 * s).round() as u16).max(2);
     let rect = centered(area, w, h);
     Clear.render(rect, buf);
-    let border = if selected == 2 && armed {
+    let border = if selected == 3 && armed {
         theme::RED.lerp(EMBER, 0.5 + 0.5 * (ctx.now * 6.0).sin())
     } else {
         theme::CYAN
@@ -137,7 +143,7 @@ pub fn render(
             theme::bold(theme::FOCUS),
             right,
         );
-        let name_color = if i == 2 { theme::RED } else { theme::TEXT };
+        let name_color = if i == 3 { theme::RED } else { theme::TEXT };
         let vx = right.saturating_sub(1 + value.chars().count() as u16);
         draw::text(
             buf,

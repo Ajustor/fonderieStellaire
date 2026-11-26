@@ -171,7 +171,7 @@ cargo run --release -- --reset
 | `X` | Carte stellaire : expéditions (Acte III, après l'éveil du Grand Attracteur) |
 | `H` | Reliques : collection, emplacements et ensembles (Acte III) |
 | `Z` | Revenir à l'événement cosmique en attente (Acte III) |
-| `R` | Options : images par seconde, effets réduits, recommencer une partie |
+| `R` | Options : couleurs (daltonien, contraste élevé), images par seconde, effets réduits, recommencer une partie |
 | `T` | Activer / arrêter l'automate (une fois acheté à l'Atelier) |
 | `I` | Infos : progression, succès et fonctionnement de chaque mécanique |
 | `PgUp` / `PgDn` | Remonter / redescendre dans le journal |

@@ -348,8 +348,15 @@ pub fn render(
             theme::bold(c),
         );
     }
+    let auto = if snap.auto_fleets {
+        " · pilote auto [A]"
+    } else if snap.auto_fleets_unlocked {
+        " · pilote [A]"
+    } else {
+        ""
+    };
     let sub_long = format!(
-        "Explorés : {}/{} · flottes : {}/{} en route · production ×{} · fragments ×{}",
+        "Explorés : {}/{} · flottes : {}/{} en route · production ×{} · fragments ×{}{auto}",
         snap.explored,
         snap.systems.len().saturating_sub(1),
         snap.fleets.len(),
@@ -358,7 +365,7 @@ pub fn render(
         fmt::short(snap.map_fragments)
     );
     let sub_short = format!(
-        "Explorés {}/{} · flottes {}/{}",
+        "Explorés {}/{} · flottes {}/{}{auto}",
         snap.explored,
         snap.systems.len().saturating_sub(1),
         snap.fleets.len(),
@@ -595,7 +602,11 @@ pub fn render(
         }
         draw::text(buf, area.x + 3, y, l, theme::fg(*c), area.right());
     }
-    let long = "[←→↑↓] naviguer   [Entrée] envoyer une flotte   [X] / [Échap] fermer";
+    let long = if snap.auto_fleets_unlocked {
+        "[←→↑↓] naviguer   [Entrée] envoyer une flotte   [A] pilote auto   [X] / [Échap] fermer"
+    } else {
+        "[←→↑↓] naviguer   [Entrée] envoyer une flotte   [X] / [Échap] fermer"
+    };
     let footer = if long.chars().count() + 2 <= area.width as usize {
         long
     } else {
