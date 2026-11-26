@@ -1,5 +1,8 @@
 # ✦ Fonderie Stellaire ✦
 
+[![ci](https://github.com/Ajustor/fonderieStellaire/actions/workflows/ci.yml/badge.svg)](https://github.com/Ajustor/fonderieStellaire/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/Ajustor/fonderieStellaire)](https://github.com/Ajustor/fonderieStellaire/releases/latest)
+
 Un **idle game cosmique** qui tourne dans ton terminal, écrit en Rust.
 
 Tu diriges une fonderie qui récolte de la **poussière d'étoile** (✦). Achète des
@@ -49,9 +52,32 @@ paliers, toasts, et une séquence Supernova plein écran.
 
 ## Télécharger (sans installer Rust)
 
+### Installation en une ligne (recommandé)
+
+**Windows** (PowerShell) :
+
+```powershell
+irm https://raw.githubusercontent.com/Ajustor/fonderieStellaire/master/install.ps1 | iex
+```
+
+**Linux** :
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Ajustor/fonderieStellaire/master/install.sh | sh
+```
+
+Le script télécharge la dernière version, vérifie sa somme SHA-256 et l'installe
+dans ton PATH (`%LOCALAPPDATA%\Programs\fonderie-stellaire` sous Windows,
+`~/.local/bin` sous Linux). Ensuite, dans n'importe quel terminal :
+
+```sh
+fonderie-stellaire
+```
+
 ### Binaires prêts à l'emploi
 
-Sur la page **Releases** du dépôt, télécharge l'archive de ton système :
+Sur la page [**Releases**](https://github.com/Ajustor/fonderieStellaire/releases/latest),
+télécharge l'archive de ton système :
 
 | Système | Archive |
 |---|---|
@@ -67,17 +93,18 @@ tar -xzf fonderie-stellaire-x86_64-unknown-linux-gnu.tar.gz
 ```
 
 Sous Windows : décompresse le `.zip` puis lance `fonderie-stellaire.exe` depuis
-Windows Terminal.
+Windows Terminal. Le binaire n'étant pas signé, SmartScreen peut afficher
+« Windows a protégé votre ordinateur » : *Informations complémentaires* →
+*Exécuter quand même*.
 
 ### Image Docker (GitHub Container Registry)
 
 ```sh
-docker run -it --rm -v fonderie:/data ghcr.io/<utilisateur>/<depot>:latest
+docker run -it --rm -v fonderie:/data ghcr.io/ajustor/fonderiestellaire:latest
 ```
 
 `-it` est indispensable (c'est un jeu en terminal) ; le volume `fonderie` garde
-ta sauvegarde entre deux parties. Remplace `<utilisateur>/<depot>` par le nom du
-dépôt GitHub (en minuscules).
+ta sauvegarde entre deux parties.
 
 ## Compiler soi-même
 
@@ -194,7 +221,7 @@ L'architecture (Clean Architecture en workspace Cargo) est décrite dans
 
   le workflow teste, compile les binaires Windows et Linux, crée la GitHub
   Release avec les archives et leurs sommes SHA-256, et publie l'image sur
-  `ghcr.io/<utilisateur>/<depot>` (tags `0.1.0`, `0.1`, `latest`).
+  `ghcr.io/ajustor/fonderiestellaire` (tags `0.1.0`, `0.1`, `latest`).
 
 > Après la première publication, le paquet `ghcr.io` est **privé** par défaut :
 > rends-le public dans *GitHub → ton profil → Packages → fonderie-stellaire →

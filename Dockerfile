@@ -1,4 +1,4 @@
-# Image du jeu : docker run -it --rm -v fonderie:/data ghcr.io/<owner>/<repo>
+# Image du jeu : docker run -it --rm -v fonderie:/data ghcr.io/ajustor/fonderiestellaire
 # Le jeu est un TUI : il faut absolument -it (terminal interactif).
 
 FROM rust:1-slim-bookworm AS build
