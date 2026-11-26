@@ -1,4 +1,4 @@
-package io.github.ajustor.fonderie
+package ajustor.fonderie
 
 import android.graphics.Canvas
 import android.graphics.Paint

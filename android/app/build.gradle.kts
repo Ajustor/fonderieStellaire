@@ -20,12 +20,12 @@ val ciVersionName = System.getenv("FONDERIE_VERSION")?.trim()?.removePrefix("v")
     ?.takeIf { it.isNotEmpty() } ?: "0.16.0"
 
 android {
-    namespace = "io.github.ajustor.fonderie"
+    namespace = "ajustor.fonderie"
     compileSdk = 34
     ndkVersion = "29.0.14206865"
 
     defaultConfig {
-        applicationId = "io.github.ajustor.fonderie"
+        applicationId = "ajustor.fonderie"
         minSdk = 26
         targetSdk = 34
         versionCode = ciVersionCode

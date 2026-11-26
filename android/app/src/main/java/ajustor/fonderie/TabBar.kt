@@ -1,4 +1,4 @@
-package io.github.ajustor.fonderie
+package ajustor.fonderie
 
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox

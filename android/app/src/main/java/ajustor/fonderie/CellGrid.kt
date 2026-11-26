@@ -1,4 +1,4 @@
-package io.github.ajustor.fonderie
+package ajustor.fonderie
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
