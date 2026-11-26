@@ -19,7 +19,7 @@ use crate::theme;
 use crate::ui::Popup;
 
 /// Statut affiché à droite d'un Défi, et sa couleur.
-fn status(ctx: &Ctx, v: &ChallengeView, goal: f64, unlock: u32) -> (String, Rgb) {
+pub(crate) fn status(ctx: &Ctx, v: &ChallengeView, goal: f64, unlock: u32) -> (String, Rgb) {
     if v.done {
         ("● réussi".into(), theme::GREEN)
     } else if v.active {
@@ -163,7 +163,7 @@ pub fn render(
 }
 
 /// Lignes du détail du Défi `index` (renvoyées à la ligne à `width`).
-fn detail_lines(
+pub(crate) fn detail_lines(
     ctx: &Ctx,
     index: usize,
     armed: bool,

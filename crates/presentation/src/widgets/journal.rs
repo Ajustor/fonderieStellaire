@@ -55,10 +55,16 @@ pub struct Entry {
 #[derive(Debug, Default)]
 pub struct Journal {
     entries: VecDeque<Entry>,
+    /// Mode mobile : les touches citées deviennent des indications tactiles.
+    pub touch: bool,
 }
 
 impl Journal {
     pub fn push(&mut self, play_time: f64, now: f64, kind: Kind, text: impl Into<String>) {
+        let mut text = text.into();
+        if self.touch {
+            text = crate::mobile::touch_text(&text);
+        }
         if self.entries.len() == CAPACITY {
             self.entries.pop_front();
         }
@@ -77,7 +83,7 @@ impl Journal {
             .unwrap_or(now);
         self.entries.push_back(Entry {
             stamp: fmt::clock(play_time),
-            text: text.into(),
+            text,
             kind,
             born,
         });

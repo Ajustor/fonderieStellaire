@@ -37,7 +37,7 @@ pub fn date_of(day: u64) -> String {
     format!("{d:02}/{m:02}/{y}")
 }
 
-fn lines(ctx: &Ctx, width: usize, today: u64) -> Vec<(String, Style)> {
+pub(crate) fn lines(ctx: &Ctx, width: usize, today: u64) -> Vec<(String, Style)> {
     let snap = ctx.snap;
     let mut out = Vec::new();
     let mut push = |t: String, s: Style| {

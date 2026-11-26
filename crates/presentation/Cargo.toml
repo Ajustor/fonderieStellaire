@@ -4,8 +4,18 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+default = ["terminal"]
+# Boucle terminal (crossterm) : sans elle, la crate n'expose que `App`,
+# `Intent` et le rendu dans un `Buffer` (version Android).
+terminal = ["dep:crossterm", "ratatui/crossterm", "ratatui/underline-color"]
+
 [dependencies]
 domain = { path = "../domain" }
 application = { path = "../application" }
-ratatui = "0.29"
-crossterm = "0.28"
+ratatui = { version = "0.29", default-features = false }
+crossterm = { version = "0.28", optional = true }
+
+[[test]]
+name = "render"
+required-features = ["terminal"]

@@ -565,6 +565,13 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
             } else {
                 short
             };
+            let touch_text;
+            let text = if vis.touch {
+                touch_text = crate::mobile::touch_text(text);
+                touch_text.as_str()
+            } else {
+                text
+            };
             let blink = 0.5 + 0.5 * (now * 4.0).sin();
             let c = banner_color.dim(0.45 * (1.0 - blink)).glow(0.25 * blink);
             let tw = text.chars().count() as u16;

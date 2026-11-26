@@ -46,6 +46,8 @@ impl Toast {
 #[derive(Debug, Default)]
 pub struct Toasts {
     items: Vec<Toast>,
+    /// Mode mobile : les touches citées deviennent des indications tactiles.
+    pub touch: bool,
 }
 
 impl Toasts {
@@ -59,9 +61,14 @@ impl Toasts {
         if self.items.len() >= MAX_TOASTS {
             self.items.remove(0);
         }
+        let (mut title, mut body) = (title.into(), body.into());
+        if self.touch {
+            title = crate::mobile::touch_text(&title);
+            body = crate::mobile::touch_text(&body);
+        }
         self.items.push(Toast {
-            title: title.into(),
-            body: body.into(),
+            title,
+            body,
             color,
             born: now,
         });

@@ -103,6 +103,9 @@ pub struct Ui {
     pub upg_rows: Vec<(UpgradeId, u16)>,
     /// Instant du dernier changement de focus.
     pub focus_changed_at: f64,
+    /// Mode mobile : cellule touchée pour la prochaine récolte (les étincelles
+    /// partent du doigt).
+    pub harvest_at: Option<(f64, f64)>,
 }
 
 /// Ajuste le défilement pour garder `sel` visible dans une fenêtre de `visible` éléments.

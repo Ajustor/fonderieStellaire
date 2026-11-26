@@ -6,16 +6,21 @@
 
 pub mod app;
 pub mod bigfont;
+pub mod cells;
 pub mod draw;
 pub mod fmt;
 pub mod fx;
 pub mod input;
 pub mod layout;
+pub mod mobile;
 pub mod screens;
+#[cfg(feature = "terminal")]
 pub mod terminal;
 pub mod theme;
 pub mod ui;
 pub mod visuals;
 pub mod widgets;
 
-pub use app::{run, App, RunOutcome, Screen};
+#[cfg(feature = "terminal")]
+pub use app::run;
+pub use app::{App, RunOutcome, Screen};

@@ -1,0 +1,18 @@
+[package]
+name = "fonderie-android"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Composition root Android : instancie les adapters, expose une API à Kotlin
+# (UniFFI) et rend l'écran en grille de cellules.
+[lib]
+name = "fonderie"
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+domain = { path = "../domain" }
+application = { path = "../application" }
+infrastructure = { path = "../infrastructure", default-features = false }
+presentation = { path = "../presentation", default-features = false }
+uniffi = "0.29"

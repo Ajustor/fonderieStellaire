@@ -6,6 +6,8 @@ members = [
     "crates/infrastructure",
     "crates/presentation",
     "crates/bin",
+    "crates/android",
+    "crates/uniffi-bindgen",
 ]
 
 [workspace.package]

@@ -21,9 +21,9 @@ use crate::ui::Popup;
 
 /// Sections du Laboratoire, dans l'ordre d'affichage.
 /// Une section : son titre et le test d'appartenance d'une recherche.
-type Section = (&'static str, fn(LabEffect) -> bool);
+pub(crate) type Section = (&'static str, fn(LabEffect) -> bool);
 
-const SECTIONS: [Section; 3] = [
+pub(crate) const SECTIONS: [Section; 3] = [
     ("AUTOMATISMES · activables / en pause avec Entrée", |e| {
         e.is_toggleable()
     }),
@@ -66,7 +66,7 @@ pub fn item_at(ctx: &Ctx, selected: usize) -> Option<LabView> {
         .and_then(|&i| ctx.snap.lab.get(i).copied())
 }
 
-fn status(
+pub(crate) fn status(
     snap: &GameSnapshot,
     v: &LabView,
     cost: u32,
@@ -264,7 +264,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, selected: 
 }
 
 /// En-tête : matière noire et recherche en cours, renvoyées à la ligne.
-fn head_lines(ctx: &Ctx, width: usize) -> Vec<(String, Rgb)> {
+pub(crate) fn head_lines(ctx: &Ctx, width: usize) -> Vec<(String, Rgb)> {
     let snap = ctx.snap;
     let violet = Rgb(170, 90, 255);
     let head = format!(
@@ -305,7 +305,7 @@ fn head_lines(ctx: &Ctx, width: usize) -> Vec<(String, Rgb)> {
 }
 
 /// Détail de la recherche n° `selected` (description et action), renvoyé à la ligne.
-fn detail_lines(
+pub(crate) fn detail_lines(
     ctx: &Ctx,
     order: &[usize],
     selected: usize,

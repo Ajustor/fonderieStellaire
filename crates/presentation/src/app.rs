@@ -1,12 +1,15 @@
 //! Boucle principale : entrée → `Command` → événements → effets/journal → rendu.
 
+#[cfg(feature = "terminal")]
 use std::io;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+#[cfg(feature = "terminal")]
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::widgets::{Block, BorderType, Borders, Widget};
+#[cfg(feature = "terminal")]
 use ratatui::Frame;
 
 use application::updates::display_version;
@@ -22,7 +25,9 @@ use crate::draw;
 use crate::fmt;
 use crate::fx::effects;
 use crate::fx::Rgb;
-use crate::input::{map_event, HoldDetector, Intent};
+#[cfg(feature = "terminal")]
+use crate::input::map_event;
+use crate::input::{HoldDetector, Intent, Phase};
 use crate::layout::is_too_small;
 use crate::screens::bigbang::BangSequence;
 use crate::screens::ending::{CreditLine, EndingSequence};
@@ -30,6 +35,7 @@ use crate::screens::game::{self, GameView};
 use crate::screens::supernova::{NovaSequence, WAVE_AT};
 use crate::screens::title::TitleScreen;
 use crate::screens::too_small;
+#[cfg(feature = "terminal")]
 use crate::terminal::{Term, TerminalGuard};
 use crate::theme;
 use crate::theme::GEN_SLOTS;
@@ -43,10 +49,10 @@ use crate::widgets::shop::{self, ShopItem};
 use crate::widgets::starmap::{self as starmap_widget, StarMapState};
 use crate::widgets::toast::Toasts;
 use crate::widgets::{inner, Ctx};
-use crossterm::terminal::{BeginSynchronizedUpdate, EndSynchronizedUpdate};
 
 /// ≈ 30 images par seconde.
 /// Durée d'une image selon le réglage (30 images/s par défaut).
+#[cfg(feature = "terminal")]
 fn frame_duration(fps: u32) -> Duration {
     Duration::from_millis(1000 / u64::from(fps.clamp(10, 60)))
 }
@@ -93,32 +99,35 @@ pub const RESTART_DELAY: f64 = 5.0;
 const RESTART_FADE: f64 = 0.6;
 
 pub struct App {
-    service: GameService,
-    snap: GameSnapshot,
-    screen: Screen,
-    ui: Ui,
-    vis: Visuals,
-    title: TitleScreen,
-    journal: Journal,
-    toasts: Toasts,
-    spark_scratch: Vec<u64>,
-    start: Instant,
-    now: f64,
-    dt: f64,
-    quit: bool,
-    stats: FrameStats,
-    hold: HoldDetector,
+    pub(crate) service: GameService,
+    pub(crate) snap: GameSnapshot,
+    pub(crate) screen: Screen,
+    pub(crate) ui: Ui,
+    pub(crate) vis: Visuals,
+    pub(crate) title: TitleScreen,
+    pub(crate) journal: Journal,
+    pub(crate) toasts: Toasts,
+    pub(crate) spark_scratch: Vec<u64>,
+    pub(crate) start: Instant,
+    pub(crate) now: f64,
+    pub(crate) dt: f64,
+    pub(crate) quit: bool,
+    pub(crate) stats: FrameStats,
+    pub(crate) hold: HoldDetector,
     /// Dernière fois qu'on a expliqué comment débloquer la récolte continue.
-    hold_hint_at: f64,
+    pub(crate) hold_hint_at: f64,
     /// Dernier message « interdit pendant le Défi » (évite d'en inonder l'écran).
-    blocked_hint_at: f64,
-    updates: UpdateService,
+    pub(crate) blocked_hint_at: f64,
+    pub(crate) updates: UpdateService,
     /// Dernier état connu de la mise à jour automatique.
-    update_status: Option<UpdateEvent>,
+    pub(crate) update_status: Option<UpdateEvent>,
     /// Redémarrage prévu (mise à jour installée) : instant et version.
-    restart_at: Option<(f64, String)>,
+    pub(crate) restart_at: Option<(f64, String)>,
     /// Le jeu se ferme pour redémarrer sur la nouvelle version.
-    restart: bool,
+    pub(crate) restart: bool,
+    /// Mode mobile (Android) : onglets, mises en page portrait, hit-test.
+    /// Absent en mode terminal, qui garde ses écrans tels quels.
+    pub(crate) mobile: Option<crate::mobile::MobileUi>,
 }
 
 fn seed() -> u64 {
@@ -155,6 +164,7 @@ impl App {
             update_status: None,
             restart_at: None,
             restart: false,
+            mobile: None,
         };
         app.vis.set_reduced(app.snap.reduced_effects);
         app.journal.push(
@@ -252,12 +262,17 @@ impl App {
         self.vis.cascade_start = self.now - 10.0;
     }
 
+    /// Horloge interne (secondes depuis le lancement).
+    pub fn time(&self) -> f64 {
+        self.now
+    }
+
     /// Avance l'horloge interne manuellement (tests).
     pub fn set_time(&mut self, now: f64) {
         self.now = now;
     }
 
-    fn command(&mut self, cmd: Command) {
+    pub(crate) fn command(&mut self, cmd: Command) {
         for ev in self.service.handle(cmd) {
             self.react(ev);
         }
@@ -267,6 +282,76 @@ impl App {
     // Boucle
     // ------------------------------------------------------------------
 
+    /// Avance d'une image hors terminal (Android) : horloge interne puis logique.
+    pub fn step(&mut self, real_dt: f64) {
+        self.now = self.start.elapsed().as_secs_f64();
+        self.update(real_dt);
+    }
+
+    /// Rendu hors terminal avec mesure du temps (overlay de debug).
+    pub fn render_timed(&mut self, buf: &mut Buffer, area: Rect, dt: f64, frame_start: Instant) {
+        let t0 = Instant::now();
+        self.render_buffer(buf, area);
+        self.stats.record(dt, t0.elapsed(), frame_start.elapsed());
+    }
+
+    /// Appui sur la zone de récolte (Espace ou doigt) : récolte simple ou continue.
+    pub fn on_harvest_input(&mut self, phase: Phase) {
+        let t = self.start.elapsed().as_secs_f64();
+        if phase == Phase::Release {
+            self.hold.saw_release();
+        }
+        if let Some(intent) = self.hold.on_space(phase, t) {
+            self.on_intent(intent);
+        }
+    }
+
+    /// Sauvegarde immédiate (mise en arrière-plan sur Android, sortie du terminal).
+    pub fn save_now(&mut self) -> Result<(), String> {
+        self.service.save().map_err(|e| e.to_string())
+    }
+
+    /// Relit la sauvegarde (retour d'arrière-plan, import) : gains hors-ligne
+    /// appliqués et annoncés comme au lancement.
+    pub fn reload_save(&mut self) -> Result<(), String> {
+        let events = self.service.load().map_err(|e| e.to_string())?;
+        self.service.fill_snapshot(&mut self.snap);
+        let mut report = self.absence_report(&events);
+        // La carte commence par la poussière produite pendant l'absence.
+        for ev in &events {
+            if let GameEvent::Domain(DomainEvent::OfflineGains { seconds, amount }) = ev {
+                report.insert(
+                    0,
+                    (
+                        '✦',
+                        format!(
+                            "+{} poussière d'étoile en {}",
+                            fmt::short(*amount),
+                            fmt::duration(*seconds)
+                        ),
+                        theme::GOLD,
+                    ),
+                );
+            }
+        }
+        if let Some(m) = self.mobile.as_mut() {
+            m.absence = report;
+        }
+        for ev in events {
+            self.react(ev);
+        }
+        Ok(())
+    }
+
+    /// Désactive l'écran « terminal trop petit » (mode mobile : la taille est connue).
+    pub fn set_mobile(&mut self, mobile: bool) {
+        self.mobile = mobile.then(crate::mobile::MobileUi::default);
+        self.journal.touch = mobile;
+        self.toasts.touch = mobile;
+        self.vis.touch = mobile;
+    }
+
+    #[cfg(feature = "terminal")]
     pub fn run_loop(&mut self, terminal: &mut Term) -> io::Result<()> {
         let mut last = Instant::now();
         while !self.quit {
@@ -277,15 +362,11 @@ impl App {
             self.update(dt);
 
             let mut render_time = Duration::ZERO;
-            // Mise à jour synchronisée : le terminal affiche l'image d'un bloc
-            // (ignoré par les terminaux qui ne la gèrent pas).
-            crossterm::queue!(terminal.backend_mut(), BeginSynchronizedUpdate)?;
-            terminal.draw(|f| {
+            crate::terminal::draw_synchronized(terminal, |f| {
                 let t0 = Instant::now();
                 self.render(f);
                 render_time = t0.elapsed();
             })?;
-            crossterm::execute!(terminal.backend_mut(), EndSynchronizedUpdate)?;
             self.stats.record(dt, render_time, frame_start.elapsed());
 
             let timeout =
@@ -303,6 +384,7 @@ impl App {
         Ok(())
     }
 
+    #[cfg(feature = "terminal")]
     pub fn on_terminal_event(&mut self, ev: &Event) {
         if let Event::Resize(_, _) = ev {
             // Les particules sont en coordonnées écran : on repart proprement.
@@ -316,7 +398,7 @@ impl App {
             }
             if k.code == KeyCode::Char(' ') && !k.modifiers.contains(KeyModifiers::CONTROL) {
                 let t = self.start.elapsed().as_secs_f64();
-                if let Some(intent) = self.hold.on_space(k.kind, t) {
+                if let Some(intent) = self.hold.on_space(k.kind.into(), t) {
                     self.on_intent(intent);
                 }
                 return;
@@ -1170,7 +1252,7 @@ impl App {
     }
 
     /// Entrée dans la fenêtre des Défis : 1er appui = arme, 2e = lance ou abandonne.
-    fn challenge_action(&mut self) {
+    pub(crate) fn challenge_action(&mut self) {
         let Some(v) = self.snap.challenges.get(self.ui.challenges_sel).copied() else {
             return;
         };
@@ -1204,7 +1286,7 @@ impl App {
     }
 
     /// Entrée dans le Laboratoire : lance la recherche, ou met en pause / relance.
-    fn lab_action(&mut self) {
+    pub(crate) fn lab_action(&mut self) {
         let item = {
             let ctx = Ctx {
                 snap: &self.snap,
@@ -1247,7 +1329,7 @@ impl App {
     }
 
     /// Entrée dans la Cosmogonie : Big Bang (confirmé), forge, construction.
-    fn cosmos_action(&mut self) {
+    pub(crate) fn cosmos_action(&mut self) {
         let now = self.now;
         match self.cosmos_ctx_item().1 {
             Some(CosmosItem::BigBang) => {
@@ -1585,12 +1667,12 @@ impl App {
             .unwrap_or("?")
     }
 
-    fn start_crunch(&mut self) {
+    pub(crate) fn start_crunch(&mut self) {
         self.start_crunch_into(domain::UniverseId::ORIGIN);
     }
 
     /// Séquence du Big Crunch vers un univers ; validée au milieu de l'animation.
-    fn start_crunch_into(&mut self, universe: domain::UniverseId) {
+    pub(crate) fn start_crunch_into(&mut self, universe: domain::UniverseId) {
         let crunches = self.snap.crunches + 1;
         let before = self.snap.crunch_production;
         let after = 1.0 + domain::catalog::balance::CRUNCH_PRODUCTION * crunches as f64;
@@ -1608,7 +1690,7 @@ impl App {
         ));
     }
 
-    fn start_supernova(&mut self) {
+    pub(crate) fn start_supernova(&mut self) {
         let gained = self.snap.fragments_available;
         let old_bonus = self.snap.fragment_bonus;
         let new_bonus = fragment_multiplier(self.snap.fragments + gained) - 1.0;
@@ -1766,9 +1848,14 @@ impl App {
     fn react_domain(&mut self, ev: DomainEvent) {
         let now = self.now;
         let sky = inner(self.ui.layout.sky);
+        if let Some(m) = self.mobile.as_mut() {
+            m.note_haptic(&ev);
+        }
         match ev {
             DomainEvent::Harvested { amount } => {
-                let (x, y) = if sky.is_empty() {
+                let (x, y) = if let Some(p) = self.ui.harvest_at.take() {
+                    p
+                } else if sky.is_empty() {
                     // Ciel replié : les étincelles partent du compteur.
                     let h = self.ui.layout.header;
                     (h.x as f64 + h.width as f64 / 3.0, h.y as f64 + 2.0)
@@ -2873,6 +2960,7 @@ impl App {
     // Rendu
     // ------------------------------------------------------------------
 
+    #[cfg(feature = "terminal")]
     pub fn render(&mut self, frame: &mut Frame) {
         let area = frame.area();
         self.render_buffer(frame.buffer_mut(), area);
@@ -2880,7 +2968,7 @@ impl App {
 
     pub fn render_buffer(&mut self, buf: &mut Buffer, area: Rect) {
         let now = self.now;
-        if is_too_small(area) {
+        if self.mobile.is_none() && is_too_small(area) {
             too_small::render(buf, area, now);
             return;
         }
@@ -2890,6 +2978,7 @@ impl App {
             .map(|d| d.as_secs() / 86_400)
             .unwrap_or(0);
         let version = display_version(self.updates.current_version());
+        let legacy = self.legacy_open();
         let App {
             service,
             snap,
@@ -2901,6 +2990,7 @@ impl App {
             toasts,
             spark_scratch,
             dt,
+            mobile,
             ..
         } = self;
         let ctx = Ctx {
@@ -2924,6 +3014,28 @@ impl App {
                         n.render_reveal(buf, area, now, &vis.stars);
                     }
                     vis.particles.draw(buf, area);
+                } else if let Some(m) = mobile.as_mut().filter(|_| !legacy) {
+                    crate::mobile::render(
+                        buf,
+                        area,
+                        &ctx,
+                        vis,
+                        ui,
+                        m,
+                        crate::mobile::MobileView {
+                            journal,
+                            toasts,
+                            spark_scratch,
+                            version: &version,
+                            today,
+                        },
+                    );
+                    if let Some(n) = vis.nova.as_ref() {
+                        n.render_over_game(buf, area, now, ctx.reduced);
+                    }
+                    if let Some(b) = vis.bang.as_ref() {
+                        b.render_collapse(buf, area, now, ctx.reduced);
+                    }
                 } else {
                     game::render(
                         buf,
@@ -2940,6 +3052,9 @@ impl App {
                             spark_scratch,
                         },
                     );
+                    if let Some(m) = mobile.as_mut() {
+                        crate::mobile::render_controls(buf, area, ui, m);
+                    }
                     if let Some(n) = vis.nova.as_ref() {
                         n.render_over_game(buf, area, now, ctx.reduced);
                     }
@@ -3091,6 +3206,7 @@ impl App {
 }
 
 /// Lance le jeu dans le terminal. Sauvegarde à la sortie.
+#[cfg(feature = "terminal")]
 pub fn run(
     service: GameService,
     startup: Vec<GameEvent>,

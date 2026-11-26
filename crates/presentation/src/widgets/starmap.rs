@@ -79,7 +79,7 @@ pub fn reward_text(kind: SystemKind, scale: f64) -> String {
 }
 
 /// Zone de la carte (sous le titre, au-dessus du détail).
-fn map_rect(area: Rect) -> Rect {
+pub(crate) fn map_rect(area: Rect) -> Rect {
     let detail = 7u16;
     Rect::new(
         area.x + 2,
@@ -97,7 +97,7 @@ pub fn position(map: Rect, s: &SystemView, columns: usize) -> (i32, i32) {
     (x.round() as i32, y.round() as i32)
 }
 
-fn columns(snap: &GameSnapshot) -> usize {
+pub(crate) fn columns(snap: &GameSnapshot) -> usize {
     snap.systems.iter().map(|s| s.column).max().unwrap_or(0) + 1
 }
 
@@ -165,7 +165,7 @@ fn route(
 }
 
 /// Lignes du détail du système sélectionné.
-fn detail_lines(ctx: &Ctx, sel: usize, width: usize) -> Vec<(String, Rgb)> {
+pub(crate) fn detail_lines(ctx: &Ctx, sel: usize, width: usize) -> Vec<(String, Rgb)> {
     let snap = ctx.snap;
     let mut out = Vec::new();
     let Some(s) = snap.systems.get(sel) else {
