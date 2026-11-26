@@ -42,6 +42,11 @@ struct SaveFile {
     golden_caught: u32,
     black_caught: u32,
     crunches: u32,
+    dark_matter_spent: u32,
+    lab: Vec<String>,
+    lab_paused: Vec<String>,
+    research: String,
+    research_left: f64,
 }
 
 impl From<&SaveData> for SaveFile {
@@ -72,6 +77,11 @@ impl From<&SaveData> for SaveFile {
             golden_caught: d.golden_caught,
             black_caught: d.black_caught,
             crunches: d.crunches,
+            dark_matter_spent: d.dark_matter_spent,
+            lab: d.lab.clone(),
+            lab_paused: d.lab_paused.clone(),
+            research: d.research.clone(),
+            research_left: d.research_left,
         }
     }
 }
@@ -104,6 +114,11 @@ impl From<SaveFile> for SaveData {
             golden_caught: f.golden_caught,
             black_caught: f.black_caught,
             crunches: f.crunches,
+            dark_matter_spent: f.dark_matter_spent,
+            lab: f.lab,
+            lab_paused: f.lab_paused,
+            research: f.research,
+            research_left: f.research_left,
         }
     }
 }

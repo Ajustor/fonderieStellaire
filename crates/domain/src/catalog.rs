@@ -4,6 +4,7 @@ use crate::achievement::{AchievementCondition, AchievementDef, AchievementId};
 use crate::challenge::{ChallengeDef, ChallengeId, ChallengeReward, Restriction};
 use crate::constellation::{ConstellationDef, ConstellationEffect, ConstellationId};
 use crate::generator::{GeneratorDef, GeneratorId};
+use crate::lab::{LabDef, LabEffect, LabId};
 use crate::perk::{PerkDef, PerkEffect, PerkId};
 use crate::upgrade::{Effect, Requirement, UpgradeDef, UpgradeId};
 
@@ -25,6 +26,8 @@ pub mod balance {
     pub const CRUNCH_PRODUCTION: f64 = 1.0;
     /// Chaque Big Crunch ajoute +25 % de fragments par Supernova.
     pub const CRUNCH_FRAGMENTS: f64 = 0.25;
+    /// Big Crunch nécessaires pour ouvrir le Laboratoire de matière noire.
+    pub const LAB_UNLOCK_CRUNCHES: u32 = 10;
     /// Plafond du temps hors-ligne pris en compte (12 h).
     pub const OFFLINE_CAP_SECS: f64 = 12.0 * 3600.0;
     /// Rendement de la production hors-ligne.
@@ -154,7 +157,7 @@ const CLICK_UPGRADES: [(&str, f64, f64, f64); 3] = [
 /// Amélioration « maintenir Espace pour récolter » : (nom, total_run requis, coût).
 const HOLD_UPGRADE: (&str, f64, f64) = ("Récolte continue", 150.0, 300.0);
 
-const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 35] = [
+const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 37] = [
     (
         "first",
         "Premier pas",
@@ -367,6 +370,149 @@ const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 35] = [
         "Cycle éternel",
         "Déclencher 10 Big Crunch",
         AchievementCondition::Crunches(10),
+    ),
+    (
+        "lab1",
+        "Premier chercheur",
+        "Terminer une recherche au Laboratoire",
+        AchievementCondition::LabResearch(1),
+    ),
+    (
+        "laball",
+        "Laboratoire complet",
+        "Terminer toutes les recherches du Laboratoire",
+        AchievementCondition::LabResearch(12),
+    ),
+];
+
+const H: f64 = 3600.0;
+
+/// Laboratoire : (clé, nom, description, symbole, coût en matière noire,
+/// durée de recherche, prérequis, effet). Durée totale : 68 h.
+#[allow(clippy::type_complexity)]
+const LAB: [(&str, &str, &str, char, u32, f64, Option<&str>, LabEffect); 12] = [
+    (
+        "lab_comet_net",
+        "Filet à comètes",
+        "Capture toute seule les comètes normales (les rares restent pour toi)",
+        '●',
+        1,
+        H,
+        None,
+        LabEffect::CometNet,
+    ),
+    (
+        "lab_click",
+        "Toucher du vide",
+        "+5 % de la prod/s à chaque récolte manuelle",
+        '•',
+        1,
+        2.0 * H,
+        None,
+        LabEffect::Click(0.05),
+    ),
+    (
+        "lab_autoconst",
+        "Constellations automatiques",
+        "Dépense les fragments libres en Constellations, la moins chère d'abord",
+        '★',
+        1,
+        2.0 * H,
+        None,
+        LabEffect::AutoConstellations,
+    ),
+    (
+        "lab_prod1",
+        "Densité I",
+        "Production ×2",
+        '▲',
+        1,
+        3.0 * H,
+        None,
+        LabEffect::Production(2.0),
+    ),
+    (
+        "lab_autonova",
+        "Supernova automatique",
+        "Déclenche la Supernova dès qu'elle double tes fragments (5 minimum)",
+        '✦',
+        2,
+        4.0 * H,
+        None,
+        LabEffect::AutoSupernova,
+    ),
+    (
+        "lab_frag",
+        "Écho stellaire",
+        "+50 % de fragments à chaque Supernova",
+        '◆',
+        2,
+        6.0 * H,
+        None,
+        LabEffect::Fragments(1.5),
+    ),
+    (
+        "lab_keep_atelier",
+        "Mémoire de l'Atelier",
+        "L'Atelier stellaire est conservé après un Big Crunch",
+        '◇',
+        2,
+        6.0 * H,
+        None,
+        LabEffect::KeepAtelier,
+    ),
+    (
+        "lab_offline",
+        "Horizon des événements",
+        "Hors-ligne : production à 100 %, jusqu'à 48 h",
+        '○',
+        1,
+        6.0 * H,
+        None,
+        LabEffect::Offline {
+            rate: 1.0,
+            cap_secs: 48.0 * H,
+        },
+    ),
+    (
+        "lab_keep_challenges",
+        "Défis gravés",
+        "Les Défis réussis sont conservés après un Big Crunch",
+        '◈',
+        2,
+        8.0 * H,
+        None,
+        LabEffect::KeepChallenges,
+    ),
+    (
+        "lab_rare",
+        "Aimant d'ombre",
+        "Comètes dorées et noires deux fois plus fréquentes",
+        '◎',
+        2,
+        8.0 * H,
+        None,
+        LabEffect::RareComets(2.0),
+    ),
+    (
+        "lab_head_start",
+        "Départ lancé",
+        "Chaque Big Crunch démarre avec 3 Supernovas déjà faites",
+        '✶',
+        3,
+        10.0 * H,
+        None,
+        LabEffect::HeadStart(3),
+    ),
+    (
+        "lab_prod2",
+        "Densité II",
+        "Production ×3 (en plus de Densité I)",
+        '▲',
+        3,
+        12.0 * H,
+        Some("lab_prod1"),
+        LabEffect::Production(3.0),
     ),
 ];
 
@@ -602,6 +748,7 @@ pub struct Catalog {
     pub perks: Vec<PerkDef>,
     pub constellations: Vec<ConstellationDef>,
     pub challenges: Vec<ChallengeDef>,
+    pub lab: Vec<LabDef>,
 }
 
 impl Catalog {
@@ -780,6 +927,26 @@ impl Catalog {
             )
             .collect();
 
+        let lab = LAB
+            .iter()
+            .enumerate()
+            .map(
+                |(i, &(key, name, description, symbol, cost, research_secs, requires, effect))| {
+                    LabDef {
+                        id: LabId(i),
+                        key,
+                        name,
+                        description,
+                        symbol,
+                        cost,
+                        research_secs,
+                        requires,
+                        effect,
+                    }
+                },
+            )
+            .collect();
+
         Catalog {
             generators,
             upgrades,
@@ -787,6 +954,7 @@ impl Catalog {
             perks,
             constellations,
             challenges,
+            lab,
         }
     }
 
@@ -808,6 +976,14 @@ impl Catalog {
 
     pub fn perk(&self, id: PerkId) -> Option<&PerkDef> {
         self.perks.get(id.index())
+    }
+
+    pub fn lab_node(&self, id: LabId) -> Option<&LabDef> {
+        self.lab.get(id.index())
+    }
+
+    pub fn lab_by_key(&self, key: &str) -> Option<LabId> {
+        self.lab.iter().find(|l| l.key == key).map(|l| l.id)
     }
 
     pub fn challenge(&self, id: ChallengeId) -> Option<&ChallengeDef> {
@@ -859,7 +1035,12 @@ mod tests {
         assert_eq!(c.generators.len(), 12);
         assert_eq!(c.upgrades.len(), 12 * 4 + 4 + 3 + 1);
         assert!(c.upgrade_by_key("hold_0").is_some());
-        assert_eq!(c.achievements.len(), 35);
+        assert_eq!(c.achievements.len(), 37);
+        assert_eq!(c.lab.len(), 12);
+        let hours: f64 = c.lab.iter().map(|l| l.research_secs).sum::<f64>() / 3600.0;
+        assert_eq!(hours, 68.0, "≈ 3 jours de recherches");
+        let cost: u32 = c.lab.iter().map(|l| l.cost).sum();
+        assert_eq!(cost, 21);
         assert_eq!(c.challenges.len(), 5);
         assert_eq!(c.constellations.len(), 6);
         assert_eq!(c.generators[11].unlock_supernovas, 15);

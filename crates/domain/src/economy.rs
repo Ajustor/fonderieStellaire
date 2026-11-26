@@ -71,6 +71,7 @@ pub fn permanent_multiplier(catalog: &Catalog, state: &GameState) -> f64 {
     upgrades
         * fragment_multiplier(state.fragments)
         * state.crunch_production()
+        * state.lab_production(catalog)
         * state.constellation_production(catalog)
         * state
             .challenge_rewards(catalog)
@@ -122,7 +123,7 @@ pub fn click_percent(catalog: &Catalog, state: &GameState) -> f64 {
             _ => None,
         })
         .sum();
-    upgrades + perks + state.constellation_click(catalog)
+    upgrades + perks + state.constellation_click(catalog) + state.lab_click(catalog)
 }
 
 /// Vrai si la récolte « touche maintenue » est débloquée.

@@ -118,6 +118,8 @@ pub fn lines(ctx: &Ctx) -> Vec<(String, Style)> {
         "● Comètes rares : dorée (×77 pendant 7 s), noire (+1 fragment, ou elle te vole).".into(),
         "✶ Big Crunch [U] (15 Supernovas) : tout le niveau Supernova repart de zéro contre".into(),
         "   de la matière noire : production ×2, ×3, ×4… et fragments +25 % par Crunch.".into(),
+        "✶ Laboratoire [L] (10 Big Crunch) : recherches en temps réel, une à la fois,".into(),
+        "   qui avancent même jeu fermé : automatismes, conservation, puissance.".into(),
         "○ Hors-ligne : ta fonderie produit à 50 % pendant ton absence (12 h max).".into(),
         "· Raccourcis : [A] tout acheter · [T] automate · [PgUp]/[PgDn] journal.".into(),
         "· Sauvegarde automatique toutes les 30 s et en quittant.".into(),

@@ -1,5 +1,29 @@
 # Journal des versions
 
+## v0.7.0 — Acte II, partie 1 : le Laboratoire
+
+### Nouveautés
+- **Laboratoire de matière noire** (`L`), ouvert au 10e Big Crunch. La matière
+  noire devient dépensable (son bonus de production est conservé) dans
+  12 **recherches en temps réel** : une à la fois, et elles **avancent même
+  jeu fermé**. Durée totale : 68 h, coût total : 21 matières noires.
+
+  | Section | Recherches |
+  |---|---|
+  | Automatismes (activables / en pause) | Filet à comètes, Constellations automatiques, Supernova automatique |
+  | Conservation au Big Crunch | Mémoire de l'Atelier, Défis gravés, Départ lancé (3 Supernovas) |
+  | Puissance | Toucher du vide, Densité I (×2), Densité II (×3), Écho stellaire (+50 % fragments), Horizon des événements (hors-ligne 100 %, 48 h), Aimant d'ombre (comètes rares ×2) |
+
+- La recherche en cours s'affiche sur la bordure de l'en-tête, avec son temps
+  restant ; la matière noire libre à côté du bonus.
+- **2 nouveaux succès** (37 au total) ; les recherches comptent dans la
+  progression.
+
+### Équilibrage
+- Le rythme du Laboratoire est fixé par la durée des recherches, et non par la
+  vitesse des Big Crunch (qui s'accélèrent trop après le 10e pour servir de
+  repère) : environ 3 jours, jeu fermé compris.
+
 ## v0.6.0
 
 ### Nouveautés

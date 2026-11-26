@@ -58,13 +58,24 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
                 theme::PINK,
             )
         }
-        None => (
-            format!(
-                " progression {} [I] ",
-                fmt::percent(snap.progress.completion)
-            ),
-            theme::GOLD,
-        ),
+        None => {
+            // Recherche en cours au Laboratoire : affichée devant la progression.
+            let research = snap
+                .research
+                .and_then(|r| {
+                    ctx.catalog
+                        .lab_node(r.id)
+                        .map(|d| format!(" ✶ {} {} [L] ·", d.name, fmt::duration(r.remaining)))
+                })
+                .unwrap_or_default();
+            (
+                format!(
+                    "{research} progression {} [I] ",
+                    fmt::percent(snap.progress.completion)
+                ),
+                theme::GOLD,
+            )
+        }
     };
     draw::text_right(
         buf,
@@ -135,9 +146,14 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
     let auto = if snap.autobuy { "▲ auto   " } else { "" };
     let dark = if snap.crunches > 0 {
         format!(
-            "✶ {} (×{})   ",
+            "✶ {} (×{}){}   ",
             snap.crunches,
-            fmt::short(snap.crunch_production)
+            fmt::short(snap.crunch_production),
+            if snap.lab_unlocked && snap.dark_matter_spendable > 0 {
+                format!(" · {} libres [L]", snap.dark_matter_spendable)
+            } else {
+                String::new()
+            }
         )
     } else {
         String::new()

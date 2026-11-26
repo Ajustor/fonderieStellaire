@@ -42,6 +42,13 @@ pub struct SaveData {
     pub black_caught: u32,
     /// Big Crunch déclenchés (matière noire).
     pub crunches: u32,
+    pub dark_matter_spent: u32,
+    /// Recherches terminées et automatismes en pause (clés texte).
+    pub lab: Vec<String>,
+    pub lab_paused: Vec<String>,
+    /// Recherche en cours (clé, vide sinon) et secondes restantes.
+    pub research: String,
+    pub research_left: f64,
 }
 
 impl SaveData {
@@ -106,6 +113,25 @@ impl SaveData {
             golden_caught: state.golden_caught,
             black_caught: state.black_caught,
             crunches: state.crunches,
+            dark_matter_spent: state.dark_matter_spent,
+            lab: catalog
+                .lab
+                .iter()
+                .filter(|l| state.lab_done(l.id))
+                .map(|l| l.key.to_string())
+                .collect(),
+            lab_paused: catalog
+                .lab
+                .iter()
+                .filter(|l| state.lab_is_paused(l.id))
+                .map(|l| l.key.to_string())
+                .collect(),
+            research: state
+                .research
+                .and_then(|(id, _)| catalog.lab_node(id))
+                .map(|l| l.key.to_string())
+                .unwrap_or_default(),
+            research_left: state.research.map(|(_, left)| left).unwrap_or(0.0),
         }
     }
 
@@ -156,6 +182,20 @@ impl SaveData {
         s.golden_caught = self.golden_caught;
         s.black_caught = self.black_caught;
         s.crunches = self.crunches;
+        s.dark_matter_spent = self.dark_matter_spent;
+        for key in &self.lab {
+            if let Some(id) = catalog.lab_by_key(key) {
+                s.lab[id.index()] = true;
+            }
+        }
+        for key in &self.lab_paused {
+            if let Some(id) = catalog.lab_by_key(key) {
+                s.lab_paused[id.index()] = true;
+            }
+        }
+        s.research = catalog
+            .lab_by_key(&self.research)
+            .map(|id| (id, self.research_left.max(0.0)));
         s.normalize(catalog);
         s
     }

@@ -1,6 +1,8 @@
 //! Vue en lecture seule de l'état du jeu, destinée à la présentation.
 
-use domain::{BuyMode, ChallengeId, CometKind, ConstellationId, GeneratorId, PerkId, UpgradeId};
+use domain::{
+    BuyMode, ChallengeId, CometKind, ConstellationId, GeneratorId, LabId, PerkId, UpgradeId,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GeneratorView {
@@ -72,6 +74,26 @@ pub struct ActiveChallengeView {
     pub elapsed: f64,
     /// Temps restant pour un Défi chronométré.
     pub time_left: Option<f64>,
+}
+
+/// Une recherche du Laboratoire.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LabView {
+    pub id: LabId,
+    pub done: bool,
+    pub paused: bool,
+    /// Peut être lancée maintenant.
+    pub available: bool,
+    /// Son prérequis n'est pas encore terminé.
+    pub blocked: bool,
+}
+
+/// La recherche en cours.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ResearchView {
+    pub id: LabId,
+    pub remaining: f64,
+    pub total: f64,
 }
 
 /// Prochaine amélioration encore verrouillée et où on en est de sa condition.
@@ -162,6 +184,12 @@ pub struct GameSnapshot {
     /// Multiplicateurs actuels de la matière noire (production, fragments).
     pub crunch_production: f64,
     pub crunch_fragments: f64,
+    /// Laboratoire de matière noire.
+    pub lab_unlocked: bool,
+    pub lab_needed: u32,
+    pub dark_matter_spendable: u32,
+    pub lab: Vec<LabView>,
+    pub research: Option<ResearchView>,
     pub constellation_levels: u32,
     pub autobuy_unlocked: bool,
     pub autobuy: bool,

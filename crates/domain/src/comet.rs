@@ -35,9 +35,16 @@ pub enum CometKind {
 impl CometKind {
     /// Tirage dans [0, 1) : les valeurs hautes donnent les comètes rares.
     pub fn from_roll(roll: f64) -> Self {
-        if roll >= 1.0 - BLACK_CHANCE {
+        Self::from_roll_with(roll, 1.0)
+    }
+
+    /// Comme `from_roll`, avec les probabilités des comètes rares × `rare_factor`.
+    pub fn from_roll_with(roll: f64, rare_factor: f64) -> Self {
+        let black = BLACK_CHANCE * rare_factor;
+        let golden = GOLDEN_CHANCE * rare_factor;
+        if roll >= 1.0 - black {
             CometKind::Black
-        } else if roll >= 1.0 - BLACK_CHANCE - GOLDEN_CHANCE {
+        } else if roll >= 1.0 - black - golden {
             CometKind::Golden
         } else {
             CometKind::Normal
@@ -106,6 +113,8 @@ pub struct CometState {
     pub storm_multiplier: f64,
     /// Sorte de la comète active (ou de la dernière).
     pub kind: CometKind,
+    /// Facteur sur les probabilités des comètes rares (Laboratoire).
+    pub rare_factor: f64,
 }
 
 impl Default for CometState {
@@ -117,6 +126,7 @@ impl Default for CometState {
             interval_factor: 1.0,
             storm_multiplier: STORM_MULTIPLIER,
             kind: CometKind::Normal,
+            rare_factor: 1.0,
         }
     }
 }
@@ -161,7 +171,7 @@ impl CometState {
                 self.next_in -= dt;
                 if self.next_in <= 0.0 {
                     self.active = Some(0.0);
-                    self.kind = CometKind::from_roll(roll);
+                    self.kind = CometKind::from_roll_with(roll, self.rare_factor);
                     tick.spawned = true;
                 }
             }

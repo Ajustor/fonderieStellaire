@@ -7,6 +7,7 @@ pub mod generators;
 pub mod header;
 pub mod help_bar;
 pub mod journal;
+pub mod lab;
 pub mod modal;
 pub mod shop;
 pub mod sky;

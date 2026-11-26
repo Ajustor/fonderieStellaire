@@ -10,8 +10,8 @@ use crate::error::AppError;
 use crate::ports::{Clock, LoadOutcome, RandomSource, SaveRepository};
 use crate::save_dto::SaveData;
 use crate::snapshot::{
-    ActiveChallengeView, ChallengeView, ConstellationView, GameSnapshot, GeneratorView,
-    NextUpgradeView, PerkView, ProgressView, TeaserView, UpgradeView,
+    ActiveChallengeView, ChallengeView, ConstellationView, GameSnapshot, GeneratorView, LabView,
+    NextUpgradeView, PerkView, ProgressView, ResearchView, TeaserView, UpgradeView,
 };
 
 /// Nombre d'échantillons de production conservés (1 par seconde).
@@ -172,6 +172,8 @@ impl GameService {
             Command::StartChallenge(id) => self.state.start_challenge(&self.catalog, id, &mut ev),
             Command::AbandonChallenge => self.state.abandon_challenge(&self.catalog, &mut ev),
             Command::BigCrunch => self.state.big_crunch(&self.catalog, &mut ev),
+            Command::StartResearch(id) => self.state.start_research(&self.catalog, id, &mut ev),
+            Command::ToggleLab(id) => self.state.toggle_lab(&self.catalog, id, &mut ev),
             Command::BuyConstellation(id) => {
                 self.state.buy_constellation(&self.catalog, id, &mut ev)
             }
@@ -313,6 +315,30 @@ impl GameService {
         snap.crunch_needed = domain::catalog::balance::CRUNCH_SUPERNOVAS;
         snap.crunch_production = st.crunch_production();
         snap.crunch_fragments = st.crunch_fragments();
+        snap.lab_unlocked = st.lab_unlocked();
+        snap.lab_needed = domain::catalog::balance::LAB_UNLOCK_CRUNCHES;
+        snap.dark_matter_spendable = st.dark_matter_spendable();
+        snap.lab.clear();
+        snap.lab.extend(c.lab.iter().map(|l| {
+            LabView {
+                id: l.id,
+                done: st.lab_done(l.id),
+                paused: st.lab_is_paused(l.id),
+                available: st.can_research(c, l.id),
+                blocked: l
+                    .requires
+                    .and_then(|k| c.lab_by_key(k))
+                    .is_some_and(|p| !st.lab_done(p)),
+            }
+        }));
+        snap.research = st.research.and_then(|(id, left)| {
+            let def = c.lab_node(id)?;
+            Some(ResearchView {
+                id,
+                remaining: left,
+                total: def.research_secs,
+            })
+        });
         snap.next_upgrade = st.next_locked_upgrade(c).and_then(|id| {
             let def = c.upgrade(id)?;
             let (current, needed) = match def.requirement {
@@ -331,8 +357,12 @@ impl GameService {
         let perks_owned = st.perks_owned();
         let achievements = st.achievements_unlocked();
         let challenges_done = st.challenges_done.iter().filter(|&&d| d).count();
-        let found_total =
-            c.generators.len() + c.achievements.len() + c.perks.len() + c.challenges.len();
+        let lab_done = st.lab.iter().filter(|&&d| d).count();
+        let found_total = c.generators.len()
+            + c.achievements.len()
+            + c.perks.len()
+            + c.challenges.len()
+            + c.lab.len();
         snap.progress = ProgressView {
             generators_found,
             generators_total: c.generators.len(),
@@ -341,7 +371,7 @@ impl GameService {
             perks_owned,
             perks_total: c.perks.len(),
             completion: if found_total > 0 {
-                (generators_found + achievements + perks_owned + challenges_done) as f64
+                (generators_found + achievements + perks_owned + challenges_done + lab_done) as f64
                     / found_total as f64
             } else {
                 0.0

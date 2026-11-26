@@ -66,6 +66,9 @@ pub struct Ui {
     pub challenges: Option<Popup>,
     pub challenges_sel: usize,
     pub challenge_armed: bool,
+    /// Laboratoire (touche L) et sa sélection.
+    pub lab: Option<Popup>,
+    pub lab_sel: usize,
     /// Lignes remontées dans le journal (0 = dernières entrées).
     pub journal_scroll: usize,
     pub debug: bool,

@@ -20,6 +20,7 @@ use domain::{
 
 use crate::draw;
 use crate::fmt;
+use crate::fx::Rgb;
 use crate::input::{map_event, HoldDetector, Intent};
 use crate::layout::is_too_small;
 use crate::screens::game::{self, GameView};
@@ -268,6 +269,11 @@ impl App {
                         self.ui.challenges = None;
                     }
                 }
+                if let Some(l) = self.ui.lab {
+                    if l.is_closed(now) {
+                        self.ui.lab = None;
+                    }
+                }
                 self.update_nova(now);
                 if let Some(p) = self.ui.popup {
                     if p.is_closed(now) {
@@ -407,6 +413,25 @@ impl App {
             }
             return;
         }
+        if let Some(popup) = self.ui.lab {
+            if popup.closing_at.is_none() {
+                let count = self.snap.lab.len();
+                match intent {
+                    Intent::Up => self.ui.lab_sel = self.ui.lab_sel.saturating_sub(1),
+                    Intent::Down => {
+                        self.ui.lab_sel = (self.ui.lab_sel + 1).min(count.saturating_sub(1))
+                    }
+                    Intent::Buy | Intent::Yes => self.lab_action(),
+                    Intent::Lab | Intent::Escape | Intent::No | Intent::Quit => {
+                        if let Some(l) = self.ui.lab.as_mut() {
+                            l.closing_at = Some(now);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            return;
+        }
         if let Some(popup) = self.ui.challenges {
             if popup.closing_at.is_none() {
                 let count = self.snap.challenges.len();
@@ -522,6 +547,22 @@ impl App {
                 }
             }
             Intent::Save => self.command(Command::Save),
+            Intent::Lab => {
+                if self.snap.lab_unlocked {
+                    self.ui.lab = Some(Popup {
+                        opened_at: now,
+                        closing_at: None,
+                    });
+                } else {
+                    let (have, need) = (self.snap.crunches, self.snap.lab_needed);
+                    self.toasts.push(
+                        now,
+                        theme::GREY,
+                        "Laboratoire",
+                        format!("S'ouvre au {need}e Big Crunch ({have}/{need})"),
+                    );
+                }
+            }
             Intent::BigCrunch => {
                 if self.snap.crunch_available {
                     self.ui.popup_crunch = true;
@@ -612,6 +653,39 @@ impl App {
             .catalog()
             .challenge(id)
             .map(|c| c.name)
+            .unwrap_or("?")
+    }
+
+    /// Entrée dans le Laboratoire : lance la recherche, ou met en pause / relance.
+    fn lab_action(&mut self) {
+        let item = {
+            let ctx = Ctx {
+                snap: &self.snap,
+                catalog: self.service.catalog(),
+                now: self.now,
+                dt: self.dt,
+                reduced: self.snap.reduced_effects,
+            };
+            crate::widgets::lab::item_at(&ctx, self.ui.lab_sel)
+        };
+        let Some(v) = item else { return };
+        let toggleable = self
+            .service
+            .catalog()
+            .lab_node(v.id)
+            .is_some_and(|d| d.effect.is_toggleable());
+        if v.done && toggleable {
+            self.command(Command::ToggleLab(v.id));
+        } else if !v.done {
+            self.command(Command::StartResearch(v.id));
+        }
+    }
+
+    fn lab_name(&self, id: domain::LabId) -> &'static str {
+        self.service
+            .catalog()
+            .lab_node(id)
+            .map(|l| l.name)
             .unwrap_or("?")
     }
 
@@ -744,6 +818,15 @@ impl App {
             DomainEvent::PurchaseFailed { target } => match target {
                 PurchaseTarget::Generator(g) => {
                     self.vis.gen_fail[g.index().min(GEN_SLOTS - 1)] = now
+                }
+                PurchaseTarget::Lab(l) => {
+                    let name = self.lab_name(l);
+                    let body = if self.snap.research.is_some() {
+                        "Une recherche à la fois".to_string()
+                    } else {
+                        format!("« {name} » n'est pas disponible")
+                    };
+                    self.toasts.push(now, theme::GREY, "Laboratoire", body);
                 }
                 PurchaseTarget::Constellation(c) => {
                     let name = self
@@ -1050,6 +1133,41 @@ impl App {
                 self.ui.upg_scroll = 0;
                 self.vis.bar_fill = [0.0; GEN_SLOTS];
                 self.vis.roll_counter(now);
+            }
+            DomainEvent::LabResearchStarted { node } => {
+                let name = self.lab_name(node);
+                let secs = self
+                    .service
+                    .catalog()
+                    .lab_node(node)
+                    .map(|l| l.research_secs)
+                    .unwrap_or(0.0);
+                self.log(
+                    Kind::Info,
+                    format!("✶ Recherche lancée : {name} ({})", fmt::duration(secs)),
+                );
+                self.toasts.push(
+                    now,
+                    Rgb(170, 90, 255),
+                    format!("✶ Recherche : {name}"),
+                    format!("Terminée dans {} (même jeu fermé)", fmt::duration(secs)),
+                );
+            }
+            DomainEvent::LabResearchDone { node } => {
+                let name = self.lab_name(node);
+                self.log(Kind::Achievement, format!("✶ Recherche terminée : {name}"));
+                self.toasts.push(
+                    now,
+                    theme::GOLD,
+                    format!("✶ {name} : terminé !"),
+                    "Nouvelle recherche possible au Laboratoire [L]",
+                );
+                self.vis.fireworks(now);
+            }
+            DomainEvent::LabToggled { node, enabled } => {
+                let name = self.lab_name(node);
+                let state = if enabled { "relancé" } else { "en pause" };
+                self.log(Kind::Info, format!("{name} : {state}"));
             }
             DomainEvent::BigCrunchUnavailable { supernovas, needed } => {
                 self.toasts.push(

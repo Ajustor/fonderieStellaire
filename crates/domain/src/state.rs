@@ -3,7 +3,7 @@
 use crate::achievement::{AchievementContext, AchievementId};
 use crate::catalog::balance::{
     CRUNCH_FRAGMENTS, CRUNCH_PRODUCTION, CRUNCH_SUPERNOVAS, HOLD_HARVEST_INTERVAL,
-    OFFLINE_CAP_SECS, OFFLINE_RATE, REVEAL_RATIO,
+    LAB_UNLOCK_CRUNCHES, OFFLINE_CAP_SECS, OFFLINE_RATE, REVEAL_RATIO,
 };
 use crate::catalog::Catalog;
 use crate::challenge::{ChallengeId, ChallengeReward, Restriction};
@@ -14,6 +14,7 @@ use crate::constellation::{ConstellationEffect, ConstellationId};
 use crate::economy;
 use crate::events::{DomainEvent, PurchaseTarget};
 use crate::generator::{milestones_crossed, BuyMode, GeneratorId};
+use crate::lab::{LabEffect, LabId};
 use crate::perk::{PerkEffect, PerkId};
 use crate::prestige::{fragment_divisor, fragments_for};
 use crate::stardust::Stardust;
@@ -62,6 +63,13 @@ pub struct GameState {
     pub black_caught: u32,
     /// Big Crunch déclenchés (matière noire).
     pub crunches: u32,
+    /// Matière noire dépensée au Laboratoire (le bonus reste calculé sur `crunches`).
+    pub dark_matter_spent: u32,
+    /// Recherches terminées, et automatismes mis en pause.
+    pub lab: Vec<bool>,
+    pub lab_paused: Vec<bool>,
+    /// Recherche en cours et secondes restantes.
+    pub research: Option<(LabId, f64)>,
     /// Niveau de chaque Constellation.
     pub constellations: Vec<u32>,
     revealed: Vec<bool>,
@@ -96,6 +104,10 @@ impl GameState {
             golden_caught: 0,
             black_caught: 0,
             crunches: 0,
+            dark_matter_spent: 0,
+            lab: Vec::new(),
+            lab_paused: Vec::new(),
+            research: None,
             constellations: Vec::new(),
             revealed: Vec::new(),
             autobuy_timer: 0.0,
@@ -116,6 +128,15 @@ impl GameState {
         self.perks.resize(catalog.perks.len(), false);
         self.constellations.resize(catalog.constellations.len(), 0);
         self.challenges_done.resize(catalog.challenges.len(), false);
+        self.lab.resize(catalog.lab.len(), false);
+        self.lab_paused.resize(catalog.lab.len(), false);
+        self.dark_matter_spent = self.dark_matter_spent.min(self.crunches);
+        if self
+            .research
+            .is_some_and(|(id, left)| id.index() >= catalog.lab.len() || !left.is_finite())
+        {
+            self.research = None;
+        }
         if self
             .challenge
             .is_some_and(|c| c.index() >= catalog.challenges.len())
@@ -253,6 +274,13 @@ impl GameState {
             .product();
         perks
             * self.crunch_fragments()
+            * self
+                .lab_effects(catalog)
+                .filter_map(|e| match e {
+                    LabEffect::Fragments(f) => Some(f),
+                    _ => None,
+                })
+                .product::<f64>()
             * (1.0
                 + self.constellation_sum(catalog, |e| match e {
                     ConstellationEffect::Fragments(x) => Some(x),
@@ -339,13 +367,19 @@ impl GameState {
 
     /// (rendement, plafond en secondes) de la production hors-ligne.
     pub fn offline_terms(&self, catalog: &Catalog) -> (f64, f64) {
-        let (rate, cap) = self
+        let (mut rate, mut cap) = self
             .perk_effects(catalog)
             .find_map(|e| match e {
                 PerkEffect::OfflineMastery { rate, cap_secs } => Some((rate, cap_secs)),
                 _ => None,
             })
             .unwrap_or((OFFLINE_RATE, OFFLINE_CAP_SECS));
+        for e in self.lab_effects(catalog) {
+            if let LabEffect::Offline { rate: r, cap_secs } = e {
+                rate = rate.max(r);
+                cap = cap.max(cap_secs);
+            }
+        }
         let extra_hours = self.constellation_sum(catalog, |e| match e {
             ConstellationEffect::OfflineHours(h) => Some(h),
             _ => None,
@@ -577,6 +611,13 @@ impl GameState {
         self.earn(production * dt);
 
         self.comet.interval_factor = self.comet_interval_factor(catalog);
+        self.comet.rare_factor = self
+            .lab_effects(catalog)
+            .filter_map(|e| match e {
+                LabEffect::RareComets(f) => Some(f),
+                _ => None,
+            })
+            .product();
         if self.active_restriction(catalog) == Some(Restriction::NoComets) {
             // Nuit noire : la prochaine comète n'arrive jamais.
             self.comet.active = None;
@@ -603,6 +644,15 @@ impl GameState {
 
         self.check_reveals(catalog, events);
         self.check_challenge(catalog, events);
+        self.advance_research(catalog, dt, events);
+
+        // Filet à comètes : capture les comètes normales après 2 s de passage.
+        if self.lab_active(catalog, LabEffect::CometNet)
+            && self.comet.kind == CometKind::Normal
+            && self.comet.active.is_some_and(|e| e >= 2.0)
+        {
+            self.catch_comet(catalog, roll, 1.0 - roll, events);
+        }
 
         if self.autobuy {
             self.autobuy_timer += dt;
@@ -615,6 +665,7 @@ impl GameState {
         self.achievement_timer += dt;
         if self.achievement_timer >= ACHIEVEMENT_CHECK_INTERVAL {
             self.achievement_timer = 0.0;
+            self.run_lab_automation(catalog, events);
             self.check_achievements(catalog, events);
         }
     }
@@ -742,6 +793,8 @@ impl GameState {
         if !elapsed_secs.is_finite() || elapsed_secs <= 0.0 {
             return;
         }
+        // Les recherches avancent en temps réel, même jeu fermé.
+        self.advance_research(catalog, elapsed_secs, events);
         let (rate, cap) = self.offline_terms(catalog);
         let seconds = elapsed_secs.min(cap);
         let amount = economy::steady_production(catalog, self) * seconds * rate;
@@ -827,16 +880,179 @@ impl GameState {
         self.fragments = 0.0;
         self.fragments_spent = 0.0;
         self.fragments_this_run = 0.0;
-        self.perks.iter_mut().for_each(|p| *p = false);
+        let keep_atelier = self.lab_owned_effect(catalog, LabEffect::KeepAtelier);
+        if !keep_atelier {
+            self.perks.iter_mut().for_each(|p| *p = false);
+            self.autobuy = false;
+        }
         self.constellations.iter_mut().for_each(|l| *l = 0);
-        self.challenges_done.iter_mut().for_each(|d| *d = false);
+        if !self.lab_owned_effect(catalog, LabEffect::KeepChallenges) {
+            self.challenges_done.iter_mut().for_each(|d| *d = false);
+        }
         self.challenge = None;
-        self.autobuy = false;
+        // Départ lancé : des Supernovas déjà faites (Trou blanc débloqué…).
+        self.supernovas = self
+            .lab_effects(catalog)
+            .filter_map(|e| match e {
+                LabEffect::HeadStart(n) => Some(n),
+                _ => None,
+            })
+            .max()
+            .unwrap_or(0);
         self.reset_run(catalog);
         events.push(DomainEvent::BigCrunch {
             crunches: self.crunches,
         });
         self.check_achievements(catalog, events);
+    }
+
+    /// Le Laboratoire est-il ouvert ? (10 Big Crunch)
+    pub fn lab_unlocked(&self) -> bool {
+        self.crunches >= LAB_UNLOCK_CRUNCHES
+    }
+
+    pub fn dark_matter_spendable(&self) -> u32 {
+        self.crunches.saturating_sub(self.dark_matter_spent)
+    }
+
+    pub fn lab_done(&self, id: LabId) -> bool {
+        self.lab.get(id.index()).copied().unwrap_or(false)
+    }
+
+    pub fn lab_is_paused(&self, id: LabId) -> bool {
+        self.lab_paused.get(id.index()).copied().unwrap_or(false)
+    }
+
+    /// Effets des recherches terminées et non en pause.
+    pub fn lab_effects<'a>(&'a self, catalog: &'a Catalog) -> impl Iterator<Item = LabEffect> + 'a {
+        catalog
+            .lab
+            .iter()
+            .filter(|l| self.lab_done(l.id) && !self.lab_is_paused(l.id))
+            .map(|l| l.effect)
+    }
+
+    fn lab_active(&self, catalog: &Catalog, effect: LabEffect) -> bool {
+        self.lab_effects(catalog).any(|e| e == effect)
+    }
+
+    /// Recherche terminée (pause ou non) : pour les effets de conservation.
+    fn lab_owned_effect(&self, catalog: &Catalog, effect: LabEffect) -> bool {
+        catalog
+            .lab
+            .iter()
+            .any(|l| l.effect == effect && self.lab_done(l.id))
+    }
+
+    pub fn lab_production(&self, catalog: &Catalog) -> f64 {
+        self.lab_effects(catalog)
+            .filter_map(|e| match e {
+                LabEffect::Production(f) => Some(f),
+                _ => None,
+            })
+            .product()
+    }
+
+    pub fn lab_click(&self, catalog: &Catalog) -> f64 {
+        self.lab_effects(catalog)
+            .filter_map(|e| match e {
+                LabEffect::Click(p) => Some(p),
+                _ => None,
+            })
+            .sum()
+    }
+
+    /// Une recherche peut-elle commencer ?
+    pub fn can_research(&self, catalog: &Catalog, id: LabId) -> bool {
+        let Some(def) = catalog.lab_node(id) else {
+            return false;
+        };
+        let prereq_ok = def
+            .requires
+            .and_then(|k| catalog.lab_by_key(k))
+            .is_none_or(|p| self.lab_done(p));
+        self.lab_unlocked()
+            && self.research.is_none()
+            && !self.lab_done(id)
+            && prereq_ok
+            && self.dark_matter_spendable() >= def.cost
+    }
+
+    /// Lance une recherche (une seule à la fois) : la matière noire est payée tout de suite.
+    pub fn start_research(&mut self, catalog: &Catalog, id: LabId, events: &mut Vec<DomainEvent>) {
+        if !self.can_research(catalog, id) {
+            events.push(DomainEvent::PurchaseFailed {
+                target: PurchaseTarget::Lab(id),
+            });
+            return;
+        }
+        let Some(def) = catalog.lab_node(id) else {
+            return;
+        };
+        self.dark_matter_spent += def.cost;
+        self.research = Some((id, def.research_secs));
+        events.push(DomainEvent::LabResearchStarted { node: id });
+    }
+
+    /// Met en pause / relance un automatisme terminé.
+    pub fn toggle_lab(&mut self, catalog: &Catalog, id: LabId, events: &mut Vec<DomainEvent>) {
+        let toggleable = catalog
+            .lab_node(id)
+            .is_some_and(|d| d.effect.is_toggleable());
+        if !self.lab_done(id) || !toggleable {
+            events.push(DomainEvent::PurchaseFailed {
+                target: PurchaseTarget::Lab(id),
+            });
+            return;
+        }
+        let paused = !self.lab_is_paused(id);
+        self.lab_paused[id.index()] = paused;
+        events.push(DomainEvent::LabToggled {
+            node: id,
+            enabled: !paused,
+        });
+    }
+
+    fn advance_research(&mut self, catalog: &Catalog, secs: f64, events: &mut Vec<DomainEvent>) {
+        let Some((id, left)) = self.research else {
+            return;
+        };
+        let left = left - secs;
+        if left > 0.0 {
+            self.research = Some((id, left));
+            return;
+        }
+        self.research = None;
+        if let Some(slot) = self.lab.get_mut(id.index()) {
+            *slot = true;
+        }
+        events.push(DomainEvent::LabResearchDone { node: id });
+        self.check_achievements(catalog, events);
+    }
+
+    /// Automatismes du Laboratoire (une fois par seconde).
+    fn run_lab_automation(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
+        if self.lab_active(catalog, LabEffect::AutoConstellations) {
+            for _ in 0..20 {
+                let next = catalog
+                    .constellations
+                    .iter()
+                    .filter(|c| !c.is_maxed(self.constellation_level(c.id)))
+                    .map(|c| (c.id, c.cost_at(self.constellation_level(c.id))))
+                    .filter(|&(_, cost)| self.fragments_spendable() + 1e-9 >= cost)
+                    .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+                match next {
+                    Some((id, _)) => self.buy_constellation(catalog, id, events),
+                    None => break,
+                }
+            }
+        }
+        if self.lab_active(catalog, LabEffect::AutoSupernova) && self.challenge.is_none() {
+            let gain = self.fragments_available_with(catalog);
+            if gain >= 5.0f64.max(self.fragments) {
+                self.supernova(catalog, events);
+            }
+        }
     }
 
     /// Contrainte du Défi en cours.
@@ -1027,6 +1243,7 @@ impl GameState {
                 black_comets: self.black_caught,
                 challenges_done: self.challenges_done.iter().filter(|&&d| d).count(),
                 crunches: self.crunches,
+                lab_done: self.lab.iter().filter(|&&d| d).count(),
             };
             for a in &catalog.achievements {
                 if !self.has_achievement(a.id) && a.condition.is_met(&ctx) {
@@ -1578,6 +1795,121 @@ mod tests {
         s.challenge = Some(c.challenge_by_key("ch_noclick").unwrap());
         s.big_crunch(&c, &mut ev);
         assert!(matches!(ev[0], DomainEvent::BigCrunchUnavailable { .. }));
+    }
+
+    fn lab(c: &Catalog, key: &str) -> LabId {
+        c.lab_by_key(key).unwrap()
+    }
+
+    /// Termine immédiatement la recherche en cours (en faisant passer le temps).
+    fn finish_research(c: &Catalog, s: &mut GameState, ev: &mut Vec<DomainEvent>) {
+        s.tick(c, 100.0 * 3600.0, 0.5, ev);
+    }
+
+    #[test]
+    fn laboratory_research_takes_real_time() {
+        let (c, mut s, mut ev) = setup();
+        let prod1 = lab(&c, "lab_prod1");
+        s.crunches = 9;
+        s.start_research(&c, prod1, &mut ev);
+        assert!(
+            matches!(ev[0], DomainEvent::PurchaseFailed { .. }),
+            "fermé avant 10 Big Crunch"
+        );
+        ev.clear();
+        s.crunches = 10;
+        s.owned[1] = 10;
+        let before = economy::total_production(&c, &s);
+        s.start_research(&c, prod1, &mut ev);
+        assert_eq!(ev, [DomainEvent::LabResearchStarted { node: prod1 }]);
+        assert_eq!(s.dark_matter_spendable(), 9);
+        // Une seule recherche à la fois.
+        ev.clear();
+        s.start_research(&c, lab(&c, "lab_click"), &mut ev);
+        assert!(matches!(ev[0], DomainEvent::PurchaseFailed { .. }));
+        // 3 h de recherche : pas finie après 2 h 59…
+        ev.clear();
+        s.tick(&c, 3.0 * 3600.0 - 1.0, 0.5, &mut ev);
+        assert!(!s.lab_done(prod1));
+        // … finie juste après, et la production double.
+        s.tick(&c, 2.0, 0.5, &mut ev);
+        assert!(ev.contains(&DomainEvent::LabResearchDone { node: prod1 }));
+        let ratio = economy::total_production(&c, &s) / before;
+        assert!(ratio >= 2.0, "{ratio}");
+        // Densité II exige Densité I : désormais possible.
+        assert!(s.can_research(&c, lab(&c, "lab_prod2")));
+    }
+
+    #[test]
+    fn research_advances_while_offline() {
+        let (c, mut s, mut ev) = setup();
+        s.crunches = 10;
+        s.owned[1] = 1;
+        let net = lab(&c, "lab_comet_net");
+        s.start_research(&c, net, &mut ev);
+        s.apply_offline(&c, 2.0 * 3600.0, &mut ev);
+        assert!(s.lab_done(net), "1 h de recherche, 2 h d'absence");
+    }
+
+    #[test]
+    fn laboratory_preserves_things_across_big_crunch() {
+        let (c, mut s, mut ev) = setup();
+        s.crunches = 20;
+        for key in ["lab_keep_atelier", "lab_keep_challenges", "lab_head_start"] {
+            s.start_research(&c, lab(&c, key), &mut ev);
+            finish_research(&c, &mut s, &mut ev);
+        }
+        s.perks[0] = true;
+        s.challenges_done[0] = true;
+        s.constellations[0] = 5;
+        s.supernovas = 15;
+        s.big_crunch(&c, &mut ev);
+        assert!(s.perks[0], "Mémoire de l'Atelier");
+        assert!(s.challenges_done[0], "Défis gravés");
+        assert_eq!(
+            s.constellations[0], 0,
+            "les Constellations repartent de zéro"
+        );
+        assert_eq!(s.supernovas, 3, "Départ lancé");
+        assert_eq!(s.dark_matter_spendable(), 21 - 7);
+    }
+
+    #[test]
+    fn laboratory_automation() {
+        let (c, mut s, mut ev) = setup();
+        s.crunches = 30;
+        for key in ["lab_autonova", "lab_autoconst", "lab_comet_net"] {
+            s.start_research(&c, lab(&c, key), &mut ev);
+            finish_research(&c, &mut s, &mut ev);
+        }
+        // Constellations automatiques : les fragments libres sont dépensés.
+        s.fragments = 10.0;
+        ev.clear();
+        s.tick(&c, 1.0, 0.5, &mut ev);
+        assert!(s.constellation_levels_total() > 0);
+        assert!(s.fragments_spendable() < 2.0);
+        // Supernova automatique dès qu'elle rapporte au moins autant qu'on a (≥ 5).
+        s.total_run = 1e10;
+        let novas = s.supernovas;
+        s.tick(&c, 1.0, 0.5, &mut ev);
+        assert_eq!(s.supernovas, novas + 1);
+        // Pause : plus de Supernova automatique.
+        let auto = lab(&c, "lab_autonova");
+        s.toggle_lab(&c, auto, &mut ev);
+        assert!(ev.contains(&DomainEvent::LabToggled {
+            node: auto,
+            enabled: false
+        }));
+        s.total_run = 1e12;
+        let novas = s.supernovas;
+        s.tick(&c, 1.0, 0.5, &mut ev);
+        assert_eq!(s.supernovas, novas);
+        // Filet à comètes : une comète normale est capturée toute seule.
+        let caught = s.meteors_caught;
+        s.comet.next_in = 0.5;
+        s.tick(&c, 1.0, 0.5, &mut ev); // apparition
+        s.tick(&c, 2.5, 0.5, &mut ev); // 2 s de passage → capture
+        assert_eq!(s.meteors_caught, caught + 1);
     }
 
     #[test]

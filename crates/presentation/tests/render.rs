@@ -403,7 +403,7 @@ fn descriptions_and_info_screen() {
     app.set_time(101.0);
     let text = render(&mut app, 100, 30);
     println!("{text}");
-    assert!(text.contains("SUCCÈS  2/35"));
+    assert!(text.contains("SUCCÈS  2/37"));
     assert!(text.contains("★ Premier pas"));
     assert!(text.contains("○ Centurion"));
     app.on_intent(Intent::Down);
@@ -698,4 +698,62 @@ fn v0_6_big_crunch_end_to_end() {
         text.contains("✶ 1 (×2)"),
         "matière noire dans l'en-tête :\n{text}"
     );
+}
+
+#[test]
+fn v0_7_laboratory() {
+    // Avant 10 Big Crunch : fermé.
+    let mut app = game_app();
+    app.on_intent(Intent::Lab);
+    app.set_time(103.0);
+    let text = render(&mut app, 100, 30);
+    assert!(text.contains("S'ouvre au 10e Big Crunch (0/10)"), "{text}");
+
+    // 10 Big Crunch : 10 matières noires à dépenser.
+    let mut save = advanced_save();
+    save.crunches = 10;
+    let mut app = app_with(Some(save));
+    let mut t = 100.0;
+    app.set_time(t);
+    app.enter_game_now();
+    app.update(0.033);
+    let _ = render(&mut app, 100, 30);
+    app.on_intent(Intent::Lab);
+    t += 1.0;
+    app.set_time(t);
+    let text = render(&mut app, 100, 30);
+    println!("{text}");
+    assert!(text.contains("LABORATOIRE DE MATIÈRE NOIRE"));
+    assert!(text.contains("Matière noire libre : 10 sur 10"));
+    assert!(text.contains("AUTOMATISMES"));
+    assert!(text.contains("Filet à comètes"));
+    assert!(text.contains("1 ✶ · 1h 00m"));
+    assert!(
+        text.contains("Densité II"),
+        "toutes les recherches sont visibles"
+    );
+
+    // Lancer la première recherche (Filet à comètes, 1 h).
+    app.on_intent(Intent::Buy);
+    app.update(0.033);
+    let snap = app.snapshot();
+    assert!(snap.research.is_some());
+    assert_eq!(snap.dark_matter_spendable, 9);
+    let text = render(&mut app, 100, 30);
+    assert!(text.contains("En cours : Filet à comètes"), "{text}");
+    // Une seule à la fois.
+    app.on_intent(Intent::Down);
+    app.on_intent(Intent::Buy);
+    app.update(0.033);
+    assert_eq!(app.snapshot().dark_matter_spendable, 9);
+    // L'en-tête rappelle la recherche en cours.
+    app.on_intent(Intent::Escape);
+    t += 1.0;
+    app.set_time(t);
+    app.update(0.033);
+    let text = render(&mut app, 100, 30);
+    assert!(text.contains("✶ Filet à comètes"), "{text}");
+    // Une heure plus tard, c'est fait.
+    app.update(3601.0);
+    assert!(app.snapshot().lab[0].done || app.snapshot().lab.iter().any(|l| l.done));
 }

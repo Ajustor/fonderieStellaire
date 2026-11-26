@@ -46,7 +46,8 @@ grep -rlE "serde|std::fs"     crates | grep -v crates/infrastructure # → rien
   paliers (`generator.rs`), production (`economy.rs`), améliorations, succès,
   comètes (dont les comètes rares), prestige, Atelier stellaire (`perk.rs`),
   Constellations (`constellation.rs`), Défis (`challenge.rs`), Big Crunch
-  (matière noire, dans `GameState`) et l'agrégat `GameState`
+  (matière noire, dans `GameState`), Laboratoire (`lab.rs` : recherches en temps
+  réel, avancées par `tick` et par `apply_offline`) et l'agrégat `GameState`
   (dont l'automate d'achat et « tout acheter »). Le temps (`dt`) et les tirages
   aléatoires (`roll: f64`) arrivent **en paramètre**. Chaque opération pousse des
   `DomainEvent` dans un `Vec`.
@@ -186,6 +187,16 @@ L'identifiant texte (`key`) doit rester **stable** : c'est lui qui est sauvegard
    où l'action a lieu dans `GameState` (voir `active_restriction`), en émettant
    `ChallengeBlocked`. Une nouvelle récompense : variante de `ChallengeReward`,
    prise en compte via `challenge_rewards` (dans `GameState` ou `economy.rs`).
+
+### Ajouter une recherche au Laboratoire
+
+1. `crates/domain/src/catalog.rs` : une ligne dans `LAB` (clé stable, nom,
+   description, symbole, coût en matière noire, durée en secondes, prérequis
+   éventuel, effet).
+2. Un nouvel effet : une variante de `lab::LabEffect`, appliquée dans
+   `GameState` via `lab_effects` (les automatismes dans `run_lab_automation`,
+   et `is_toggleable` s'ils peuvent être mis en pause). L'écran du Laboratoire
+   le range dans sa section d'après l'effet (`widgets/lab.rs`, `SECTIONS`).
 
 ### Ajouter un événement de domaine
 

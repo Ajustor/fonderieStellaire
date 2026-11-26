@@ -15,7 +15,7 @@ use crate::visuals::Visuals;
 use crate::widgets::journal::Journal;
 use crate::widgets::toast::Toasts;
 use crate::widgets::{
-    challenges, codex, generators, header, help_bar, journal, modal, shop, sky, sparkline,
+    challenges, codex, generators, header, help_bar, journal, lab, modal, shop, sky, sparkline,
     upgrades, Ctx,
 };
 
@@ -74,6 +74,9 @@ pub fn render(
         } else {
             modal::render(buf, area, ctx, &popup);
         }
+    }
+    if let Some(popup) = ui.lab {
+        lab::render(buf, area, ctx, &popup, ui.lab_sel);
     }
     if let Some(popup) = ui.challenges {
         challenges::render(

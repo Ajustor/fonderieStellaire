@@ -6,6 +6,7 @@ use crate::challenge::{ChallengeId, Restriction};
 use crate::comet::{CometKind, CometReward};
 use crate::constellation::ConstellationId;
 use crate::generator::GeneratorId;
+use crate::lab::LabId;
 use crate::perk::PerkId;
 use crate::upgrade::UpgradeId;
 
@@ -17,6 +18,8 @@ pub enum PurchaseTarget {
     Perk(PerkId),
     /// Niveau de Constellation.
     Constellation(ConstellationId),
+    /// Recherche du Laboratoire.
+    Lab(LabId),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -118,6 +121,19 @@ pub enum DomainEvent {
     BigCrunchUnavailable {
         supernovas: u32,
         needed: u32,
+    },
+    /// Une recherche du Laboratoire commence (matière noire payée).
+    LabResearchStarted {
+        node: LabId,
+    },
+    /// Une recherche est terminée : son effet est actif.
+    LabResearchDone {
+        node: LabId,
+    },
+    /// Un automatisme du Laboratoire est mis en pause ou relancé.
+    LabToggled {
+        node: LabId,
+        enabled: bool,
     },
     /// Une Constellation gagne un niveau.
     ConstellationUpgraded {
