@@ -120,6 +120,8 @@ pub fn lines(ctx: &Ctx) -> Vec<(String, Style)> {
         "   de la matière noire : production ×2, ×3, ×4… et fragments +25 % par Crunch.".into(),
         "✶ Laboratoire [L] (10 Big Crunch) : recherches en temps réel, une à la fois,".into(),
         "   qui avancent même jeu fermé : automatismes, conservation, puissance.".into(),
+        "◎ Univers parallèles [V] (10 Big Crunch) : choisis les règles de chaque cycle".into(),
+        "   au Big Crunch ; atteins leur objectif pour gagner leur Clé (bonus permanent).".into(),
         "○ Hors-ligne : ta fonderie produit à 50 % pendant ton absence (12 h max).".into(),
         "· Raccourcis : [A] tout acheter · [T] automate · [PgUp]/[PgDn] journal.".into(),
         "· Sauvegarde automatique toutes les 30 s et en quittant.".into(),

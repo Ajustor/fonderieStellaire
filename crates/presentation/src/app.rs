@@ -33,6 +33,7 @@ use crate::theme::GEN_SLOTS;
 use crate::ui::{Panel, Popup, Ui};
 use crate::visuals::{Visuals, NEVER};
 use crate::widgets::journal::{Journal, Kind};
+use crate::widgets::portals::PortalState;
 use crate::widgets::shop::{self, ShopItem};
 use crate::widgets::toast::Toasts;
 use crate::widgets::{inner, Ctx};
@@ -274,6 +275,18 @@ impl App {
                         self.ui.lab = None;
                     }
                 }
+                // Fin de la plongée dans un portail : le Big Crunch commence.
+                if let Some(p) = self.ui.portal {
+                    if p.dive_progress(now) == Some(1.0) {
+                        self.ui.portal = None;
+                        self.start_crunch_into(domain::UniverseId(p.sel));
+                    }
+                }
+                if let Some((start, _)) = self.vis.key_ceremony {
+                    if now - start > crate::widgets::ceremony::DURATION {
+                        self.vis.key_ceremony = None;
+                    }
+                }
                 self.update_nova(now);
                 if let Some(p) = self.ui.popup {
                     if p.is_closed(now) {
@@ -292,6 +305,11 @@ impl App {
         let sky = inner(self.ui.layout.sky);
         self.vis.update(dt, now, sky, reduced);
         self.toasts.update(now);
+        self.vis.shooting_fast = self
+            .service
+            .catalog()
+            .universe(self.snap.universe)
+            .is_some_and(|u| u.key == "swarm");
         while let Some(ev) = self.updates.poll() {
             self.react_update(ev);
         }
@@ -331,11 +349,15 @@ impl App {
             if let Some(n) = self.vis.nova.as_mut() {
                 n.committed = true;
             }
-            let crunch = self.vis.nova.as_ref().is_some_and(|n| n.crunch);
-            self.command(if crunch {
-                Command::BigCrunch
-            } else {
-                Command::Supernova
+            let target = self
+                .vis
+                .nova
+                .as_ref()
+                .filter(|n| n.crunch)
+                .map(|n| n.universe);
+            self.command(match target {
+                Some(universe) => Command::BigCrunch(universe),
+                None => Command::Supernova,
             });
         }
         if done {
@@ -410,6 +432,31 @@ impl App {
                     }
                     _ => {}
                 }
+            }
+            return;
+        }
+        if let Some(mut portal) = self.ui.portal {
+            if portal.chosen_at.is_none() {
+                let n = self.service.catalog().universes.len();
+                match intent {
+                    Intent::PrevPanel | Intent::Up => {
+                        portal.select(now, portal.sel.saturating_sub(1));
+                    }
+                    Intent::NextPanel | Intent::Down => {
+                        portal.select(now, (portal.sel + 1).min(n.saturating_sub(1)));
+                    }
+                    Intent::Buy | Intent::Yes if portal.crunch => portal.chosen_at = Some(now),
+                    Intent::Escape
+                    | Intent::No
+                    | Intent::Quit
+                    | Intent::Universes
+                    | Intent::BigCrunch => {
+                        self.ui.portal = None;
+                        return;
+                    }
+                    _ => {}
+                }
+                self.ui.portal = Some(portal);
             }
             return;
         }
@@ -563,6 +610,24 @@ impl App {
                     );
                 }
             }
+            Intent::Universes => {
+                if self.snap.universes_unlocked {
+                    let current = self.snap.universe.index();
+                    self.ui.portal = Some(PortalState::new(now, current, false));
+                } else {
+                    self.toasts.push(
+                        now,
+                        theme::GREY,
+                        "Univers parallèles",
+                        format!("S'ouvrent au 10e Big Crunch ({}/10)", self.snap.crunches),
+                    );
+                }
+            }
+            Intent::BigCrunch if self.snap.crunch_available && self.snap.universes_unlocked => {
+                // Le choix de l'univers tient lieu de confirmation.
+                let current = self.snap.universe.index();
+                self.ui.portal = Some(PortalState::new(now, current, true));
+            }
             Intent::BigCrunch => {
                 if self.snap.crunch_available {
                     self.ui.popup_crunch = true;
@@ -571,7 +636,7 @@ impl App {
                         closing_at: None,
                     });
                 } else {
-                    self.command(Command::BigCrunch);
+                    self.command(Command::BigCrunch(domain::UniverseId::ORIGIN));
                 }
             }
             Intent::Challenges => {
@@ -690,10 +755,26 @@ impl App {
     }
 
     fn start_crunch(&mut self) {
+        self.start_crunch_into(domain::UniverseId::ORIGIN);
+    }
+
+    /// Séquence du Big Crunch vers un univers ; validée au milieu de l'animation.
+    fn start_crunch_into(&mut self, universe: domain::UniverseId) {
         let crunches = self.snap.crunches + 1;
         let before = self.snap.crunch_production;
         let after = 1.0 + domain::catalog::balance::CRUNCH_PRODUCTION * crunches as f64;
-        self.vis.nova = Some(NovaSequence::crunch(self.now, crunches, before, after));
+        let name = if self.snap.universes_unlocked {
+            self.service
+                .catalog()
+                .universe(universe)
+                .map(|u| u.name)
+                .unwrap_or("")
+        } else {
+            ""
+        };
+        self.vis.nova = Some(NovaSequence::crunch_into(
+            self.now, crunches, before, after, universe, name,
+        ));
     }
 
     fn start_supernova(&mut self) {
@@ -1168,6 +1249,50 @@ impl App {
                 let name = self.lab_name(node);
                 let state = if enabled { "relancé" } else { "en pause" };
                 self.log(Kind::Info, format!("{name} : {state}"));
+            }
+            DomainEvent::UniverseEntered { universe } => {
+                if self.snap.universes_unlocked || universe != domain::UniverseId::ORIGIN {
+                    if let Some(def) = self.service.catalog().universe(universe) {
+                        let color = theme::universe_color(universe.index());
+                        self.toasts.push(
+                            now,
+                            color,
+                            format!("{} Univers : {}", def.symbol, def.name),
+                            def.rules_text,
+                        );
+                        self.log(
+                            Kind::Supernova,
+                            format!("{} Univers : {} ({})", def.symbol, def.name, def.rules_text),
+                        );
+                    }
+                }
+            }
+            DomainEvent::UniverseKeyEarned { universe } => {
+                let (name, reward) = self
+                    .service
+                    .catalog()
+                    .universe(universe)
+                    .map(|u| (u.key_name, u.reward_text))
+                    .unwrap_or(("?", ""));
+                self.log(Kind::Achievement, format!("✶ {name} obtenue ! {reward}"));
+                self.vis.key_ceremony = Some((now, universe));
+                // Gerbe aux couleurs de l'univers au centre de l'écran.
+                let area = self
+                    .ui
+                    .layout
+                    .panels()
+                    .iter()
+                    .fold(Rect::default(), |a, r| a.union(*r));
+                let palette = theme::universe_palette(universe.index());
+                self.vis.explode(
+                    area.x as f64 + area.width as f64 / 2.0,
+                    area.y as f64 + area.height as f64 / 2.0 - 2.0,
+                    120,
+                    45.0,
+                    &[palette[0], palette[1], theme::WHITE, theme::GOLD],
+                );
+                self.vis.fireworks(now + 0.4);
+                self.vis.fireworks(now + 1.2);
             }
             DomainEvent::BigCrunchUnavailable { supernovas, needed } => {
                 self.toasts.push(

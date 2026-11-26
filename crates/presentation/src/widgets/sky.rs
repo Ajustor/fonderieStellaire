@@ -46,6 +46,17 @@ fn comet_palette(kind: CometKind) -> ([Rgb; 3], Rgb, Rgb) {
 
 /// Nébuleuse en arrière-plan (value noise qui dérive lentement).
 pub fn draw_nebula(buf: &mut Buffer, area: Rect, now: f64, strength: f64) {
+    draw_nebula_tinted(buf, area, now, strength, None);
+}
+
+/// Nébuleuse teintée aux couleurs d'un univers parallèle.
+pub fn draw_nebula_tinted(
+    buf: &mut Buffer,
+    area: Rect,
+    now: f64,
+    strength: f64,
+    universe_tint: Option<Rgb>,
+) {
     if strength <= 0.0 {
         return;
     }
@@ -57,7 +68,11 @@ pub fn draw_nebula(buf: &mut Buffer, area: Rect, now: f64, strength: f64) {
             if n > 0.56 {
                 let k = ((n - 0.56) / 0.3).clamp(0.0, 1.0);
                 let tint = fbm(fx * 0.03 - now * 0.01, fy * 0.08, 1, 5);
-                let c = gradient(&theme::NEBULA, tint).lerp(theme::NEBULA[1].glow(0.1), k * 0.5);
+                let mut c =
+                    gradient(&theme::NEBULA, tint).lerp(theme::NEBULA[1].glow(0.1), k * 0.5);
+                if let Some(t) = universe_tint {
+                    c = c.lerp(t.dim(0.55), 0.5);
+                }
                 let c = theme::BLACK.lerp(c, strength);
                 let ch = if n > 0.68 { '▒' } else { '░' };
                 draw::put(buf, area, x as i32, y as i32, ch, c);
@@ -220,6 +235,21 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
     }
     let now = ctx.now;
     let snap = ctx.snap;
+    // L'univers en cours colore et rythme le décor.
+    let uni = ctx
+        .catalog
+        .universe(snap.universe)
+        .map(|u| u.key)
+        .unwrap_or("origin");
+    let palette = theme::universe_palette(snap.universe.index());
+    // Temps dilaté : le ciel ralentit ; Gravité forte : tout tourne plus vite.
+    let tnow = match uni {
+        "time" => now * 0.35,
+        "gravity" => now * 1.6,
+        _ => now,
+    };
+    let tint = (uni != "origin").then_some(palette[1]);
+    let gravity = if uni == "gravity" { 1.25 } else { 1.0 };
     let w = inner.width as f64;
     let h = inner.height as f64;
     let ox = inner.x as f64;
@@ -227,7 +257,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
 
     // 1. Nébuleuse.
     if !ctx.reduced {
-        draw_nebula(buf, inner, now, 1.0);
+        draw_nebula_tinted(buf, inner, tnow, 1.0, tint);
     }
 
     // 2. Aurore pendant la tempête solaire.
@@ -245,7 +275,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
         let mut r = 0.6;
         while r < max_r {
             for arm in 0..2 {
-                let a = r * 0.45 + now * 0.25 + arm as f64 * PI;
+                let a = r * 0.45 + tnow * 0.25 + arm as f64 * PI;
                 let px = ox + cx + r * a.cos();
                 let py = oy + cy + r * a.sin() * 0.5;
                 if draw::is_blank(buf, px as i32, py as i32) {
@@ -258,7 +288,8 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
     }
 
     // 4. Étoiles.
-    draw_stars(buf, inner, &vis.stars, now, 9.0, 1.0);
+    // Entropie : les étoiles s'éteignent à mesure que le cycle s'étire.
+    draw_stars(buf, inner, &vis.stars, tnow, 9.0, snap.entropy);
 
     // 4 bis. Constellation : chaque niveau acheté allume une étoile.
     if snap.constellation_levels > 0 || snap.fragments > 0.0 {
@@ -277,13 +308,13 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
     let base_r = (2.4 + (snap.production + 1.0).log10() * 0.4)
         .min(h * 0.95)
         .min(w * 0.3);
-    let r = base_r * vis.sun_scale * (1.0 + 0.05 * (now * 2.2).sin());
+    let r = base_r * vis.sun_scale * gravity * (1.0 + 0.05 * (tnow * 2.2).sin());
     let sun_q = |px: f64, py: f64| -> f64 {
         let dx = px - cx;
         let dy = (py - cy) * 2.0;
         let d = (dx * dx + dy * dy).sqrt();
         let ang = dy.atan2(dx);
-        let rr = r * (1.0 + 0.08 * (ang * 6.0 + now * 2.0).sin());
+        let rr = r * (1.0 + 0.08 * (ang * 6.0 + tnow * 2.0).sin());
         d / rr.max(0.1)
     };
     let x_from = (cx - r * 1.2 - 1.0).max(0.0) as u16;
@@ -301,7 +332,9 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
                 } else {
                     '░'
                 };
-                let c = gradient(&theme::SUN, q);
+                // L'entropie ternit le soleil.
+                let c =
+                    gradient(&theme::SUN, q).lerp(theme::GREY.dim(0.3), (1.0 - snap.entropy) * 0.7);
                 draw::put(
                     buf,
                     inner,
@@ -338,7 +371,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
             let (px, py, glyph) = if i == 4 {
                 // Sphères de Dyson : arcs autour du soleil.
                 let rr = r + 1.4;
-                let a = now * 0.3 + k as f64 * TAU / count as f64;
+                let a = tnow * 0.3 + k as f64 * TAU / count as f64;
                 let (c, s) = (a.cos(), a.sin());
                 let g = match (c >= 0.0, s >= 0.0) {
                     (true, false) => '◝',
@@ -352,7 +385,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
                     r + 2.0 + (i as f64 + 1.0) * ((w * 0.9 - r - 2.0).max(6.0) / gen_count);
                 let b_axis = a_axis * 0.42;
                 let speed = 1.3 / (1.0 + i as f64 * 0.45);
-                let a = -now * speed + k as f64 * TAU / count as f64 + i as f64 * 0.9;
+                let a = -tnow * speed + k as f64 * TAU / count as f64 + i as f64 * 0.9;
                 (
                     cx + a_axis * a.cos(),
                     cy + b_axis * a.sin(),
@@ -398,6 +431,44 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
         }
     }
     vis.orbit_ready = true;
+
+    // 6 bis. Clés d'univers : un anneau par Clé autour du soleil, avec une
+    // perle brillante qui en fait le tour (sens alternés).
+    let mut ring = 0;
+    for (ui, view) in snap.universes.iter().enumerate() {
+        if !view.key {
+            continue;
+        }
+        let rr = r + 2.6 + ring as f64 * 1.3;
+        let color = theme::universe_color(ui);
+        let dots = ((rr * 2.4) as usize).max(10);
+        for k in (0..dots).step_by(2) {
+            let a = k as f64 * TAU / dots as f64 + tnow * 0.05;
+            let px = ox + cx + rr * a.cos();
+            let py = oy + cy + rr * a.sin() * 0.5;
+            if draw::is_blank(buf, px.floor() as i32, py.floor() as i32) {
+                draw::put(
+                    buf,
+                    inner,
+                    px.floor() as i32,
+                    py.floor() as i32,
+                    '·',
+                    color.dim(0.45),
+                );
+            }
+        }
+        let dir = if ring % 2 == 0 { 1.0 } else { -1.0 };
+        let a = dir * now * 0.9 + ui as f64;
+        draw::put_styled(
+            buf,
+            inner,
+            (ox + cx + rr * a.cos()).floor() as i32,
+            (oy + cy + rr * a.sin() * 0.5).floor() as i32,
+            '◆',
+            theme::bold(color.glow(0.3)),
+        );
+        ring += 1;
+    }
 
     // 7. Étoiles filantes.
     for s in &vis.shooting {

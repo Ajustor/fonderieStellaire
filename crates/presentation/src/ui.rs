@@ -69,6 +69,8 @@ pub struct Ui {
     /// Laboratoire (touche L) et sa sélection.
     pub lab: Option<Popup>,
     pub lab_sel: usize,
+    /// Écran des portails (choix d'univers au Big Crunch, ou consultation).
+    pub portal: Option<crate::widgets::portals::PortalState>,
     /// Lignes remontées dans le journal (0 = dernières entrées).
     pub journal_scroll: usize,
     pub debug: bool,

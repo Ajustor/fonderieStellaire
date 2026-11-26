@@ -43,6 +43,8 @@ pub enum AchievementCondition {
     Crunches(u32),
     /// Recherches du Laboratoire terminées.
     LabResearch(usize),
+    /// Clés d'univers obtenues.
+    UniverseKeys(usize),
 }
 
 /// Données nécessaires pour évaluer une condition de succès.
@@ -63,6 +65,7 @@ pub struct AchievementContext<'a> {
     pub challenges_done: usize,
     pub crunches: u32,
     pub lab_done: usize,
+    pub universe_keys: usize,
 }
 
 impl AchievementCondition {
@@ -92,6 +95,7 @@ impl AchievementCondition {
             AchievementCondition::ChallengesDone(n) => ctx.challenges_done >= n,
             AchievementCondition::Crunches(n) => ctx.crunches >= n,
             AchievementCondition::LabResearch(n) => ctx.lab_done >= n,
+            AchievementCondition::UniverseKeys(n) => ctx.universe_keys >= n,
         }
     }
 }
@@ -127,6 +131,7 @@ mod tests {
             challenges_done: 0,
             crunches: 0,
             lab_done: 0,
+            universe_keys: 0,
         }
     }
 

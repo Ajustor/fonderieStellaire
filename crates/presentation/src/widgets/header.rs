@@ -38,6 +38,24 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
         ctx.now,
         area.right().saturating_sub(1),
     );
+    // Badge de l'univers en cours (hors univers d'origine), qui scintille.
+    if let Some(def) = ctx
+        .catalog
+        .universe(ctx.snap.universe)
+        .filter(|u| u.key_reward.is_some())
+    {
+        let color =
+            theme::universe_color(def.id.index()).glow(0.2 * (0.5 + 0.5 * (ctx.now * 2.5).sin()));
+        let badge = format!(" {} {} ", def.symbol, def.name);
+        draw::text(
+            buf,
+            area.x + 2 + TITLE.chars().count() as u16,
+            area.y,
+            &badge,
+            theme::bold(color),
+            area.right().saturating_sub(2),
+        );
+    }
     if inner.height < 3 || inner.width < 20 {
         return;
     }

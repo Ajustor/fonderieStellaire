@@ -16,6 +16,7 @@ pub mod perk;
 pub mod prestige;
 pub mod stardust;
 pub mod state;
+pub mod universe;
 pub mod upgrade;
 
 pub use achievement::{AchievementCondition, AchievementContext, AchievementDef, AchievementId};
@@ -29,4 +30,5 @@ pub use lab::{LabDef, LabEffect, LabId};
 pub use perk::{PerkDef, PerkEffect, PerkId};
 pub use stardust::Stardust;
 pub use state::GameState;
+pub use universe::{KeyReward, UniverseDef, UniverseId, UniverseRules};
 pub use upgrade::{Effect, Requirement, UpgradeDef, UpgradeId};

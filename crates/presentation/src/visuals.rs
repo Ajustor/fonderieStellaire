@@ -127,6 +127,10 @@ pub struct Visuals {
     pub sky_flash_color: Rgb,
     pub cascade_start: f64,
     pub mode_flash: f64,
+    /// Univers « Nuée » : étoiles filantes bien plus fréquentes.
+    pub shooting_fast: bool,
+    /// Cérémonie de Clé en cours : (début, univers).
+    pub key_ceremony: Option<(f64, domain::UniverseId)>,
     /// Dernier niveau de Constellation acheté (étoile qui s'allume).
     pub constellation_pop: f64,
     pub nova: Option<NovaSequence>,
@@ -168,6 +172,8 @@ impl Visuals {
             sky_flash_color: theme::WHITE,
             cascade_start: NEVER,
             mode_flash: NEVER,
+            shooting_fast: false,
+            key_ceremony: None,
             constellation_pop: NEVER,
             nova: None,
             sun_scale: 1.0,
@@ -317,7 +323,12 @@ impl Visuals {
                 life: self.rng.range(0.5, 0.8),
             };
             self.shooting.push(star);
-            self.next_shooting = now + self.rng.range(5.0, 15.0);
+            self.next_shooting = now
+                + if self.shooting_fast {
+                    self.rng.range(0.6, 2.0)
+                } else {
+                    self.rng.range(5.0, 15.0)
+                };
         }
     }
 }

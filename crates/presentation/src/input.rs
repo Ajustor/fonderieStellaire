@@ -33,6 +33,8 @@ pub enum Intent {
     BigCrunch,
     /// `L` : Laboratoire de matière noire.
     Lab,
+    /// `V` : univers parallèles (consultation).
+    Universes,
     /// `T` : activer / arrêter l'automate.
     ToggleAuto,
     /// `PgUp` / `PgDn` : remonter / redescendre dans le journal.
@@ -154,6 +156,7 @@ pub fn map_key(key: &KeyEvent) -> Option<Intent> {
             'd' => Intent::Challenges,
             'u' => Intent::BigCrunch,
             'l' => Intent::Lab,
+            'v' => Intent::Universes,
             't' => Intent::ToggleAuto,
             'o' | 'y' => Intent::Yes,
             'n' => Intent::No,

@@ -62,6 +62,28 @@ pub const FIREWORKS: [[Rgb; 3]; 4] = [
 ];
 pub const SPARKS: [Rgb; 3] = [Rgb(255, 220, 120), Rgb(255, 255, 255), Rgb(255, 170, 90)];
 
+/// Palettes des univers parallèles (index = univers) : trois teintes du vortex.
+pub const UNIVERSE_PALETTES: [[Rgb; 3]; 6] = [
+    [Rgb(255, 220, 120), Rgb(255, 140, 190), Rgb(150, 90, 255)],
+    [Rgb(255, 120, 60), Rgb(200, 40, 40), Rgb(90, 20, 30)],
+    [Rgb(150, 230, 255), Rgb(80, 140, 255), Rgb(40, 40, 140)],
+    [Rgb(255, 150, 220), Rgb(200, 90, 255), Rgb(80, 40, 160)],
+    [Rgb(255, 225, 150), Rgb(220, 160, 80), Rgb(120, 80, 40)],
+    [Rgb(170, 255, 190), Rgb(120, 150, 200), Rgb(70, 60, 90)],
+];
+
+pub fn universe_palette(index: usize) -> [Rgb; 3] {
+    UNIVERSE_PALETTES
+        .get(index)
+        .copied()
+        .unwrap_or(UNIVERSE_PALETTES[0])
+}
+
+/// Couleur principale d'un univers.
+pub fn universe_color(index: usize) -> Rgb {
+    universe_palette(index)[0]
+}
+
 pub fn generator_color(index: usize) -> Rgb {
     GENERATOR_COLORS.get(index).copied().unwrap_or(WHITE)
 }

@@ -166,6 +166,7 @@ cargo run --release -- --reset
 | `D` | Défis : un cycle avec contrainte, contre une récompense permanente |
 | `U` | Big Crunch (après 15 Supernovas) |
 | `L` | Laboratoire de matière noire (après 10 Big Crunch) |
+| `V` | Univers parallèles et leurs Clés (après 10 Big Crunch) |
 | `T` | Activer / arrêter l'automate (une fois acheté à l'Atelier) |
 | `I` | Infos : progression, succès et fonctionnement de chaque mécanique |
 | `PgUp` / `PgDn` | Remonter / redescendre dans le journal |
@@ -209,7 +210,11 @@ Majuscules et minuscules sont acceptées.
   recherches qui durent un temps réel (de 1 h à 12 h), une à la fois, même jeu
   fermé : automatismes (Supernova, Constellations, comètes), conservation au Big
   Crunch, et bonus de puissance.
-- **Succès** : 37 succès, **+1 %** de production chacun.
+- **Univers parallèles** (après 10 Big Crunch) : chaque Big Crunch ouvre un
+  écran de portails pour choisir les règles du cycle suivant (Gravité forte,
+  Temps dilaté, Nuée, Désert, Entropie). Atteindre l'objectif d'un univers
+  rapporte sa **Clé**, un bonus permanent.
+- **Succès** : 39 succès, **+1 %** de production chacun.
 - **Progression** : le pourcentage dans l'en-tête et l'écran `I` indiquent où tu
   en es (générateurs, succès, Atelier, poussière avant le prochain fragment).
 - **Hors-ligne** : ta fonderie produit à 50 % pendant ton absence (12 h max).

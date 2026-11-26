@@ -8,6 +8,7 @@ use crate::constellation::ConstellationId;
 use crate::generator::GeneratorId;
 use crate::lab::LabId;
 use crate::perk::PerkId;
+use crate::universe::UniverseId;
 use crate::upgrade::UpgradeId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -116,6 +117,14 @@ pub enum DomainEvent {
     /// Big Crunch : tout le niveau Supernova repart de zéro contre de la matière noire.
     BigCrunch {
         crunches: u32,
+    },
+    /// Nouvel univers après un Big Crunch.
+    UniverseEntered {
+        universe: UniverseId,
+    },
+    /// Objectif d'un univers atteint : sa Clé est acquise pour toujours.
+    UniverseKeyEarned {
+        universe: UniverseId,
     },
     /// Big Crunch demandé trop tôt.
     BigCrunchUnavailable {

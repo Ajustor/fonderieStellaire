@@ -1,5 +1,41 @@
 # Journal des versions
 
+## v0.8.0 — Acte II, partie 2 : les Univers parallèles
+
+### Nouveautés
+- **Univers parallèles** (à partir du 10e Big Crunch) : chaque Big Crunch
+  ouvre l'**écran des portails**, où l'on choisit les règles du cycle suivant.
+
+  | Univers | Règles | Clé (objectif) | Bonus permanent de la Clé |
+  |---|---|---|---|
+  | Gravité forte | générateurs ×2 plus chers, production ×4 | 20 Supernovas | générateurs −25 % |
+  | Temps dilaté | production ×0,5 en jeu, hors-ligne ×4 | 18 Supernovas | hors-ligne ×2, +24 h |
+  | Nuée | comètes ×5 plus fréquentes, tempêtes 2× plus courtes | 20 Supernovas | pluie d'étoiles +50 %, comètes rares ×1,5 |
+  | Désert | aucune amélioration, production ×10 | 20 Supernovas | production ×2 |
+  | Entropie | production −1 %/min dans chaque cycle, fragments ×3 | 22 Supernovas | fragments ×1,5 |
+
+- `V` pour consulter les univers et ses Clés à tout moment.
+- **2 nouveaux succès** (39 au total) ; les Clés comptent dans la progression.
+
+### Animations
+- **Écran des portails** : carrousel de cartes avec un **vortex animé** par
+  univers (bras en spirale, densité `· : ░ ▒ ▓ █`, couleurs propres). Les
+  cartes arrivent en vol, glissent avec rebond, la carte choisie brille et
+  tourne plus vite ; à la validation, le portail **s'ouvre jusqu'à engloutir
+  l'écran** avant l'implosion du Big Crunch.
+- **Big Crunch aux couleurs de la destination** : onde d'implosion et flash
+  teintés, puis le vortex de l'univers s'ouvre derrière « BIG CRUNCH » et
+  « Bienvenue dans l'univers : … ».
+- **Cérémonie de la Clé** : deux anneaux en sens inverse s'ouvrent avec
+  rebond autour d'une clé dessinée en blocs, traversée par un reflet ; nom et
+  bonus écrits en machine à écrire, gerbe d'étincelles et feux d'artifice.
+- **Le ciel reflète l'univers** : nébuleuse teintée, ciel **ralenti** dans le
+  Temps dilaté et **accéléré** (soleil plus gros) en Gravité forte, étoiles qui
+  **s'éteignent** et soleil qui se ternit avec l'Entropie, pluie d'étoiles
+  filantes dans la Nuée. Chaque Clé ajoute un **anneau en orbite** autour du
+  soleil, parcouru par une perle brillante.
+- Badge de l'univers en cours sur la bordure de l'en-tête.
+
 ## v0.7.0 — Acte II, partie 1 : le Laboratoire
 
 ### Nouveautés

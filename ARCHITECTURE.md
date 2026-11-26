@@ -47,7 +47,9 @@ grep -rlE "serde|std::fs"     crates | grep -v crates/infrastructure # → rien
   comètes (dont les comètes rares), prestige, Atelier stellaire (`perk.rs`),
   Constellations (`constellation.rs`), Défis (`challenge.rs`), Big Crunch
   (matière noire, dans `GameState`), Laboratoire (`lab.rs` : recherches en temps
-  réel, avancées par `tick` et par `apply_offline`) et l'agrégat `GameState`
+  réel, avancées par `tick` et par `apply_offline`), Univers parallèles
+  (`universe.rs` : règles appliquées via `GameState::rules`, Clés via
+  `key_product`) et l'agrégat `GameState`
   (dont l'automate d'achat et « tout acheter »). Le temps (`dt`) et les tirages
   aléatoires (`roll: f64`) arrivent **en paramètre**. Chaque opération pousse des
   `DomainEvent` dans un `Vec`.
@@ -197,6 +199,15 @@ L'identifiant texte (`key`) doit rester **stable** : c'est lui qui est sauvegard
    `GameState` via `lab_effects` (les automatismes dans `run_lab_automation`,
    et `is_toggleable` s'ils peuvent être mis en pause). L'écran du Laboratoire
    le range dans sa section d'après l'effet (`widgets/lab.rs`, `SECTIONS`).
+
+### Ajouter un univers parallèle
+
+1. `crates/domain/src/catalog.rs` : une entrée dans `universes()` (clé stable,
+   nom, règles en clair, symbole, `UniverseRules`, objectif de la Clé en
+   Supernovas, nom et bonus de la Clé).
+2. `crates/presentation/src/theme.rs` : sa palette dans `UNIVERSE_PALETTES`
+   (couleurs du vortex, du badge, de l'anneau de sa Clé).
+3. Optionnel : un effet sur le ciel dans `widgets/sky.rs` (voir `tnow`).
 
 ### Ajouter un événement de domaine
 

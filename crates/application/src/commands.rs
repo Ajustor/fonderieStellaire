@@ -1,4 +1,4 @@
-use domain::{ChallengeId, ConstellationId, GeneratorId, LabId, PerkId, UpgradeId};
+use domain::{ChallengeId, ConstellationId, GeneratorId, LabId, PerkId, UniverseId, UpgradeId};
 
 /// Intentions de jeu envoyées par la présentation au [`crate::GameService`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -25,8 +25,8 @@ pub enum Command {
     StartChallenge(ChallengeId),
     /// Abandonne le Défi en cours.
     AbandonChallenge,
-    /// Big Crunch : remise à zéro du niveau Supernova contre de la matière noire.
-    BigCrunch,
+    /// Big Crunch vers un univers (l'origine tant que les univers sont fermés).
+    BigCrunch(UniverseId),
     /// Lance une recherche au Laboratoire.
     StartResearch(LabId),
     /// Met en pause / relance un automatisme du Laboratoire.

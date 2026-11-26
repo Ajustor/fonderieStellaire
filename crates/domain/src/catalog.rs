@@ -6,6 +6,7 @@ use crate::constellation::{ConstellationDef, ConstellationEffect, ConstellationI
 use crate::generator::{GeneratorDef, GeneratorId};
 use crate::lab::{LabDef, LabEffect, LabId};
 use crate::perk::{PerkDef, PerkEffect, PerkId};
+use crate::universe::{KeyReward, UniverseDef, UniverseId, UniverseRules};
 use crate::upgrade::{Effect, Requirement, UpgradeDef, UpgradeId};
 
 /// Constantes d'équilibrage.
@@ -28,6 +29,8 @@ pub mod balance {
     pub const CRUNCH_FRAGMENTS: f64 = 0.25;
     /// Big Crunch nécessaires pour ouvrir le Laboratoire de matière noire.
     pub const LAB_UNLOCK_CRUNCHES: u32 = 10;
+    /// Big Crunch nécessaires pour choisir son univers.
+    pub const UNIVERSES_UNLOCK_CRUNCHES: u32 = 10;
     /// Plafond du temps hors-ligne pris en compte (12 h).
     pub const OFFLINE_CAP_SECS: f64 = 12.0 * 3600.0;
     /// Rendement de la production hors-ligne.
@@ -157,7 +160,7 @@ const CLICK_UPGRADES: [(&str, f64, f64, f64); 3] = [
 /// Amélioration « maintenir Espace pour récolter » : (nom, total_run requis, coût).
 const HOLD_UPGRADE: (&str, f64, f64) = ("Récolte continue", 150.0, 300.0);
 
-const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 37] = [
+const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 39] = [
     (
         "first",
         "Premier pas",
@@ -383,7 +386,140 @@ const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 37] = [
         "Terminer toutes les recherches du Laboratoire",
         AchievementCondition::LabResearch(12),
     ),
+    (
+        "key1",
+        "Passe-muraille",
+        "Obtenir une Clé d'univers",
+        AchievementCondition::UniverseKeys(1),
+    ),
+    (
+        "keyall",
+        "Maître du multivers",
+        "Obtenir les 5 Clés d'univers",
+        AchievementCondition::UniverseKeys(5),
+    ),
 ];
+
+/// Univers parallèles. Le premier est l'univers d'origine (règles normales).
+fn universes() -> Vec<UniverseDef> {
+    let n = UniverseRules::NORMAL;
+    let defs = [
+        (
+            "origin",
+            "Univers d'origine",
+            "Les règles habituelles",
+            '✦',
+            n,
+            0,
+            "",
+            None,
+            "",
+        ),
+        (
+            "gravity",
+            "Gravité forte",
+            "Générateurs ×2 plus chers · production ×4",
+            '●',
+            UniverseRules {
+                cost: 2.0,
+                production: 4.0,
+                ..n
+            },
+            20,
+            "Clé de gravité",
+            Some(KeyReward::GeneratorDiscount(0.75)),
+            "Générateurs 25 % moins chers partout",
+        ),
+        (
+            "time",
+            "Temps dilaté",
+            "Production ×0,5 en jeu · hors-ligne ×4",
+            '○',
+            UniverseRules {
+                production: 0.5,
+                offline: 4.0,
+                ..n
+            },
+            18,
+            "Clé du temps",
+            Some(KeyReward::Offline {
+                factor: 2.0,
+                extra_cap_secs: 24.0 * 3600.0,
+            }),
+            "Hors-ligne ×2 et +24 h de plafond partout",
+        ),
+        (
+            "swarm",
+            "Nuée",
+            "Comètes 5× plus fréquentes · tempêtes 2× plus courtes",
+            '✶',
+            UniverseRules {
+                comet_interval: 0.2,
+                storm_duration: 0.5,
+                ..n
+            },
+            20,
+            "Clé des comètes",
+            Some(KeyReward::Comets {
+                shower: 1.5,
+                rare: 1.5,
+            }),
+            "Pluie d'étoiles +50 %, comètes rares ×1,5 partout",
+        ),
+        (
+            "desert",
+            "Désert",
+            "Aucune amélioration · production ×10",
+            '◇',
+            UniverseRules {
+                production: 10.0,
+                no_upgrades: true,
+                ..n
+            },
+            20,
+            "Clé des sables",
+            Some(KeyReward::Production(2.0)),
+            "Production ×2 partout",
+        ),
+        (
+            "entropy",
+            "Entropie",
+            "Production −1 %/min dans chaque cycle · fragments ×3",
+            '◈',
+            UniverseRules {
+                fragments: 3.0,
+                entropy_per_min: 0.01,
+                ..n
+            },
+            22,
+            "Clé de l'entropie",
+            Some(KeyReward::Fragments(1.5)),
+            "Fragments ×1,5 partout",
+        ),
+    ];
+    defs.into_iter()
+        .enumerate()
+        .map(
+            |(
+                i,
+                (key, name, rules_text, symbol, rules, key_goal, key_name, key_reward, reward_text),
+            )| {
+                UniverseDef {
+                    id: UniverseId(i),
+                    key,
+                    name,
+                    rules_text,
+                    symbol,
+                    rules,
+                    key_goal,
+                    key_name,
+                    key_reward,
+                    reward_text,
+                }
+            },
+        )
+        .collect()
+}
 
 const H: f64 = 3600.0;
 
@@ -749,6 +885,7 @@ pub struct Catalog {
     pub constellations: Vec<ConstellationDef>,
     pub challenges: Vec<ChallengeDef>,
     pub lab: Vec<LabDef>,
+    pub universes: Vec<UniverseDef>,
 }
 
 impl Catalog {
@@ -955,6 +1092,7 @@ impl Catalog {
             constellations,
             challenges,
             lab,
+            universes: universes(),
         }
     }
 
@@ -976,6 +1114,14 @@ impl Catalog {
 
     pub fn perk(&self, id: PerkId) -> Option<&PerkDef> {
         self.perks.get(id.index())
+    }
+
+    pub fn universe(&self, id: UniverseId) -> Option<&UniverseDef> {
+        self.universes.get(id.index())
+    }
+
+    pub fn universe_by_key(&self, key: &str) -> Option<UniverseId> {
+        self.universes.iter().find(|u| u.key == key).map(|u| u.id)
     }
 
     pub fn lab_node(&self, id: LabId) -> Option<&LabDef> {
@@ -1035,7 +1181,15 @@ mod tests {
         assert_eq!(c.generators.len(), 12);
         assert_eq!(c.upgrades.len(), 12 * 4 + 4 + 3 + 1);
         assert!(c.upgrade_by_key("hold_0").is_some());
-        assert_eq!(c.achievements.len(), 37);
+        assert_eq!(c.achievements.len(), 39);
+        assert_eq!(c.universes.len(), 6);
+        assert_eq!(
+            c.universes
+                .iter()
+                .filter(|u| u.key_reward.is_some())
+                .count(),
+            5
+        );
         assert_eq!(c.lab.len(), 12);
         let hours: f64 = c.lab.iter().map(|l| l.research_secs).sum::<f64>() / 3600.0;
         assert_eq!(hours, 68.0, "≈ 3 jours de recherches");

@@ -18,6 +18,6 @@ pub use ports::{Clock, LoadOutcome, RandomSource, RepositoryError, SaveRepositor
 pub use save_dto::{SaveData, SAVE_VERSION};
 pub use snapshot::{
     ActiveChallengeView, ChallengeView, ConstellationView, GameSnapshot, GeneratorView, LabView,
-    NextUpgradeView, PerkView, ProgressView, ResearchView, TeaserView, UpgradeView,
+    NextUpgradeView, PerkView, ProgressView, ResearchView, TeaserView, UniverseView, UpgradeView,
 };
 pub use updates::{ReleaseInfo, UpdateError, UpdateEvent, UpdateProvider, UpdateService};

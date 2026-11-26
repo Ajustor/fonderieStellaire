@@ -15,8 +15,8 @@ use crate::visuals::Visuals;
 use crate::widgets::journal::Journal;
 use crate::widgets::toast::Toasts;
 use crate::widgets::{
-    challenges, codex, generators, header, help_bar, journal, lab, modal, shop, sky, sparkline,
-    upgrades, Ctx,
+    ceremony, challenges, codex, generators, header, help_bar, journal, lab, modal, portals, shop,
+    sky, sparkline, upgrades, Ctx,
 };
 
 /// Décalage entre deux panneaux de la cascade.
@@ -68,6 +68,13 @@ pub fn render(
 
     view.toasts.render(buf, area, layout.sky.y, ctx.now);
 
+    // Cérémonie de Clé d'univers, par-dessus le jeu.
+    if let Some((start, universe)) = vis.key_ceremony {
+        if let Some(def) = ctx.catalog.universe(universe) {
+            ceremony::render(buf, area, ctx.now, start, def);
+        }
+    }
+
     if let Some(popup) = ui.popup {
         if ui.popup_crunch {
             modal::render_crunch(buf, area, ctx, &popup);
@@ -93,6 +100,10 @@ pub fn render(
     }
     if let Some(codex) = ui.codex {
         codex::render(buf, area, ctx, &codex, &mut ui.codex_scroll);
+    }
+    // Les portails recouvrent tout l'écran.
+    if let Some(portal) = ui.portal {
+        portals::render(buf, area, ctx, &portal, &vis.stars);
     }
 }
 

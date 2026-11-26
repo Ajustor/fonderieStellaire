@@ -3,7 +3,7 @@
 use crate::achievement::{AchievementContext, AchievementId};
 use crate::catalog::balance::{
     CRUNCH_FRAGMENTS, CRUNCH_PRODUCTION, CRUNCH_SUPERNOVAS, HOLD_HARVEST_INTERVAL,
-    LAB_UNLOCK_CRUNCHES, OFFLINE_CAP_SECS, OFFLINE_RATE, REVEAL_RATIO,
+    LAB_UNLOCK_CRUNCHES, OFFLINE_CAP_SECS, OFFLINE_RATE, REVEAL_RATIO, UNIVERSES_UNLOCK_CRUNCHES,
 };
 use crate::catalog::Catalog;
 use crate::challenge::{ChallengeId, ChallengeReward, Restriction};
@@ -18,6 +18,7 @@ use crate::lab::{LabEffect, LabId};
 use crate::perk::{PerkEffect, PerkId};
 use crate::prestige::{fragment_divisor, fragments_for};
 use crate::stardust::Stardust;
+use crate::universe::{KeyReward, UniverseId, UniverseRules, ENTROPY_FLOOR};
 use crate::upgrade::{Effect, UpgradeId};
 
 /// Intervalle entre deux vérifications de succès.
@@ -70,6 +71,11 @@ pub struct GameState {
     pub lab_paused: Vec<bool>,
     /// Recherche en cours et secondes restantes.
     pub research: Option<(LabId, f64)>,
+    /// Univers du cycle de Big Crunch en cours, et Clés obtenues.
+    pub universe: UniverseId,
+    pub universe_keys: Vec<bool>,
+    /// `play_time` du début du cycle (pour l'entropie).
+    pub run_started: f64,
     /// Niveau de chaque Constellation.
     pub constellations: Vec<u32>,
     revealed: Vec<bool>,
@@ -108,6 +114,9 @@ impl GameState {
             lab: Vec::new(),
             lab_paused: Vec::new(),
             research: None,
+            universe: UniverseId::ORIGIN,
+            universe_keys: Vec::new(),
+            run_started: 0.0,
             constellations: Vec::new(),
             revealed: Vec::new(),
             autobuy_timer: 0.0,
@@ -129,6 +138,10 @@ impl GameState {
         self.constellations.resize(catalog.constellations.len(), 0);
         self.challenges_done.resize(catalog.challenges.len(), false);
         self.lab.resize(catalog.lab.len(), false);
+        self.universe_keys.resize(catalog.universes.len(), false);
+        if self.universe.index() >= catalog.universes.len() {
+            self.universe = UniverseId::ORIGIN;
+        }
         self.lab_paused.resize(catalog.lab.len(), false);
         self.dark_matter_spent = self.dark_matter_spent.min(self.crunches);
         if self
@@ -234,7 +247,13 @@ impl GameState {
                 _ => None,
             })
             .product();
-        perks * constellations
+        perks
+            * constellations
+            * self.rules(catalog).cost
+            * self.key_product(catalog, |r| match r {
+                KeyReward::GeneratorDiscount(f) => Some(f),
+                _ => None,
+            })
     }
 
     fn comet_interval_factor(&self, catalog: &Catalog) -> f64 {
@@ -246,6 +265,7 @@ impl GameState {
             })
             .product();
         rewards
+            * self.rules(catalog).comet_interval
             * self
                 .perk_effects(catalog)
                 .filter_map(|e| match e {
@@ -256,12 +276,61 @@ impl GameState {
     }
 
     fn storm_factor(&self, catalog: &Catalog) -> f64 {
-        self.perk_effects(catalog)
-            .filter_map(|e| match e {
-                PerkEffect::LongStorm(f) => Some(f),
+        self.rules(catalog).storm_duration
+            * self
+                .perk_effects(catalog)
+                .filter_map(|e| match e {
+                    PerkEffect::LongStorm(f) => Some(f),
+                    _ => None,
+                })
+                .product::<f64>()
+    }
+
+    /// Règles de l'univers en cours.
+    pub fn rules(&self, catalog: &Catalog) -> UniverseRules {
+        catalog
+            .universe(self.universe)
+            .map(|u| u.rules)
+            .unwrap_or(UniverseRules::NORMAL)
+    }
+
+    pub fn has_universe_key(&self, id: UniverseId) -> bool {
+        self.universe_keys.get(id.index()).copied().unwrap_or(false)
+    }
+
+    /// Produit des bonus de Clés d'un type.
+    fn key_product(&self, catalog: &Catalog, f: impl Fn(KeyReward) -> Option<f64>) -> f64 {
+        catalog
+            .universes
+            .iter()
+            .filter(|u| self.has_universe_key(u.id))
+            .filter_map(|u| u.key_reward.and_then(&f))
+            .product()
+    }
+
+    /// Choisir son univers est-il possible ? (10 Big Crunch)
+    pub fn universes_unlocked(&self) -> bool {
+        self.crunches >= UNIVERSES_UNLOCK_CRUNCHES
+    }
+
+    /// Facteur d'entropie du cycle en cours (1 = aucune perte).
+    pub fn entropy_factor(&self, catalog: &Catalog) -> f64 {
+        let per_min = self.rules(catalog).entropy_per_min;
+        if per_min <= 0.0 {
+            return 1.0;
+        }
+        let minutes = (self.play_time - self.run_started).max(0.0) / 60.0;
+        (1.0 - per_min * minutes).max(ENTROPY_FLOOR)
+    }
+
+    /// Multiplicateur de production de l'univers (règles, entropie, Clés).
+    pub fn universe_production(&self, catalog: &Catalog) -> f64 {
+        self.rules(catalog).production
+            * self.entropy_factor(catalog)
+            * self.key_product(catalog, |r| match r {
+                KeyReward::Production(f) => Some(f),
                 _ => None,
             })
-            .product()
     }
 
     fn nova_factor(&self, catalog: &Catalog) -> f64 {
@@ -274,6 +343,11 @@ impl GameState {
             .product();
         perks
             * self.crunch_fragments()
+            * self.rules(catalog).fragments
+            * self.key_product(catalog, |r| match r {
+                KeyReward::Fragments(f) => Some(f),
+                _ => None,
+            })
             * self
                 .lab_effects(catalog)
                 .filter_map(|e| match e {
@@ -384,7 +458,22 @@ impl GameState {
             ConstellationEffect::OfflineHours(h) => Some(h),
             _ => None,
         });
-        (rate, cap + extra_hours * 3600.0)
+        let (key_factor, key_cap) = catalog
+            .universes
+            .iter()
+            .filter(|u| self.has_universe_key(u.id))
+            .filter_map(|u| match u.key_reward {
+                Some(KeyReward::Offline {
+                    factor,
+                    extra_cap_secs,
+                }) => Some((factor, extra_cap_secs)),
+                _ => None,
+            })
+            .fold((1.0, 0.0), |(f, c), (kf, kc)| (f * kf, c + kc));
+        (
+            rate * self.rules(catalog).offline * key_factor,
+            cap + extra_hours * 3600.0 + key_cap,
+        )
     }
 
     /// Vrai si l'automate d'achat a été acheté.
@@ -591,6 +680,12 @@ impl GameState {
             });
             return;
         }
+        if self.rules(catalog).no_upgrades {
+            events.push(DomainEvent::ChallengeBlocked {
+                restriction: Restriction::NoUpgrades,
+            });
+            return;
+        }
         let cost = def.cost * self.upgrade_cost_factor(catalog);
         if !self.is_upgrade_available(catalog, id) || !self.stardust.spend(cost) {
             events.push(fail);
@@ -617,7 +712,11 @@ impl GameState {
                 LabEffect::RareComets(f) => Some(f),
                 _ => None,
             })
-            .product();
+            .product::<f64>()
+            * self.key_product(catalog, |r| match r {
+                KeyReward::Comets { rare, .. } => Some(rare),
+                _ => None,
+            });
         if self.active_restriction(catalog) == Some(Restriction::NoComets) {
             // Nuit noire : la prochaine comète n'arrive jamais.
             self.comet.active = None;
@@ -703,7 +802,12 @@ impl GameState {
                 duration: duration * self.storm_factor(catalog),
             },
             CometReward::StarShower { amount } => CometReward::StarShower {
-                amount: amount * (1.0 + shower_bonus),
+                amount: amount
+                    * (1.0 + shower_bonus)
+                    * self.key_product(catalog, |r| match r {
+                        KeyReward::Comets { shower, .. } => Some(shower),
+                        _ => None,
+                    }),
             },
             other => other,
         };
@@ -745,11 +849,13 @@ impl GameState {
             fragments_gained: gained,
             total_fragments: self.fragments,
         });
+        self.check_universe_key(catalog, events);
         self.check_achievements(catalog, events);
     }
 
     /// Remet le cycle à zéro (Supernova ou lancement d'un Défi).
     fn reset_run(&mut self, catalog: &Catalog) {
+        self.run_started = self.play_time;
         self.stardust = Stardust::ZERO;
         self.total_run = 0.0;
         self.owned.iter_mut().for_each(|o| *o = 0);
@@ -822,6 +928,12 @@ impl GameState {
             });
             return;
         }
+        if self.rules(catalog).no_upgrades {
+            events.push(DomainEvent::ChallengeBlocked {
+                restriction: Restriction::NoUpgrades,
+            });
+            return;
+        }
         let factor = self.upgrade_cost_factor(catalog);
         let mut count = 0;
         loop {
@@ -867,7 +979,12 @@ impl GameState {
     /// Big Crunch : remet à zéro tout le niveau Supernova (fragments, Atelier,
     /// Constellations, Supernovas, Défis) contre un bonus permanent.
     /// Les succès, les statistiques et les comètes capturées sont conservés.
-    pub fn big_crunch(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
+    pub fn big_crunch(
+        &mut self,
+        catalog: &Catalog,
+        next: UniverseId,
+        events: &mut Vec<DomainEvent>,
+    ) {
         if !self.can_big_crunch() {
             events.push(DomainEvent::BigCrunchUnavailable {
                 supernovas: self.supernovas,
@@ -899,10 +1016,37 @@ impl GameState {
             })
             .max()
             .unwrap_or(0);
+        // Univers du prochain cycle (l'origine tant que les univers sont fermés).
+        self.universe = if self.universes_unlocked() && catalog.universe(next).is_some() {
+            next
+        } else {
+            UniverseId::ORIGIN
+        };
         self.reset_run(catalog);
         events.push(DomainEvent::BigCrunch {
             crunches: self.crunches,
         });
+        events.push(DomainEvent::UniverseEntered {
+            universe: self.universe,
+        });
+        // « Départ lancé » peut suffire pour une Clé à objectif bas.
+        self.check_universe_key(catalog, events);
+        self.check_achievements(catalog, events);
+    }
+
+    /// Clé de l'univers en cours si son objectif de Supernovas est atteint.
+    fn check_universe_key(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
+        let Some(def) = catalog.universe(self.universe) else {
+            return;
+        };
+        if def.key_reward.is_none()
+            || self.has_universe_key(def.id)
+            || self.supernovas < def.key_goal
+        {
+            return;
+        }
+        self.universe_keys[def.id.index()] = true;
+        events.push(DomainEvent::UniverseKeyEarned { universe: def.id });
         self.check_achievements(catalog, events);
     }
 
@@ -1244,6 +1388,7 @@ impl GameState {
                 challenges_done: self.challenges_done.iter().filter(|&&d| d).count(),
                 crunches: self.crunches,
                 lab_done: self.lab.iter().filter(|&&d| d).count(),
+                universe_keys: self.universe_keys.iter().filter(|&&k| k).count(),
             };
             for a in &catalog.achievements {
                 if !self.has_achievement(a.id) && a.condition.is_met(&ctx) {
@@ -1727,7 +1872,7 @@ mod tests {
     fn big_crunch_resets_the_supernova_layer() {
         let (c, mut s, mut ev) = setup();
         s.supernovas = 14;
-        s.big_crunch(&c, &mut ev);
+        s.big_crunch(&c, UniverseId::ORIGIN, &mut ev);
         assert_eq!(
             ev,
             [DomainEvent::BigCrunchUnavailable {
@@ -1752,7 +1897,7 @@ mod tests {
         let hold = c.upgrade_by_key("hold_0").unwrap();
         s.upgrades[hold.index()] = true;
 
-        s.big_crunch(&c, &mut ev);
+        s.big_crunch(&c, UniverseId::ORIGIN, &mut ev);
         assert!(ev.contains(&DomainEvent::BigCrunch { crunches: 1 }));
         assert_eq!(s.crunches, 1);
         // Remis à zéro.
@@ -1793,7 +1938,7 @@ mod tests {
         // Pas de Big Crunch pendant un Défi.
         s.supernovas = 20;
         s.challenge = Some(c.challenge_by_key("ch_noclick").unwrap());
-        s.big_crunch(&c, &mut ev);
+        s.big_crunch(&c, UniverseId::ORIGIN, &mut ev);
         assert!(matches!(ev[0], DomainEvent::BigCrunchUnavailable { .. }));
     }
 
@@ -1863,7 +2008,7 @@ mod tests {
         s.challenges_done[0] = true;
         s.constellations[0] = 5;
         s.supernovas = 15;
-        s.big_crunch(&c, &mut ev);
+        s.big_crunch(&c, UniverseId::ORIGIN, &mut ev);
         assert!(s.perks[0], "Mémoire de l'Atelier");
         assert!(s.challenges_done[0], "Défis gravés");
         assert_eq!(
@@ -1910,6 +2055,92 @@ mod tests {
         s.tick(&c, 1.0, 0.5, &mut ev); // apparition
         s.tick(&c, 2.5, 0.5, &mut ev); // 2 s de passage → capture
         assert_eq!(s.meteors_caught, caught + 1);
+    }
+
+    fn universe(c: &Catalog, key: &str) -> UniverseId {
+        c.universe_by_key(key).unwrap()
+    }
+
+    #[test]
+    fn universes_open_at_10_crunches() {
+        let (c, mut s, mut ev) = setup();
+        let gravity = universe(&c, "gravity");
+        s.supernovas = 15;
+        s.big_crunch(&c, gravity, &mut ev);
+        assert_eq!(s.universe, UniverseId::ORIGIN, "fermés avant 10 Big Crunch");
+        s.crunches = 10;
+        s.supernovas = 15;
+        ev.clear();
+        s.big_crunch(&c, gravity, &mut ev);
+        assert_eq!(s.universe, gravity);
+        assert!(ev.contains(&DomainEvent::UniverseEntered { universe: gravity }));
+    }
+
+    #[test]
+    fn universe_rules_apply() {
+        let (c, mut s, mut ev) = setup();
+        s.owned[1] = 10;
+        let base_prod = economy::total_production(&c, &s);
+        let base_cost = s.generator_cost(&c, GeneratorId(0), 1);
+        // Gravité forte : coûts ×2, production ×4.
+        s.universe = universe(&c, "gravity");
+        assert!((s.generator_cost(&c, GeneratorId(0), 1) - base_cost * 2.0).abs() < 1e-9);
+        assert!((economy::total_production(&c, &s) / base_prod - 4.0).abs() < 1e-9);
+        // Désert : améliorations interdites, production ×10.
+        s.universe = universe(&c, "desert");
+        s.stardust = Stardust::new(1e6);
+        s.buy_upgrade(&c, c.upgrade_by_key("gen1_t0").unwrap(), &mut ev);
+        assert!(matches!(
+            ev.last(),
+            Some(DomainEvent::ChallengeBlocked { .. })
+        ));
+        assert!((economy::total_production(&c, &s) / base_prod - 10.0).abs() < 1e-9);
+        // Entropie : −1 %/min, plancher à 10 %.
+        s.universe = universe(&c, "entropy");
+        s.run_started = s.play_time;
+        assert_eq!(s.entropy_factor(&c), 1.0);
+        s.play_time += 30.0 * 60.0;
+        assert!((s.entropy_factor(&c) - 0.7).abs() < 1e-9);
+        s.play_time += 1000.0 * 60.0;
+        assert_eq!(s.entropy_factor(&c), 0.1);
+        // Temps dilaté : hors-ligne ×4.
+        s.universe = universe(&c, "time");
+        assert_eq!(s.offline_terms(&c).0, OFFLINE_RATE * 4.0);
+        // Nuée : comètes 5× plus fréquentes.
+        s.universe = universe(&c, "swarm");
+        s.tick(&c, 0.1, 0.0, &mut ev);
+        assert!((s.comet.interval_factor - 0.2).abs() < 1e-9);
+    }
+
+    #[test]
+    fn universe_key_is_earned_and_kept() {
+        let (c, mut s, mut ev) = setup();
+        let desert = universe(&c, "desert");
+        s.crunches = 10;
+        s.supernovas = 15;
+        s.big_crunch(&c, desert, &mut ev);
+        s.owned[1] = 10;
+        let prod_in_desert = economy::total_production(&c, &s);
+        // 20 Supernovas dans le Désert → Clé des sables.
+        s.supernovas = 19;
+        s.total_run = 1e12;
+        ev.clear();
+        s.supernova(&c, &mut ev);
+        assert!(ev.contains(&DomainEvent::UniverseKeyEarned { universe: desert }));
+        assert!(s.has_universe_key(desert));
+        assert!(s.has_achievement(c.achievement_by_key("key1").unwrap()));
+        // Retour à l'origine : la Clé reste, production ×2 partout.
+        s.supernovas = 15;
+        s.big_crunch(&c, UniverseId::ORIGIN, &mut ev);
+        s.owned[1] = 10;
+        let prod_origin = economy::total_production(&c, &s);
+        assert!(
+            prod_origin > 0.0 && prod_in_desert > prod_origin,
+            "le Désert ×10 > la Clé ×2"
+        );
+        s.universe_keys[desert.index()] = false;
+        let without_key = economy::total_production(&c, &s);
+        assert!((prod_origin / without_key - 2.0).abs() < 1e-9);
     }
 
     #[test]

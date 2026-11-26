@@ -49,6 +49,10 @@ pub struct SaveData {
     /// Recherche en cours (clé, vide sinon) et secondes restantes.
     pub research: String,
     pub research_left: f64,
+    /// Univers en cours (clé) et Clés obtenues.
+    pub universe: String,
+    pub universe_keys: Vec<String>,
+    pub run_started: f64,
 }
 
 impl SaveData {
@@ -132,6 +136,17 @@ impl SaveData {
                 .map(|l| l.key.to_string())
                 .unwrap_or_default(),
             research_left: state.research.map(|(_, left)| left).unwrap_or(0.0),
+            universe: catalog
+                .universe(state.universe)
+                .map(|u| u.key.to_string())
+                .unwrap_or_default(),
+            universe_keys: catalog
+                .universes
+                .iter()
+                .filter(|u| state.has_universe_key(u.id))
+                .map(|u| u.key.to_string())
+                .collect(),
+            run_started: state.run_started,
         }
     }
 
@@ -193,6 +208,13 @@ impl SaveData {
                 s.lab_paused[id.index()] = true;
             }
         }
+        s.universe = catalog.universe_by_key(&self.universe).unwrap_or_default();
+        for key in &self.universe_keys {
+            if let Some(id) = catalog.universe_by_key(key) {
+                s.universe_keys[id.index()] = true;
+            }
+        }
+        s.run_started = self.run_started.min(self.play_time);
         s.research = catalog
             .lab_by_key(&self.research)
             .map(|id| (id, self.research_left.max(0.0)));

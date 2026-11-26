@@ -1,7 +1,8 @@
 //! Vue en lecture seule de l'état du jeu, destinée à la présentation.
 
 use domain::{
-    BuyMode, ChallengeId, CometKind, ConstellationId, GeneratorId, LabId, PerkId, UpgradeId,
+    BuyMode, ChallengeId, CometKind, ConstellationId, GeneratorId, LabId, PerkId, UniverseId,
+    UpgradeId,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -86,6 +87,14 @@ pub struct LabView {
     pub available: bool,
     /// Son prérequis n'est pas encore terminé.
     pub blocked: bool,
+}
+
+/// Un univers parallèle.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UniverseView {
+    pub id: UniverseId,
+    pub current: bool,
+    pub key: bool,
 }
 
 /// La recherche en cours.
@@ -190,6 +199,12 @@ pub struct GameSnapshot {
     pub dark_matter_spendable: u32,
     pub lab: Vec<LabView>,
     pub research: Option<ResearchView>,
+    /// Univers parallèles.
+    pub universe: UniverseId,
+    pub universes_unlocked: bool,
+    pub universes: Vec<UniverseView>,
+    /// Facteur d'entropie du cycle (1 = aucune perte).
+    pub entropy: f64,
     pub constellation_levels: u32,
     pub autobuy_unlocked: bool,
     pub autobuy: bool,

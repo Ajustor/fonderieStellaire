@@ -11,7 +11,7 @@ use crate::ports::{Clock, LoadOutcome, RandomSource, SaveRepository};
 use crate::save_dto::SaveData;
 use crate::snapshot::{
     ActiveChallengeView, ChallengeView, ConstellationView, GameSnapshot, GeneratorView, LabView,
-    NextUpgradeView, PerkView, ProgressView, ResearchView, TeaserView, UpgradeView,
+    NextUpgradeView, PerkView, ProgressView, ResearchView, TeaserView, UniverseView, UpgradeView,
 };
 
 /// Nombre d'échantillons de production conservés (1 par seconde).
@@ -171,7 +171,7 @@ impl GameService {
             Command::ToggleAutoBuy => self.state.toggle_autobuy(&self.catalog, &mut ev),
             Command::StartChallenge(id) => self.state.start_challenge(&self.catalog, id, &mut ev),
             Command::AbandonChallenge => self.state.abandon_challenge(&self.catalog, &mut ev),
-            Command::BigCrunch => self.state.big_crunch(&self.catalog, &mut ev),
+            Command::BigCrunch(next) => self.state.big_crunch(&self.catalog, next, &mut ev),
             Command::StartResearch(id) => self.state.start_research(&self.catalog, id, &mut ev),
             Command::ToggleLab(id) => self.state.toggle_lab(&self.catalog, id, &mut ev),
             Command::BuyConstellation(id) => {
@@ -331,6 +331,16 @@ impl GameService {
                     .is_some_and(|p| !st.lab_done(p)),
             }
         }));
+        snap.universe = st.universe;
+        snap.universes_unlocked = st.universes_unlocked();
+        snap.universes.clear();
+        snap.universes
+            .extend(c.universes.iter().map(|u| UniverseView {
+                id: u.id,
+                current: st.universe == u.id,
+                key: st.has_universe_key(u.id),
+            }));
+        snap.entropy = st.entropy_factor(c);
         snap.research = st.research.and_then(|(id, left)| {
             let def = c.lab_node(id)?;
             Some(ResearchView {

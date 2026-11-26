@@ -47,6 +47,9 @@ struct SaveFile {
     lab_paused: Vec<String>,
     research: String,
     research_left: f64,
+    universe: String,
+    universe_keys: Vec<String>,
+    run_started: f64,
 }
 
 impl From<&SaveData> for SaveFile {
@@ -82,6 +85,9 @@ impl From<&SaveData> for SaveFile {
             lab_paused: d.lab_paused.clone(),
             research: d.research.clone(),
             research_left: d.research_left,
+            universe: d.universe.clone(),
+            universe_keys: d.universe_keys.clone(),
+            run_started: d.run_started,
         }
     }
 }
@@ -119,6 +125,9 @@ impl From<SaveFile> for SaveData {
             lab_paused: f.lab_paused,
             research: f.research,
             research_left: f.research_left,
+            universe: f.universe,
+            universe_keys: f.universe_keys,
+            run_started: f.run_started,
         }
     }
 }

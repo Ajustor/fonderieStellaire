@@ -39,6 +39,10 @@ pub struct NovaSequence {
     /// Big Crunch (implosion) plutôt que Supernova. Les bonus sont alors des
     /// multiplicateurs de production (×2 → ×3…).
     pub crunch: bool,
+    /// Univers de destination du Big Crunch, son nom et ses couleurs.
+    pub universe: domain::UniverseId,
+    pub universe_name: String,
+    pub palette: [crate::fx::Rgb; 3],
 }
 
 impl NovaSequence {
@@ -61,7 +65,26 @@ impl NovaSequence {
             committed: false,
             wave_fired: false,
             crunch: false,
+            universe: domain::UniverseId::ORIGIN,
+            universe_name: String::new(),
+            palette: theme::universe_palette(0),
         }
+    }
+
+    /// Big Crunch vers un univers donné (couleurs et nom de la destination).
+    pub fn crunch_into(
+        now: f64,
+        crunches: u32,
+        prod_before: f64,
+        prod_after: f64,
+        universe: domain::UniverseId,
+        universe_name: &str,
+    ) -> Self {
+        let mut s = Self::crunch(now, crunches, prod_before, prod_after);
+        s.universe = universe;
+        s.universe_name = universe_name.to_string();
+        s.palette = theme::universe_palette(universe.index());
+        s
     }
 
     /// Séquence du Big Crunch : `crunches` après l'effondrement, production
@@ -140,7 +163,9 @@ impl NovaSequence {
                     if (0.0..4.0).contains(&band) {
                         let ch = ['█', '▓', '▒', '░'][band as usize];
                         let c = if self.crunch {
-                            CRUNCH_VIOLET.lerp(theme::PINK, band / 4.0).dim(p * 0.4)
+                            self.palette[0]
+                                .lerp(self.palette[1], band / 4.0)
+                                .dim(p * 0.4)
                         } else {
                             theme::WHITE
                                 .lerp(theme::ORANGE, band / 4.0 + p * 0.3)
@@ -156,7 +181,9 @@ impl NovaSequence {
         if (1.2..1.9).contains(&t) {
             let amount = if t < 1.4 { 1.0 } else { 1.0 - (t - 1.4) / 0.5 };
             let color = if self.crunch {
-                CRUNCH_VIOLET.lerp(theme::BLACK, (t - 1.2) / 0.7)
+                CRUNCH_VIOLET
+                    .lerp(self.palette[0], 0.5)
+                    .lerp(theme::BLACK, (t - 1.2) / 0.7)
             } else {
                 theme::WHITE.lerp(theme::ORANGE, (t - 1.2) / 0.7)
             };
@@ -177,6 +204,22 @@ impl NovaSequence {
         let tl = &self.timeline;
         draw::clear(buf, area);
         draw_stars(buf, area, stars, now, 12.0, tl.progress("stars", t));
+        if self.crunch {
+            let open = tl.progress("stars", t);
+            let cx = area.x as f64 + area.width as f64 / 2.0;
+            let cy = area.y as f64 + area.height as f64 / 2.0;
+            let radius = open * area.width.min(area.height * 2) as f64 * 0.45;
+            crate::widgets::portals::draw_vortex(
+                buf,
+                area,
+                cx,
+                cy,
+                radius,
+                now,
+                &self.palette,
+                0.55,
+            );
+        }
 
         let text = if self.crunch {
             "BIG CRUNCH".to_string()
@@ -248,21 +291,21 @@ impl NovaSequence {
                 theme::bold(theme::CYAN),
                 area.right(),
             );
-            let sub = if self.crunch {
-                "L'univers se replie sur lui-même… puis tout recommence."
+            let sub = if self.crunch && !self.universe_name.is_empty() {
+                format!("Bienvenue dans l'univers : {}", self.universe_name)
+            } else if self.crunch {
+                "L'univers se replie sur lui-même… puis tout recommence.".to_string()
             } else {
-                "La fonderie renaît de la poussière…"
+                "La fonderie renaît de la poussière…".to_string()
             };
             let w = sub.chars().count() as u16;
             let x = area.x + area.width.saturating_sub(w) / 2;
-            draw::text(
-                buf,
-                x,
-                cy + 4,
-                sub,
-                theme::fg(theme::MUTED.dim(1.0 - count_p)),
-                area.right(),
-            );
+            let sub_color = if self.crunch {
+                self.palette[0].lerp(theme::WHITE, 0.3 * (1.0 - count_p))
+            } else {
+                theme::MUTED.dim(1.0 - count_p)
+            };
+            draw::text(buf, x, cy + 4, &sub, theme::bold(sub_color), area.right());
         }
     }
 }

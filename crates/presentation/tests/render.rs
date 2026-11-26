@@ -403,7 +403,7 @@ fn descriptions_and_info_screen() {
     app.set_time(101.0);
     let text = render(&mut app, 100, 30);
     println!("{text}");
-    assert!(text.contains("SUCCÈS  2/37"));
+    assert!(text.contains("SUCCÈS  2/39"));
     assert!(text.contains("★ Premier pas"));
     assert!(text.contains("○ Centurion"));
     app.on_intent(Intent::Down);
@@ -756,4 +756,70 @@ fn v0_7_laboratory() {
     // Une heure plus tard, c'est fait.
     app.update(3601.0);
     assert!(app.snapshot().lab[0].done || app.snapshot().lab.iter().any(|l| l.done));
+}
+
+#[test]
+fn v0_8_portals_universes_and_key_ceremony() {
+    // 10 Big Crunch et 15 Supernovas : le Big Crunch ouvre les portails.
+    let mut save = advanced_save();
+    save.crunches = 10;
+    save.supernovas = 15;
+    let mut app = app_with(Some(save));
+    let mut t = 100.0;
+    app.set_time(t);
+    app.enter_game_now();
+    app.update(0.033);
+    let _ = render(&mut app, 120, 36);
+
+    app.on_intent(Intent::BigCrunch);
+    // Les cartes arrivent en vol : on laisse l'animation se poser.
+    for _ in 0..30 {
+        t += 1.0 / 30.0;
+        app.set_time(t);
+        let _ = render(&mut app, 120, 36);
+    }
+    app.on_intent(Intent::NextPanel); // → Gravité forte
+    for _ in 0..15 {
+        t += 1.0 / 30.0;
+        app.set_time(t);
+        let _ = render(&mut app, 120, 36);
+    }
+    let text = render(&mut app, 120, 36);
+    println!("{text}");
+    assert!(text.contains("CHOISIS TON UNIVERS"));
+    assert!(text.contains("Gravité forte"));
+    assert!(text.contains("Clé : 20 Supernovas"));
+    assert!(
+        text.contains('▓') || text.contains('▒'),
+        "les vortex sont dessinés"
+    );
+
+    // Plongée, puis toute la séquence du Big Crunch, image par image.
+    app.on_intent(Intent::Buy);
+    for i in 0..(7 * 30) {
+        t += 1.0 / 30.0;
+        app.set_time(t);
+        app.update(1.0 / 30.0);
+        let (w, h) = if i % 3 == 0 { (80, 24) } else { (120, 36) };
+        let _ = render(&mut app, w, h);
+    }
+    let snap = app.snapshot();
+    assert_eq!(snap.crunches, 11);
+    assert_eq!(snap.universe.index(), 1, "univers : Gravité forte");
+    let text = render(&mut app, 120, 36);
+    assert!(
+        text.contains("● Gravité forte"),
+        "badge de l'univers :\n{text}"
+    );
+
+    // La consultation (V) ne lance rien.
+    app.on_intent(Intent::Universes);
+    t += 1.0;
+    app.set_time(t);
+    let text = render(&mut app, 120, 36);
+    assert!(text.contains("UNIVERS PARALLÈLES"));
+    app.on_intent(Intent::Buy);
+    app.update(0.033);
+    assert_eq!(app.snapshot().crunches, 11);
+    app.on_intent(Intent::Escape);
 }
