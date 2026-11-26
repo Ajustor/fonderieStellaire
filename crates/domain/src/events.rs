@@ -27,6 +27,19 @@ pub enum PurchaseTarget {
     Attractor(usize),
     /// Expédition vers un système.
     Expedition(usize),
+    /// Équiper une relique.
+    Relic(crate::relic::RelicId),
+}
+
+/// Ce que devient une relique trouvée.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RelicOutcome {
+    /// Nouvelle dans la collection.
+    New,
+    /// Déjà possédée, mais à une rareté plus basse : elle est améliorée.
+    Upgraded,
+    /// Doublon : changée en Éclat (+1 % de production).
+    Shard,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -171,6 +184,17 @@ pub enum DomainEvent {
     },
     /// Tous les systèmes sont explorés.
     StarMapCompleted,
+    /// Une relique rapportée d'expédition.
+    RelicFound {
+        relic: crate::relic::RelicId,
+        rarity: u8,
+        outcome: RelicOutcome,
+    },
+    /// Relique équipée ou rangée.
+    RelicToggled {
+        relic: crate::relic::RelicId,
+        equipped: bool,
+    },
     /// Big Crunch demandé trop tôt.
     BigCrunchUnavailable {
         supernovas: u32,

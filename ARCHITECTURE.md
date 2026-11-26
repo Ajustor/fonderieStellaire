@@ -53,7 +53,8 @@ grep -rlE "serde|std::fs"     crates | grep -v crates/infrastructure # → rien
   générateurs primordiaux avec `GeneratorDef::particle_cost`, étapes en temps
   réel avancées comme les recherches), Carte stellaire (`starmap.rs` : carte
   générée depuis une graine sauvegardée, expéditions dont l'issue est tirée au
-  départ) et l'agrégat `GameState`
+  départ), Reliques (`relic.rs` : collection, rareté tirée au retour, effets
+  des reliques équipées et bonus d'ensemble) et l'agrégat `GameState`
   (dont l'automate d'achat et « tout acheter »). Le temps (`dt`) et les tirages
   aléatoires (`roll: f64`) arrivent **en paramètre**. Chaque opération pousse des
   `DomainEvent` dans un `Vec`.

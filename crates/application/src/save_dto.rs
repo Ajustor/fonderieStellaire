@@ -72,6 +72,12 @@ pub struct SaveData {
     pub explored: Vec<usize>,
     pub fleets: Vec<(usize, f64, f64, bool)>,
     pub expeditions_launched: u32,
+    /// Butin et prospection de chaque flotte (même ordre que `fleets`).
+    pub fleets_loot: Vec<(f64, bool)>,
+    /// Reliques : (clé, rareté), clés des équipées, Éclats.
+    pub relics: Vec<(String, u8)>,
+    pub equipped: Vec<String>,
+    pub shards: u32,
 }
 
 impl SaveData {
@@ -193,6 +199,18 @@ impl SaveData {
                 .map(|f| (f.target, f.left, f.total, f.success))
                 .collect(),
             expeditions_launched: state.expeditions_launched,
+            fleets_loot: state.fleets.iter().map(|f| (f.loot, f.prospect)).collect(),
+            relics: catalog
+                .relics
+                .iter()
+                .filter_map(|r| state.relic_rarity(r.id).map(|k| (r.key.to_string(), k)))
+                .collect(),
+            equipped: state
+                .equipped
+                .iter()
+                .filter_map(|&id| catalog.relic(id).map(|r| r.key.to_string()))
+                .collect(),
+            shards: state.shards,
         }
     }
 
@@ -284,15 +302,31 @@ impl SaveData {
         s.fleets = self
             .fleets
             .iter()
-            .map(
-                |&(target, left, total, success)| domain::state::Expedition {
+            .enumerate()
+            .map(|(i, &(target, left, total, success))| {
+                let (loot, prospect) = self.fleets_loot.get(i).copied().unwrap_or((0.5, false));
+                domain::state::Expedition {
                     target,
                     left,
                     total,
                     success,
-                },
-            )
+                    loot,
+                    prospect,
+                }
+            })
             .collect();
+        s.relics.resize(catalog.relics.len(), None);
+        for (key, rarity) in &self.relics {
+            if let Some(id) = catalog.relic_by_key(key) {
+                s.relics[id.index()] = Some(*rarity);
+            }
+        }
+        s.equipped = self
+            .equipped
+            .iter()
+            .filter_map(|k| catalog.relic_by_key(k))
+            .collect();
+        s.shards = self.shards;
         s.expeditions_launched = self.expeditions_launched;
         // 0 (valeur par défaut) ou négatif : aucun chantier en cours.
         s.attractor_build = (self.attractor_left > 0.0).then_some(self.attractor_left);

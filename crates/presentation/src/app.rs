@@ -369,6 +369,25 @@ impl App {
                         self.ui.options_armed = false;
                     }
                 }
+                if let Some(r) = self.ui.relics {
+                    if r.is_closed(now) {
+                        self.ui.relics = None;
+                    }
+                }
+                // Cartes des reliques trouvées, l'une après l'autre.
+                if self
+                    .vis
+                    .relic_card
+                    .is_some_and(|c| now - c.start >= crate::widgets::relics::CARD_DURATION)
+                {
+                    self.vis.relic_card = None;
+                }
+                if self.vis.relic_card.is_none() {
+                    if let Some(mut next) = self.vis.relic_queue.pop_front() {
+                        next.start = now;
+                        self.vis.relic_card = Some(next);
+                    }
+                }
                 // Fin de l'effacement : nouvelle partie, retour à l'écran titre.
                 if let Some(at) = self.ui.wipe_at {
                     if now - at >= crate::widgets::options::WIPE_DURATION {
@@ -532,6 +551,33 @@ impl App {
         if self.vis.bang.is_some() || self.ui.wipe_at.is_some() {
             if intent == Intent::Quit {
                 self.quit = true;
+            }
+            return;
+        }
+        if let Some(popup) = self.ui.relics {
+            if popup.closing_at.is_none() {
+                let sel = self.ui.relics_sel;
+                match intent {
+                    Intent::PrevPanel => {
+                        self.ui.relics_sel = crate::widgets::relics::navigate(sel, -1, 0)
+                    }
+                    Intent::NextPanel => {
+                        self.ui.relics_sel = crate::widgets::relics::navigate(sel, 1, 0)
+                    }
+                    Intent::Up => self.ui.relics_sel = crate::widgets::relics::navigate(sel, 0, -1),
+                    Intent::Down => {
+                        self.ui.relics_sel = crate::widgets::relics::navigate(sel, 0, 1)
+                    }
+                    Intent::Buy | Intent::Yes => {
+                        self.command(Command::ToggleRelic(domain::RelicId(sel)));
+                    }
+                    Intent::Relics | Intent::Escape | Intent::No | Intent::Quit => {
+                        if let Some(p) = self.ui.relics.as_mut() {
+                            p.closing_at = Some(now);
+                        }
+                    }
+                    _ => {}
+                }
             }
             return;
         }
@@ -810,6 +856,21 @@ impl App {
                 }
             }
             Intent::Save => self.command(Command::Save),
+            Intent::Relics => {
+                if self.snap.starmap_unlocked {
+                    self.ui.relics = Some(Popup {
+                        opened_at: now,
+                        closing_at: None,
+                    });
+                } else {
+                    self.toasts.push(
+                        now,
+                        theme::GREY,
+                        "Reliques",
+                        "Les expéditions de l'Acte III en rapportent",
+                    );
+                }
+            }
             Intent::StarMap => {
                 if self.snap.starmap_unlocked {
                     let mut state = StarMapState::new(now);
@@ -1338,6 +1399,14 @@ impl App {
                         format!("Pas assez de particules {PARTICLE}")
                     };
                     self.toasts.push(now, theme::GREY, "Grand Attracteur", body);
+                }
+                PurchaseTarget::Relic(_) => {
+                    let body = if self.snap.relics_equipped >= self.snap.relic_slots {
+                        "Emplacements pleins : range d'abord une relique"
+                    } else {
+                        "Pas encore trouvée"
+                    };
+                    self.toasts.push(now, theme::GREY, "Reliques", body);
                 }
                 PurchaseTarget::Expedition(system) => {
                     let body = if self.snap.fleets.len() >= self.snap.fleets_max {
@@ -1917,6 +1986,50 @@ impl App {
                         "Échec : la flotte rentre les cales vides",
                     );
                 }
+            }
+            DomainEvent::RelicFound {
+                relic,
+                rarity,
+                outcome,
+            } => {
+                let name = self
+                    .service
+                    .catalog()
+                    .relic(relic)
+                    .map(|r| r.name)
+                    .unwrap_or("?");
+                let rarity_name = domain::relic::RARITY_NAMES[(rarity as usize).min(3)];
+                let what = match outcome {
+                    domain::RelicOutcome::New => "nouvelle",
+                    domain::RelicOutcome::Upgraded => "améliorée",
+                    domain::RelicOutcome::Shard => "doublon, changé en Éclat",
+                };
+                self.log(
+                    Kind::Achievement,
+                    format!("◆ Relique : {name} ({rarity_name}, {what})"),
+                );
+                self.vis
+                    .relic_queue
+                    .push_back(crate::widgets::relics::RelicCard {
+                        start: now,
+                        relic,
+                        rarity,
+                        outcome,
+                    });
+                if rarity >= 3 {
+                    self.vis.fireworks(now + 0.5);
+                    self.vis.fireworks(now + 1.0);
+                }
+            }
+            DomainEvent::RelicToggled { relic, equipped } => {
+                let name = self
+                    .service
+                    .catalog()
+                    .relic(relic)
+                    .map(|r| r.name)
+                    .unwrap_or("?");
+                let what = if equipped { "équipée" } else { "rangée" };
+                self.log(Kind::Info, format!("◆ {name} {what}"));
             }
             DomainEvent::StarMapCompleted => {
                 self.log(

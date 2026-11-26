@@ -129,6 +129,7 @@ pub fn lines(ctx: &Ctx) -> Vec<(String, Style)> {
         "▼ Forge primordiale [G] : des particules pour forger 3 générateurs de fin de jeu, présents dans tous les cycles.".into(),
         "◆ Grand Attracteur [G] : 7 étapes payées en particules et construites en temps réel, même jeu fermé. La dernière clôt l'Acte II.".into(),
         "▸ Carte stellaire [X] (Acte III, après l'éveil du Grand Attracteur) : envoie des flottes explorer des systèmes, en temps réel. Plus un système est dangereux, plus l'expédition est longue et risquée, et plus elle rapporte : production, fragments, hors-ligne, comètes, flottes en plus ou un gros gain immédiat.".into(),
+        "◆ Reliques [H] : rapportées par les expéditions (toujours en prospection, vers un système déjà exploré). 16 à collectionner, 4 raretés ; équipe-les (3 à 5 emplacements) et réunis 3 reliques d'un même ensemble pour son bonus. Un doublon devient un Éclat (+1 % de production).".into(),
         "○ Hors-ligne : ta fonderie produit à 50 % pendant ton absence (12 h max).".into(),
         "· Raccourcis : [A] tout acheter · [T] automate · [PgUp]/[PgDn] journal.".into(),
         "· Sauvegarde automatique toutes les 30 s et en quittant.".into(),

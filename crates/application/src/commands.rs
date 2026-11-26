@@ -43,4 +43,6 @@ pub enum Command {
     NewGame,
     /// Envoie une flotte explorer un système de la Carte stellaire.
     LaunchExpedition(usize),
+    /// Équipe ou range une relique.
+    ToggleRelic(domain::RelicId),
 }

@@ -61,6 +61,10 @@ struct SaveFile {
     explored: Vec<usize>,
     fleets: Vec<(usize, f64, f64, bool)>,
     expeditions_launched: u32,
+    fleets_loot: Vec<(f64, bool)>,
+    relics: Vec<(String, u8)>,
+    equipped: Vec<String>,
+    shards: u32,
 }
 
 impl From<&SaveData> for SaveFile {
@@ -110,6 +114,10 @@ impl From<&SaveData> for SaveFile {
             explored: d.explored.clone(),
             fleets: d.fleets.clone(),
             expeditions_launched: d.expeditions_launched,
+            fleets_loot: d.fleets_loot.clone(),
+            relics: d.relics.clone(),
+            equipped: d.equipped.clone(),
+            shards: d.shards,
         }
     }
 }
@@ -161,6 +169,10 @@ impl From<SaveFile> for SaveData {
             explored: f.explored,
             fleets: f.fleets,
             expeditions_launched: f.expeditions_launched,
+            fleets_loot: f.fleets_loot,
+            relics: f.relics,
+            equipped: f.equipped,
+            shards: f.shards,
         }
     }
 }

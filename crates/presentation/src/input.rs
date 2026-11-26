@@ -41,6 +41,8 @@ pub enum Intent {
     Options,
     /// `X` : Carte stellaire (Acte III).
     StarMap,
+    /// `H` : Reliques (Acte III).
+    Relics,
     /// `T` : activer / arrêter l'automate.
     ToggleAuto,
     /// `PgUp` / `PgDn` : remonter / redescendre dans le journal.
@@ -166,6 +168,7 @@ pub fn map_key(key: &KeyEvent) -> Option<Intent> {
             'g' => Intent::Cosmos,
             'r' => Intent::Options,
             'x' => Intent::StarMap,
+            'h' => Intent::Relics,
             't' => Intent::ToggleAuto,
             'o' | 'y' => Intent::Yes,
             'n' => Intent::No,

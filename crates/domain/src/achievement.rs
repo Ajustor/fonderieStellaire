@@ -55,6 +55,10 @@ pub enum AchievementCondition {
     Expeditions(u32),
     /// Systèmes explorés (hors fonderie).
     Explored(usize),
+    /// Reliques différentes possédées.
+    Relics(usize),
+    /// Un bonus d'ensemble de reliques actif.
+    RelicSet,
 }
 
 /// Données nécessaires pour évaluer une condition de succès.
@@ -81,6 +85,8 @@ pub struct AchievementContext<'a> {
     pub attractor_stages: usize,
     pub expeditions: u32,
     pub explored: usize,
+    pub relics: usize,
+    pub relic_set_active: bool,
 }
 
 impl AchievementCondition {
@@ -116,6 +122,8 @@ impl AchievementCondition {
             AchievementCondition::AttractorStages(n) => ctx.attractor_stages >= n,
             AchievementCondition::Expeditions(n) => ctx.expeditions >= n,
             AchievementCondition::Explored(n) => ctx.explored >= n,
+            AchievementCondition::Relics(n) => ctx.relics >= n,
+            AchievementCondition::RelicSet => ctx.relic_set_active,
         }
     }
 }
@@ -157,6 +165,8 @@ mod tests {
             attractor_stages: 0,
             expeditions: 0,
             explored: 0,
+            relics: 0,
+            relic_set_active: false,
         }
     }
 

@@ -63,6 +63,15 @@ pub struct SystemView {
     pub reward_scale: f64,
 }
 
+/// Une relique de la collection.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RelicView {
+    pub id: domain::RelicId,
+    /// Meilleure rareté possédée (0 à 3), `None` si pas encore trouvée.
+    pub rarity: Option<u8>,
+    pub equipped: bool,
+}
+
 /// Une flotte en route.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FleetView {
@@ -288,4 +297,12 @@ pub struct GameSnapshot {
     pub explored: usize,
     pub map_production: f64,
     pub map_fragments: f64,
+    /// Reliques : collection, emplacements, Éclats, ensembles (reliques
+    /// équipées par ensemble).
+    pub relics: Vec<RelicView>,
+    pub relic_slots: usize,
+    pub relics_equipped: usize,
+    pub shards: u32,
+    pub relic_production: f64,
+    pub relic_sets: Vec<(domain::RelicSet, usize)>,
 }

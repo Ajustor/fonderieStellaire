@@ -202,7 +202,22 @@ fn no_text_is_cut_anywhere() {
     let mut act3 = late.clone();
     act3.big_bangs = 1;
     act3.attractor = 7;
-    report.extend(audit("carte stellaire", act3, &[Intent::StarMap], 6));
+    report.extend(audit(
+        "carte stellaire",
+        act3.clone(),
+        &[Intent::StarMap],
+        6,
+    ));
+    let mut relics = act3.clone();
+    relics.relics = vec![
+        ("r_hammer".into(), 3),
+        ("r_compass".into(), 1),
+        ("r_mirror".into(), 2),
+        ("r_tear".into(), 0),
+    ];
+    relics.equipped = vec!["r_hammer".into()];
+    relics.shards = 12;
+    report.extend(audit("reliques", relics, &[Intent::Relics], 8));
     let mut bang = late.clone();
     bang.crunches = 34;
     report.extend(audit("cosmogonie", bang, &[Intent::Cosmos], 11));

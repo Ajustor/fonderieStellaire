@@ -403,7 +403,8 @@ fn descriptions_and_info_screen() {
     app.set_time(101.0);
     let text = render(&mut app, 100, 30);
     println!("{text}");
-    assert!(text.contains("SUCCÈS  2/45"));
+    let total = domain::Catalog::standard().achievements.len();
+    assert!(text.contains(&format!("SUCCÈS  2/{total}")), "{text}");
     assert!(text.contains("★ Premier pas"));
     // Succès du plus facile au plus difficile.
     let first = text.find("★ Premier pas").expect("premier succès");
@@ -1081,4 +1082,66 @@ fn v0_10_star_map_and_expeditions() {
     app.on_intent(Intent::Escape);
     let text = render(&mut app, 120, 36);
     assert!(!text.contains("CARTE STELLAIRE"));
+}
+
+#[test]
+fn v0_11_relics_found_equipped_and_card() {
+    let mut save = advanced_save();
+    save.big_bangs = 1;
+    save.attractor = 7;
+    save.relics = vec![("r_hammer".into(), 3), ("r_crucible".into(), 0)];
+    let mut app = app_with(Some(save));
+    let mut t = 100.0;
+    app.set_time(t);
+    app.enter_game_now();
+    app.update(0.033);
+    app.on_intent(Intent::Relics);
+    t += 1.0;
+    app.set_time(t);
+    let text = render(&mut app, 120, 36);
+    println!("{text}");
+    assert!(text.contains("RELIQUES"), "{text}");
+    assert!(text.contains("Marteau stellaire"));
+    assert!(text.contains("légendaire"));
+    assert!(text.contains("+80% de production"));
+    assert!(text.contains("[Entrée] équiper"));
+    app.on_intent(Intent::Buy);
+    app.update(0.033);
+    assert!(app.snapshot().relics[0].equipped);
+    assert_eq!(app.snapshot().relics_equipped, 1);
+    app.on_intent(Intent::Escape);
+
+    // Une prospection rapporte une relique : la carte se retourne.
+    let first = app.snapshot().systems[0].links[0];
+    app.on_intent(Intent::StarMap);
+    let _ = first;
+    app.on_intent(Intent::Buy);
+    app.update(0.033);
+    let total = app
+        .snapshot()
+        .fleets
+        .first()
+        .map(|f| f.total)
+        .unwrap_or(0.0);
+    app.update(total + 1.0);
+    app.on_intent(Intent::Escape);
+    let mut saw_card = false;
+    for _ in 0..(4 * 30) {
+        t += 1.0 / 30.0;
+        app.set_time(t);
+        app.update(1.0 / 30.0);
+        let text = render(&mut app, 100, 30);
+        saw_card |= text.contains("RELIQUE TROUVÉE");
+    }
+    let found = app
+        .snapshot()
+        .relics
+        .iter()
+        .filter(|r| r.rarity.is_some())
+        .count()
+        > 2
+        || app.snapshot().shards > 0;
+    if found {
+        assert!(saw_card, "la carte de la relique s'affiche");
+    }
 }

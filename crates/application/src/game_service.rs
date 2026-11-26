@@ -11,7 +11,7 @@ use crate::ports::{Clock, LoadOutcome, RandomSource, SaveRepository};
 use crate::save_dto::{SaveData, SAVE_RESET_BELOW};
 use crate::snapshot::{
     ActiveChallengeView, ChallengeView, ConstellationView, FleetView, ForgeView, GameSnapshot,
-    GeneratorView, LabView, NextUpgradeView, PerkView, ProgressView, ResearchBuildView,
+    GeneratorView, LabView, NextUpgradeView, PerkView, ProgressView, RelicView, ResearchBuildView,
     ResearchView, SystemView, TeaserView, UniverseView, UpgradeView,
 };
 
@@ -202,6 +202,7 @@ impl GameService {
                 self.state
                     .launch_expedition(&self.catalog, system, roll, &mut ev)
             }
+            Command::ToggleRelic(id) => self.state.toggle_relic(&self.catalog, id, &mut ev),
             Command::CycleFrameRate => {
                 self.frame_rate = match self.frame_rate {
                     0 | 30 => 20,
@@ -437,8 +438,8 @@ impl GameService {
                 explored: st.is_explored(sys.index),
                 revealed: st.is_revealed(sys.index),
                 available: st.can_launch_expedition(c, sys.index),
-                chance: st.expedition_chance(sys.index),
-                duration: sys.duration(),
+                chance: st.expedition_chance_in(c, sys.index),
+                duration: st.expedition_duration(c, sys.index),
                 reward_scale: sys.reward_scale(),
             }));
         snap.fleets.clear();
@@ -449,6 +450,27 @@ impl GameService {
         }));
         snap.map_production = st.map_bonus(domain::SystemKind::Nebula, 0.10);
         snap.map_fragments = st.map_bonus(domain::SystemKind::Cluster, 0.10);
+        snap.relics.clear();
+        snap.relics.extend(c.relics.iter().map(|r| RelicView {
+            id: r.id,
+            rarity: st.relic_rarity(r.id),
+            equipped: st.is_equipped(r.id),
+        }));
+        snap.relic_slots = st.relic_slots();
+        snap.relics_equipped = st.equipped.len();
+        snap.shards = st.shards;
+        snap.relic_production = st.relic_production(c);
+        snap.relic_sets = domain::RelicSet::ALL
+            .iter()
+            .map(|&s| {
+                let n = st
+                    .equipped
+                    .iter()
+                    .filter(|&&id| c.relic(id).is_some_and(|d| d.set == s))
+                    .count();
+                (s, n)
+            })
+            .collect();
         snap.research = st.research.and_then(|(id, left)| {
             let def = c.lab_node(id)?;
             Some(ResearchView {

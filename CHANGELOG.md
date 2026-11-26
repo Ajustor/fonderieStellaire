@@ -1,5 +1,36 @@
 # Journal des versions
 
+## v0.11.0 — Acte III, partie 2 : les Reliques
+
+### Nouveautés
+- **Reliques** (touche `H`) : 16 reliques réparties en **4 ensembles**
+  (Forgeron, Voyageur, Éclipse, Origines), chacune en **4 raretés**
+  (commune, rare, épique, légendaire, de ×1 à ×4 sur son effet). Effets :
+  production, fragments, clics, hors-ligne, comètes, vitesse et réussite des
+  expéditions.
+- Les expéditions réussies rapportent une relique **une fois sur deux** ; les
+  systèmes dangereux donnent plus souvent des reliques rares.
+- **Prospection** : renvoyer une flotte vers un système déjà exploré, plus
+  vite et plus sûrement, pour une relique à coup sûr.
+- **3 à 5 emplacements** (+1 à 10 systèmes explorés, +1 à la carte
+  complète). **Bonus d'ensemble** avec 3 reliques du même ensemble :
+  production ×1,5 (Forgeron), expéditions plus rapides et plus sûres
+  (Voyageur), hors-ligne +25 % (Éclipse), production ×2 (Origines).
+- Un **doublon** devient un **Éclat** : +1 % de production chacun, pour
+  toujours. Une relique trouvée à une rareté supérieure remplace l'ancienne.
+- **3 nouveaux succès** (48 au total).
+
+### Animations
+- **Relique trouvée** : une carte se retourne au centre de l'écran (même
+  par-dessus la Carte stellaire), bordée de la couleur de sa rareté, traversée
+  par un reflet. Une relique épique s'entoure d'étincelles ; une légendaire a
+  une bordure arc-en-ciel qui tourne et des feux d'artifice. Plusieurs
+  reliques s'affichent l'une après l'autre.
+
+### Rythme (simulateur, 3 h de jeu par jour)
+- Collection complète vers le **41e jour** (les raretés supérieures restent
+  à chasser ensuite).
+
 ## v0.10.0 — Acte III, partie 1 : la Carte stellaire
 
 ### Nouveautés

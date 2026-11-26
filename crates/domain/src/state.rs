@@ -15,11 +15,13 @@ use crate::comet::{
 use crate::constellation::{ConstellationEffect, ConstellationId};
 use crate::cosmos::{particles_for, AttractorEffect};
 use crate::economy;
+use crate::events::RelicOutcome;
 use crate::events::{DomainEvent, PurchaseTarget};
 use crate::generator::{milestones_crossed, BuyMode, GeneratorId};
 use crate::lab::{LabEffect, LabId};
 use crate::perk::{PerkEffect, PerkId};
 use crate::prestige::{fragment_divisor, fragments_for};
+use crate::relic::{roll_rarity, RelicEffect, RelicId, RelicSet};
 use crate::stardust::Stardust;
 use crate::starmap::{self, StarMap, SystemKind, BASE_FLEETS};
 use crate::universe::{KeyReward, UniverseId, UniverseRules, ENTROPY_FLOOR};
@@ -41,6 +43,10 @@ pub struct Expedition {
     pub total: f64,
     /// Issue tirée au départ.
     pub success: bool,
+    /// Tirage du butin (relique), fait au départ lui aussi.
+    pub loot: f64,
+    /// Prospection : retour vers un système déjà exploré, pour des reliques.
+    pub prospect: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -110,6 +116,11 @@ pub struct GameState {
     pub explored: Vec<bool>,
     pub fleets: Vec<Expedition>,
     pub expeditions_launched: u32,
+    /// Reliques : meilleure rareté possédée (indexée par relique), reliques
+    /// équipées, et Éclats (doublons).
+    pub relics: Vec<Option<u8>>,
+    pub equipped: Vec<RelicId>,
+    pub shards: u32,
     /// Niveau de chaque Constellation.
     pub constellations: Vec<u32>,
     revealed: Vec<bool>,
@@ -165,6 +176,9 @@ impl GameState {
             explored: Vec::new(),
             fleets: Vec::new(),
             expeditions_launched: 0,
+            relics: Vec::new(),
+            equipped: Vec::new(),
+            shards: 0,
             constellations: Vec::new(),
             revealed: Vec::new(),
             autobuy_timer: 0.0,
@@ -197,6 +211,19 @@ impl GameState {
             *f &= g.is_primordial();
         }
         self.particles_spent = self.particles_spent.min(self.particles);
+        self.relics.resize(catalog.relics.len(), None);
+        for r in self.relics.iter_mut().flatten() {
+            *r = (*r).min(3);
+        }
+        let owned: Vec<bool> = self.relics.iter().map(|r| r.is_some()).collect();
+        let mut seen = Vec::new();
+        self.equipped.retain(|id| {
+            let ok = owned.get(id.index()).copied().unwrap_or(false) && !seen.contains(id);
+            seen.push(*id);
+            ok
+        });
+        let slots = self.relic_slots();
+        self.equipped.truncate(slots);
         // Carte stellaire : reconstruite depuis sa graine.
         if self.map_seed != 0 && self.map.systems.is_empty() {
             self.map = starmap::generate(self.map_seed);
@@ -340,7 +367,13 @@ impl GameState {
                 _ => None,
             })
             .product();
-        rewards / self.map_bonus(SystemKind::Pulsar, 0.10)
+        rewards
+            / self.map_bonus(SystemKind::Pulsar, 0.10)
+            / (1.0
+                + self.relic_sum(catalog, |e| match e {
+                    RelicEffect::Comets(x) => Some(x),
+                    _ => None,
+                }))
             * self.rules(catalog).comet_interval
             * self
                 .perk_effects(catalog)
@@ -421,6 +454,11 @@ impl GameState {
             * self.crunch_fragments()
             * self.particle_fragments()
             * self.map_bonus(SystemKind::Cluster, 0.10)
+            * (1.0
+                + self.relic_sum(catalog, |e| match e {
+                    RelicEffect::Fragments(x) => Some(x),
+                    _ => None,
+                }))
             * self.attractor_product(catalog, |e| match e {
                 AttractorEffect::Fragments(f) => Some(f),
                 _ => None,
@@ -543,6 +581,18 @@ impl GameState {
         }
         // Trous noirs explorés : +2 h de plafond chacun (selon le danger).
         cap += (self.map_bonus(SystemKind::BlackHole, 2.0) - 1.0) * 3600.0;
+        // Reliques : plafond et rendement.
+        cap += self.relic_sum(catalog, |e| match e {
+            RelicEffect::OfflineHours(h) => Some(h),
+            _ => None,
+        }) * 3600.0;
+        rate += self.relic_sum(catalog, |e| match e {
+            RelicEffect::OfflineRate(x) => Some(x),
+            _ => None,
+        });
+        if self.relic_set_active(catalog, RelicSet::Eclipse) {
+            rate += 0.25;
+        }
         let extra_hours = self.constellation_sum(catalog, |e| match e {
             ConstellationEffect::OfflineHours(h) => Some(h),
             _ => None,
@@ -1337,17 +1387,192 @@ impl GameState {
     /// Chance de succès d'une expédition (le danger la baisse, l'expérience
     /// des systèmes déjà explorés la remonte).
     pub fn expedition_chance(&self, system: usize) -> f64 {
-        let danger = self.map.systems.get(system).map(|s| s.danger).unwrap_or(5) as f64;
-        (1.10 - 0.15 * danger + 0.02 * self.explored_count() as f64).clamp(0.30, 0.95)
+        self.expedition_chance_with(None, system)
     }
 
+    /// Chance de succès, reliques comprises (quand le catalogue est connu).
+    pub fn expedition_chance_in(&self, catalog: &Catalog, system: usize) -> f64 {
+        self.expedition_chance_with(Some(catalog), system)
+    }
+
+    fn expedition_chance_with(&self, catalog: Option<&Catalog>, system: usize) -> f64 {
+        let danger = self.map.systems.get(system).map(|s| s.danger).unwrap_or(5) as f64;
+        // Une prospection (système déjà exploré) est plus sûre.
+        let prospect = if self.is_explored(system) { 0.15 } else { 0.0 };
+        let relics = catalog
+            .map(|c| {
+                self.relic_sum(c, |e| match e {
+                    RelicEffect::ExpeditionLuck(x) => Some(x),
+                    _ => None,
+                }) + if self.relic_set_active(c, RelicSet::Voyager) {
+                    0.10
+                } else {
+                    0.0
+                }
+            })
+            .unwrap_or(0.0);
+        (1.10 - 0.15 * danger + 0.02 * self.explored_count() as f64 + prospect + relics)
+            .clamp(0.30, 0.95)
+    }
+
+    /// Durée d'une expédition (reliques et prospection comprises).
+    pub fn expedition_duration(&self, catalog: &Catalog, system: usize) -> f64 {
+        let Some(sys) = self.map.systems.get(system) else {
+            return 0.0;
+        };
+        let prospect = if self.is_explored(system) { 0.6 } else { 1.0 };
+        let speed = (1.0
+            - self.relic_sum(catalog, |e| match e {
+                RelicEffect::ExpeditionSpeed(x) => Some(x),
+                _ => None,
+            }))
+        .max(0.4);
+        let set = if self.relic_set_active(catalog, RelicSet::Voyager) {
+            0.75
+        } else {
+            1.0
+        };
+        sys.duration() * prospect * speed * set
+    }
+
+    /// Une flotte peut partir : vers un système à portée pas encore exploré,
+    /// ou en prospection vers un système déjà exploré.
     pub fn can_launch_expedition(&self, catalog: &Catalog, system: usize) -> bool {
         self.starmap_unlocked(catalog)
             && system > 0
             && self.is_revealed(system)
-            && !self.is_explored(system)
             && !self.fleets.iter().any(|f| f.target == system)
             && self.fleets.len() < self.fleets_max()
+    }
+
+    // ------------------------------------------------------------------
+    // Reliques
+    // ------------------------------------------------------------------
+
+    /// Emplacements : 3, +1 à 10 systèmes explorés, +1 à la carte complète.
+    pub fn relic_slots(&self) -> usize {
+        let n = self.explored_count();
+        let all = self.map.systems.len().saturating_sub(1);
+        3 + usize::from(n >= 10) + usize::from(all > 0 && n >= all)
+    }
+
+    pub fn relic_rarity(&self, id: RelicId) -> Option<u8> {
+        self.relics.get(id.index()).copied().flatten()
+    }
+
+    pub fn relics_owned(&self) -> usize {
+        self.relics.iter().filter(|r| r.is_some()).count()
+    }
+
+    pub fn is_equipped(&self, id: RelicId) -> bool {
+        self.equipped.contains(&id)
+    }
+
+    /// Effets des reliques équipées (rareté comprise).
+    pub fn relic_effects<'a>(
+        &'a self,
+        catalog: &'a Catalog,
+    ) -> impl Iterator<Item = RelicEffect> + 'a {
+        self.equipped.iter().filter_map(|&id| {
+            let def = catalog.relic(id)?;
+            Some(def.effect_at(self.relic_rarity(id)?))
+        })
+    }
+
+    pub fn relic_sum(&self, catalog: &Catalog, f: impl Fn(RelicEffect) -> Option<f64>) -> f64 {
+        self.relic_effects(catalog).filter_map(f).sum()
+    }
+
+    /// Bonus d'ensemble : 3 reliques équipées du même ensemble.
+    pub fn relic_set_active(&self, catalog: &Catalog, set: RelicSet) -> bool {
+        self.equipped
+            .iter()
+            .filter(|&&id| catalog.relic(id).is_some_and(|d| d.set == set))
+            .count()
+            >= 3
+    }
+
+    /// Multiplicateur de production des reliques (effets, ensembles, Éclats).
+    pub fn relic_production(&self, catalog: &Catalog) -> f64 {
+        let base = 1.0
+            + self.relic_sum(catalog, |e| match e {
+                RelicEffect::Production(x) => Some(x),
+                _ => None,
+            });
+        let forge = if self.relic_set_active(catalog, RelicSet::Forge) {
+            1.5
+        } else {
+            1.0
+        };
+        let origins = if self.relic_set_active(catalog, RelicSet::Origins) {
+            2.0
+        } else {
+            1.0
+        };
+        base * forge * origins * (1.0 + 0.01 * self.shards as f64)
+    }
+
+    /// Équipe ou range une relique.
+    pub fn toggle_relic(&mut self, catalog: &Catalog, id: RelicId, events: &mut Vec<DomainEvent>) {
+        if self.relic_rarity(id).is_none() {
+            events.push(DomainEvent::PurchaseFailed {
+                target: PurchaseTarget::Relic(id),
+            });
+            return;
+        }
+        if let Some(pos) = self.equipped.iter().position(|&e| e == id) {
+            self.equipped.remove(pos);
+            events.push(DomainEvent::RelicToggled {
+                relic: id,
+                equipped: false,
+            });
+            return;
+        }
+        if self.equipped.len() >= self.relic_slots() {
+            events.push(DomainEvent::PurchaseFailed {
+                target: PurchaseTarget::Relic(id),
+            });
+            return;
+        }
+        self.equipped.push(id);
+        events.push(DomainEvent::RelicToggled {
+            relic: id,
+            equipped: true,
+        });
+        self.check_achievements(catalog, events);
+    }
+
+    /// Ajoute une relique trouvée à la collection.
+    fn gain_relic(
+        &mut self,
+        catalog: &Catalog,
+        id: RelicId,
+        rarity: u8,
+        events: &mut Vec<DomainEvent>,
+    ) {
+        let Some(slot) = self.relics.get_mut(id.index()) else {
+            return;
+        };
+        let outcome = match *slot {
+            None => {
+                *slot = Some(rarity);
+                RelicOutcome::New
+            }
+            Some(r) if rarity > r => {
+                *slot = Some(rarity);
+                RelicOutcome::Upgraded
+            }
+            Some(_) => {
+                self.shards += 1;
+                RelicOutcome::Shard
+            }
+        };
+        events.push(DomainEvent::RelicFound {
+            relic: id,
+            rarity,
+            outcome,
+        });
+        self.check_achievements(catalog, events);
     }
 
     /// Envoie une flotte. `roll` décide dès le départ de l'issue (secret).
@@ -1364,13 +1589,17 @@ impl GameState {
             });
             return;
         }
-        let total = self.map.systems[system].duration();
-        let success = roll < self.expedition_chance(system);
+        let total = self.expedition_duration(catalog, system);
+        let success = roll < self.expedition_chance_in(catalog, system);
+        let loot = (roll * 7919.73 + 0.317).fract();
+        let prospect = self.is_explored(system);
         self.fleets.push(Expedition {
             target: system,
             left: total,
             total,
             success,
+            loot,
+            prospect,
         });
         self.expeditions_launched += 1;
         events.push(DomainEvent::ExpeditionLaunched { system });
@@ -1417,6 +1646,26 @@ impl GameState {
         let was_complete = self.explored_count() + 1 >= self.map.systems.len();
         for f in back {
             let mut stardust = 0.0;
+            // Butin : une relique (toujours en prospection, une fois sur deux sinon).
+            if f.success && (f.prospect || f.loot < 0.5) && !catalog.relics.is_empty() {
+                let pick = ((f.loot * 977.31).fract() * catalog.relics.len() as f64) as usize;
+                let danger = self.map.systems[f.target].danger;
+                let rarity = roll_rarity((f.loot * 131.7).fract(), danger);
+                self.gain_relic(
+                    catalog,
+                    RelicId(pick.min(catalog.relics.len() - 1)),
+                    rarity,
+                    events,
+                );
+            }
+            if f.success && f.prospect {
+                events.push(DomainEvent::ExpeditionReturned {
+                    system: f.target,
+                    success: true,
+                    stardust: 0.0,
+                });
+                continue;
+            }
             if f.success {
                 self.explored[f.target] = true;
                 let sys = &self.map.systems[f.target];
@@ -1830,6 +2079,10 @@ impl GameState {
                 attractor_stages: self.attractor,
                 expeditions: self.expeditions_launched,
                 explored: self.explored_count(),
+                relics: self.relics_owned(),
+                relic_set_active: RelicSet::ALL
+                    .iter()
+                    .any(|&s| self.relic_set_active(catalog, s)),
             };
             for a in &catalog.achievements {
                 if !self.has_achievement(a.id) && a.condition.is_met(&ctx) {
@@ -2908,7 +3161,7 @@ mod tests {
         assert_eq!(s.fleets.len(), 1);
         s.launch_expedition(&c, target, 0.0, &mut ev);
         assert_eq!(s.fleets.len(), 1, "une flotte par système");
-        let secs = s.map.systems[target].duration();
+        let secs = s.fleets[0].total;
         ev.clear();
         s.apply_offline(&c, secs + 1.0, &mut ev);
         assert!(ev.iter().any(|e| matches!(
@@ -2924,7 +3177,7 @@ mod tests {
         // Une expédition ratée n'explore rien.
         let next = s.map.systems[0].links[1];
         s.launch_expedition(&c, next, 0.999, &mut ev);
-        let secs = s.map.systems[next].duration();
+        let secs = s.fleets[0].total;
         ev.clear();
         s.tick(&c, secs + 1.0, 0.5, &mut ev);
         assert!(ev
@@ -2961,5 +3214,64 @@ mod tests {
         let easy = s.expedition_chance(1);
         let hard = s.expedition_chance(s.map.systems.len() - 1);
         assert!(easy > hard && hard >= 0.25);
+    }
+
+    #[test]
+    fn relics_are_found_equipped_and_combined_into_sets() {
+        let c = Catalog::standard();
+        let (mut s, mut ev) = act_three(&c);
+        // Butin d'une expédition réussie.
+        s.gain_relic(&c, RelicId(0), 1, &mut ev);
+        assert!(ev.iter().any(|e| matches!(
+            e,
+            DomainEvent::RelicFound {
+                outcome: RelicOutcome::New,
+                ..
+            }
+        )));
+        s.gain_relic(&c, RelicId(0), 0, &mut ev);
+        assert_eq!(s.shards, 1, "doublon → Éclat");
+        s.gain_relic(&c, RelicId(0), 3, &mut ev);
+        assert_eq!(
+            s.relic_rarity(RelicId(0)),
+            Some(3),
+            "améliorée en légendaire"
+        );
+        // Équiper : Marteau stellaire légendaire = +80 % de production.
+        let before = economy::permanent_multiplier(&c, &s);
+        s.toggle_relic(&c, RelicId(0), &mut ev);
+        let ratio = economy::permanent_multiplier(&c, &s) / before;
+        assert!((ratio - 1.8).abs() < 1e-9, "{ratio}");
+        // Ensemble du Forgeron (3 reliques) : production ×1,5 en plus.
+        for i in 1..=2 {
+            s.gain_relic(&c, RelicId(i), 0, &mut ev);
+            s.toggle_relic(&c, RelicId(i), &mut ev);
+        }
+        assert!(s.relic_set_active(&c, RelicSet::Forge));
+        assert!(s.has_achievement(c.achievement_by_key("relicset").unwrap()));
+        // 3 emplacements au départ.
+        s.gain_relic(&c, RelicId(5), 0, &mut ev);
+        s.toggle_relic(&c, RelicId(5), &mut ev);
+        assert_eq!(s.equipped.len(), 3);
+        // Ranger libère un emplacement.
+        s.toggle_relic(&c, RelicId(0), &mut ev);
+        assert_eq!(s.equipped.len(), 2);
+    }
+
+    #[test]
+    fn prospecting_an_explored_system_brings_back_a_relic() {
+        let c = Catalog::standard();
+        let (mut s, mut ev) = act_three(&c);
+        s.explored[1] = true;
+        assert!(s.can_launch_expedition(&c, 1), "prospection possible");
+        assert!(s.expedition_duration(&c, 1) < s.map.systems[1].duration());
+        s.launch_expedition(&c, 1, 0.01, &mut ev);
+        let secs = s.fleets[0].total;
+        ev.clear();
+        s.tick(&c, secs + 1.0, 0.5, &mut ev);
+        assert!(ev
+            .iter()
+            .any(|e| matches!(e, DomainEvent::RelicFound { .. })));
+        assert_eq!(s.relics_owned(), 1);
     }
 }

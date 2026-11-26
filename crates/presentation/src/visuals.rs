@@ -138,6 +138,9 @@ pub struct Visuals {
     pub bang: Option<crate::screens::bigbang::BangSequence>,
     /// Générique de fin de l'Acte II.
     pub ending: Option<crate::screens::ending::EndingSequence>,
+    /// Reliques trouvées : la carte affichée et celles qui attendent leur tour.
+    pub relic_card: Option<crate::widgets::relics::RelicCard>,
+    pub relic_queue: std::collections::VecDeque<crate::widgets::relics::RelicCard>,
     /// Systèmes tout juste explorés : (instant, système), pour l'onde sur la carte.
     pub map_pops: Vec<(f64, usize)>,
     /// Étape du Grand Attracteur qui vient d'être achevée : (instant, étape).
@@ -188,6 +191,8 @@ impl Visuals {
             ending: None,
             attractor_pop: None,
             map_pops: Vec::new(),
+            relic_card: None,
+            relic_queue: std::collections::VecDeque::new(),
             sun_scale: 1.0,
         }
     }

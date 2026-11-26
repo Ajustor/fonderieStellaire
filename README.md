@@ -169,6 +169,7 @@ cargo run --release -- --reset
 | `V` | Univers parallèles et leurs Clés (après 10 Big Crunch) |
 | `G` | Cosmogonie : Big Bang, forge primordiale, Grand Attracteur (après 10 Big Crunch) |
 | `X` | Carte stellaire : expéditions (Acte III, après l'éveil du Grand Attracteur) |
+| `H` | Reliques : collection, emplacements et ensembles (Acte III) |
 | `R` | Options : images par seconde, effets réduits, recommencer une partie |
 | `T` | Activer / arrêter l'automate (une fois acheté à l'Atelier) |
 | `I` | Infos : progression, succès et fonctionnement de chaque mécanique |
@@ -227,7 +228,10 @@ Majuscules et minuscules sont acceptées.
   système est dangereux, plus le voyage est long et risqué, et plus il
   rapporte (production, fragments, hors-ligne, comètes, flottes, gains
   immédiats).
-- **Succès** : 45 succès, **+1 %** de production chacun.
+- **Reliques** (Acte III) : 16 reliques en 4 ensembles et 4 raretés,
+  rapportées par les expéditions et les prospections. On en équipe 3 à 5 ;
+  3 reliques d'un même ensemble donnent un bonus d'ensemble.
+- **Succès** : 48 succès, **+1 %** de production chacun.
 - **Progression** : le pourcentage dans l'en-tête et l'écran `I` indiquent où tu
   en es (générateurs, succès, Atelier, poussière avant le prochain fragment).
 - **Hors-ligne** : ta fonderie produit à 50 % pendant ton absence (12 h max).

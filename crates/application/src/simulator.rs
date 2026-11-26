@@ -188,18 +188,48 @@ pub fn simulate(catalog: &Catalog, cfg: &SimConfig, mut progress: impl FnMut(f64
             s.build_attractor(catalog, &mut ev);
         }
 
-        // Expéditions : la cible la plus sûre parmi les systèmes accessibles.
+        // Expéditions : d'abord explorer (la cible la plus sûre), sinon
+        // prospecter le système exploré le plus dangereux (meilleures reliques).
         while s.fleets.len() < s.fleets_max() {
-            let target = (1..s.map.systems.len())
-                .filter(|&i| s.can_launch_expedition(catalog, i))
+            let unexplored = (1..s.map.systems.len())
+                .filter(|&i| !s.is_explored(i) && s.can_launch_expedition(catalog, i))
                 .max_by(|&a, &b| {
-                    s.expedition_chance(a)
-                        .partial_cmp(&s.expedition_chance(b))
+                    s.expedition_chance_in(catalog, a)
+                        .partial_cmp(&s.expedition_chance_in(catalog, b))
                         .unwrap_or(std::cmp::Ordering::Equal)
                 });
+            let target = unexplored.or_else(|| {
+                (1..s.map.systems.len())
+                    .filter(|&i| s.is_explored(i) && s.can_launch_expedition(catalog, i))
+                    .max_by_key(|&i| s.map.systems[i].danger)
+            });
             match target {
                 Some(i) => s.launch_expedition(catalog, i, rng.next(), &mut ev),
                 None => break,
+            }
+        }
+
+        // Reliques : on équipe les plus rares, en privilégiant la production.
+        if ev
+            .iter()
+            .any(|e| matches!(e, DomainEvent::RelicFound { .. }))
+        {
+            let mut owned: Vec<_> = catalog
+                .relics
+                .iter()
+                .filter_map(|r| s.relic_rarity(r.id).map(|k| (r.id, k, r.set)))
+                .collect();
+            owned.sort_by_key(|&(_, k, set)| {
+                (
+                    std::cmp::Reverse(k),
+                    matches!(set, domain::RelicSet::Eclipse) as u8,
+                )
+            });
+            for id in s.equipped.clone() {
+                s.toggle_relic(catalog, id, &mut ev);
+            }
+            for (id, _, _) in owned.into_iter().take(s.relic_slots()) {
+                s.toggle_relic(catalog, id, &mut ev);
             }
         }
 
@@ -276,7 +306,19 @@ pub fn simulate(catalog: &Catalog, cfg: &SimConfig, mut progress: impl FnMut(f64
                 }
                 DomainEvent::StarMapCompleted => {
                     mark(&mut report, "Carte stellaire complète".into(), t);
-                    report.finished = true;
+                }
+                DomainEvent::RelicFound { .. } => {
+                    let n = s.relics_owned();
+                    if n >= 1 {
+                        mark(&mut report, "1re relique".into(), t);
+                    }
+                    if n >= 8 {
+                        mark(&mut report, "8 reliques".into(), t);
+                    }
+                    if n >= catalog.relics.len() {
+                        mark(&mut report, "Collection de reliques complète".into(), t);
+                        report.finished = true;
+                    }
                 }
                 _ => {}
             }

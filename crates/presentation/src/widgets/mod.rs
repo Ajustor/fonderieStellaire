@@ -13,6 +13,7 @@ pub mod lab;
 pub mod modal;
 pub mod options;
 pub mod portals;
+pub mod relics;
 pub mod shop;
 pub mod sky;
 pub mod sparkline;

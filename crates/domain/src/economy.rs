@@ -74,6 +74,7 @@ pub fn permanent_multiplier(catalog: &Catalog, state: &GameState) -> f64 {
         * state.particle_production()
         * state.attractor_production(catalog)
         * state.map_bonus(crate::starmap::SystemKind::Nebula, 0.10)
+        * state.relic_production(catalog)
         * state.lab_production(catalog)
         * state.universe_production(catalog)
         * state.constellation_production(catalog)
@@ -127,7 +128,14 @@ pub fn click_percent(catalog: &Catalog, state: &GameState) -> f64 {
             _ => None,
         })
         .sum();
-    upgrades + perks + state.constellation_click(catalog) + state.lab_click(catalog)
+    upgrades
+        + perks
+        + state.constellation_click(catalog)
+        + state.lab_click(catalog)
+        + state.relic_sum(catalog, |e| match e {
+            crate::relic::RelicEffect::Click(x) => Some(x),
+            _ => None,
+        })
 }
 
 /// Vrai si la récolte « touche maintenue » est débloquée.

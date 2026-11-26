@@ -209,6 +209,30 @@ fn detail_lines(ctx: &Ctx, sel: usize, width: usize) -> Vec<(String, Rgb)> {
     let reward = reward_text(s.kind, s.reward_scale);
     if s.explored {
         push(format!("Exploré : {reward}."), theme::GREEN);
+        let hint = if let Some(f) = snap.fleets.iter().find(|f| f.target == sel) {
+            (
+                format!(
+                    "Prospection en cours : retour dans {}.",
+                    fmt::duration(f.remaining)
+                ),
+                FLEET,
+            )
+        } else if s.available {
+            (
+                format!(
+                    "[Entrée] prospecter : une relique à coup sûr si elle réussit ({}, {}).",
+                    fmt::duration(s.duration),
+                    fmt::percent(s.chance)
+                ),
+                theme::GOLD,
+            )
+        } else {
+            (
+                "Prospection possible dès qu'une flotte est libre.".to_string(),
+                theme::GREY,
+            )
+        };
+        push(hint.0, hint.1);
         return out;
     }
     push(format!("Récompense : {reward}."), theme::CYAN);

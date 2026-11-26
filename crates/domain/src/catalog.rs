@@ -7,6 +7,7 @@ use crate::cosmos::{AttractorEffect, AttractorStage};
 use crate::generator::{GeneratorDef, GeneratorId};
 use crate::lab::{LabDef, LabEffect, LabId};
 use crate::perk::{PerkDef, PerkEffect, PerkId};
+use crate::relic::{RelicDef, RelicEffect, RelicId, RelicSet};
 use crate::universe::{KeyReward, UniverseDef, UniverseId, UniverseRules};
 use crate::upgrade::{Effect, Requirement, UpgradeDef, UpgradeId};
 
@@ -148,6 +149,122 @@ const GENERATOR_FLAVORS: [&str; 15] = [
     "Un esprit à l'échelle du cosmos, qui rêve la poussière avant qu'elle n'existe.",
 ];
 
+/// Reliques : (clé, nom, ensemble, effet de base, texte d'ambiance).
+const RELICS: [(&str, &str, RelicSet, RelicEffect, &str); 16] = [
+    (
+        "r_hammer",
+        "Marteau stellaire",
+        RelicSet::Forge,
+        RelicEffect::Production(0.20),
+        "Il a forgé la première étoile, dit-on.",
+    ),
+    (
+        "r_crucible",
+        "Creuset d'or",
+        RelicSet::Forge,
+        RelicEffect::Fragments(0.15),
+        "Ce qui y fond en ressort plus précieux.",
+    ),
+    (
+        "r_gauntlet",
+        "Gant de forge",
+        RelicSet::Forge,
+        RelicEffect::Click(0.02),
+        "Chaque geste frappe comme un marteau.",
+    ),
+    (
+        "r_anvil",
+        "Enclume du vide",
+        RelicSet::Forge,
+        RelicEffect::Production(0.10),
+        "Rien ne la marque, tout s'y façonne.",
+    ),
+    (
+        "r_compass",
+        "Boussole des marées",
+        RelicSet::Voyager,
+        RelicEffect::ExpeditionSpeed(0.10),
+        "Elle indique le chemin le plus court entre deux étoiles.",
+    ),
+    (
+        "r_lantern",
+        "Lanterne de Véga",
+        RelicSet::Voyager,
+        RelicEffect::ExpeditionLuck(0.05),
+        "Sa flamme ne vacille jamais devant le danger.",
+    ),
+    (
+        "r_chart",
+        "Carte d'Orion",
+        RelicSet::Voyager,
+        RelicEffect::ExpeditionSpeed(0.06),
+        "Tracée par des navigateurs disparus.",
+    ),
+    (
+        "r_sail",
+        "Voile solaire",
+        RelicSet::Voyager,
+        RelicEffect::ExpeditionLuck(0.03),
+        "Le vent des étoiles s'y engouffre.",
+    ),
+    (
+        "r_mirror",
+        "Miroir noir",
+        RelicSet::Eclipse,
+        RelicEffect::OfflineHours(4.0),
+        "Il garde le reflet de ce qui s'est passé sans toi.",
+    ),
+    (
+        "r_hourglass",
+        "Sablier figé",
+        RelicSet::Eclipse,
+        RelicEffect::OfflineRate(0.10),
+        "Le temps n'y coule qu'à moitié.",
+    ),
+    (
+        "r_crown",
+        "Couronne d'ombre",
+        RelicSet::Eclipse,
+        RelicEffect::Comets(0.10),
+        "Les comètes viennent s'y incliner.",
+    ),
+    (
+        "r_eye",
+        "Œil du pulsar",
+        RelicSet::Eclipse,
+        RelicEffect::Comets(0.08),
+        "Il cligne au rythme du cosmos.",
+    ),
+    (
+        "r_spark",
+        "Étincelle du Big Bang",
+        RelicSet::Origins,
+        RelicEffect::Production(0.30),
+        "La toute première lumière, en éclat.",
+    ),
+    (
+        "r_seed",
+        "Graine d'univers",
+        RelicSet::Origins,
+        RelicEffect::Fragments(0.25),
+        "Plantée, elle donnerait un cosmos entier.",
+    ),
+    (
+        "r_heart",
+        "Cœur de quasar",
+        RelicSet::Origins,
+        RelicEffect::Production(0.15),
+        "Il bat encore, très lentement.",
+    ),
+    (
+        "r_tear",
+        "Larme cosmique",
+        RelicSet::Origins,
+        RelicEffect::Fragments(0.10),
+        "Versée par une étoile à sa naissance.",
+    ),
+];
+
 /// Grand Attracteur : (nom, description, coût en particules, heures, effet).
 const ATTRACTOR: [(&str, &str, u32, f64, AttractorEffect); 7] = [
     (
@@ -249,7 +366,7 @@ const HOLD_UPGRADE: (&str, f64, f64) = ("Récolte continue", 150.0, 300.0);
 
 /// Succès, du plus facile au plus difficile (ordre mesuré par le simulateur
 /// sur une partie à 3 h de jeu par jour).
-const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 45] = [
+const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 48] = [
     (
         "first",
         "Premier pas",
@@ -522,6 +639,24 @@ const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 45] = [
         "Atlas complet",
         "Explorer tous les systèmes de la Carte stellaire",
         AchievementCondition::Explored(24),
+    ),
+    (
+        "relic1",
+        "Archéologue",
+        "Trouver une relique",
+        AchievementCondition::Relics(1),
+    ),
+    (
+        "relicset",
+        "Panoplie",
+        "Activer le bonus d'un ensemble de reliques",
+        AchievementCondition::RelicSet,
+    ),
+    (
+        "relicall",
+        "Musée du cosmos",
+        "Réunir les 16 reliques",
+        AchievementCondition::Relics(16),
     ),
 ];
 
@@ -1013,6 +1148,8 @@ pub struct Catalog {
     pub universes: Vec<UniverseDef>,
     /// Étapes du Grand Attracteur, dans l'ordre de construction.
     pub attractor: Vec<AttractorStage>,
+    /// Reliques (4 ensembles de 4).
+    pub relics: Vec<RelicDef>,
 }
 
 impl Catalog {
@@ -1221,6 +1358,18 @@ impl Catalog {
             challenges,
             lab,
             universes: universes(),
+            relics: RELICS
+                .iter()
+                .enumerate()
+                .map(|(i, &(key, name, set, effect, flavor))| RelicDef {
+                    id: RelicId(i),
+                    key,
+                    name,
+                    set,
+                    effect,
+                    flavor,
+                })
+                .collect(),
             attractor: ATTRACTOR
                 .iter()
                 .enumerate()
@@ -1256,6 +1405,14 @@ impl Catalog {
 
     pub fn perk(&self, id: PerkId) -> Option<&PerkDef> {
         self.perks.get(id.index())
+    }
+
+    pub fn relic(&self, id: RelicId) -> Option<&RelicDef> {
+        self.relics.get(id.index())
+    }
+
+    pub fn relic_by_key(&self, key: &str) -> Option<RelicId> {
+        self.relics.iter().find(|r| r.key == key).map(|r| r.id)
     }
 
     pub fn attractor_stage(&self, index: usize) -> Option<&AttractorStage> {
@@ -1333,7 +1490,8 @@ mod tests {
         let cost: u32 = c.attractor.iter().map(|s| s.cost).sum();
         assert_eq!(cost, 23);
         assert!(c.upgrade_by_key("hold_0").is_some());
-        assert_eq!(c.achievements.len(), 45);
+        assert_eq!(c.achievements.len(), 48);
+        assert_eq!(c.relics.len(), 16);
         assert_eq!(c.universes.len(), 6);
         assert_eq!(
             c.universes

@@ -16,7 +16,7 @@ use crate::widgets::journal::Journal;
 use crate::widgets::toast::Toasts;
 use crate::widgets::{
     ceremony, challenges, codex, cosmos, generators, header, help_bar, journal, lab, modal,
-    options, portals, shop, sky, sparkline, starmap, upgrades, Ctx,
+    options, portals, relics, shop, sky, sparkline, starmap, upgrades, Ctx,
 };
 
 /// Décalage entre deux panneaux de la cascade.
@@ -113,8 +113,15 @@ pub fn render(
             &info,
         );
     }
+    if let Some(popup) = ui.relics {
+        relics::render(buf, area, ctx, &popup, ui.relics_sel);
+    }
     if let Some(m) = ui.starmap {
         starmap::render(buf, area, ctx, &m, &vis.stars, &vis.map_pops);
+    }
+    // Relique trouvée : par-dessus tout, même la carte.
+    if let Some(card) = vis.relic_card {
+        relics::render_card(buf, area, ctx, &card);
     }
     if let Some(at) = ui.wipe_at {
         options::render_wipe(buf, area, ctx.now, at);
