@@ -169,7 +169,7 @@ pub fn impact(effect: Effect, snap: &GameSnapshot) -> Option<String> {
 }
 
 /// Lignes de l'encart « qui fait quoi » de l'amélioration sélectionnée.
-fn detail_lines(ctx: &Ctx, id: UpgradeId, width: usize) -> Vec<(String, Style)> {
+pub(crate) fn detail_lines(ctx: &Ctx, id: UpgradeId, width: usize) -> Vec<(String, Style)> {
     let Some(def) = ctx.catalog.upgrade(id) else {
         return Vec::new();
     };

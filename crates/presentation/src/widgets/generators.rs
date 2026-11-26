@@ -321,7 +321,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
 }
 
 /// Lignes de l'encart « qui fait quoi » du générateur sélectionné.
-fn detail_lines(ctx: &Ctx, g: &GeneratorView, width: usize) -> Vec<(String, Style)> {
+pub(crate) fn detail_lines(ctx: &Ctx, g: &GeneratorView, width: usize) -> Vec<(String, Style)> {
     let Some(def) = ctx.catalog.generator(g.id) else {
         return Vec::new();
     };

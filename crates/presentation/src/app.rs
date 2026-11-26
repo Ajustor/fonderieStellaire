@@ -99,34 +99,35 @@ pub const RESTART_DELAY: f64 = 5.0;
 const RESTART_FADE: f64 = 0.6;
 
 pub struct App {
-    service: GameService,
-    snap: GameSnapshot,
-    screen: Screen,
-    ui: Ui,
-    vis: Visuals,
-    title: TitleScreen,
-    journal: Journal,
-    toasts: Toasts,
-    spark_scratch: Vec<u64>,
-    start: Instant,
-    now: f64,
-    dt: f64,
-    quit: bool,
-    stats: FrameStats,
-    hold: HoldDetector,
+    pub(crate) service: GameService,
+    pub(crate) snap: GameSnapshot,
+    pub(crate) screen: Screen,
+    pub(crate) ui: Ui,
+    pub(crate) vis: Visuals,
+    pub(crate) title: TitleScreen,
+    pub(crate) journal: Journal,
+    pub(crate) toasts: Toasts,
+    pub(crate) spark_scratch: Vec<u64>,
+    pub(crate) start: Instant,
+    pub(crate) now: f64,
+    pub(crate) dt: f64,
+    pub(crate) quit: bool,
+    pub(crate) stats: FrameStats,
+    pub(crate) hold: HoldDetector,
     /// Dernière fois qu'on a expliqué comment débloquer la récolte continue.
-    hold_hint_at: f64,
+    pub(crate) hold_hint_at: f64,
     /// Dernier message « interdit pendant le Défi » (évite d'en inonder l'écran).
-    blocked_hint_at: f64,
-    updates: UpdateService,
+    pub(crate) blocked_hint_at: f64,
+    pub(crate) updates: UpdateService,
     /// Dernier état connu de la mise à jour automatique.
-    update_status: Option<UpdateEvent>,
+    pub(crate) update_status: Option<UpdateEvent>,
     /// Redémarrage prévu (mise à jour installée) : instant et version.
-    restart_at: Option<(f64, String)>,
+    pub(crate) restart_at: Option<(f64, String)>,
     /// Le jeu se ferme pour redémarrer sur la nouvelle version.
-    restart: bool,
-    /// Mode mobile : pas d'écran « terminal trop petit ».
-    mobile: bool,
+    pub(crate) restart: bool,
+    /// Mode mobile (Android) : onglets, mises en page portrait, hit-test.
+    /// Absent en mode terminal, qui garde ses écrans tels quels.
+    pub(crate) mobile: Option<crate::mobile::MobileUi>,
 }
 
 fn seed() -> u64 {
@@ -163,7 +164,7 @@ impl App {
             update_status: None,
             restart_at: None,
             restart: false,
-            mobile: false,
+            mobile: None,
         };
         app.vis.set_reduced(app.snap.reduced_effects);
         app.journal.push(
@@ -266,7 +267,7 @@ impl App {
         self.now = now;
     }
 
-    fn command(&mut self, cmd: Command) {
+    pub(crate) fn command(&mut self, cmd: Command) {
         for ev in self.service.handle(cmd) {
             self.react(ev);
         }
@@ -318,7 +319,7 @@ impl App {
 
     /// Désactive l'écran « terminal trop petit » (mode mobile : la taille est connue).
     pub fn set_mobile(&mut self, mobile: bool) {
-        self.mobile = mobile;
+        self.mobile = mobile.then(crate::mobile::MobileUi::default);
     }
 
     #[cfg(feature = "terminal")]
@@ -1820,7 +1821,9 @@ impl App {
         let sky = inner(self.ui.layout.sky);
         match ev {
             DomainEvent::Harvested { amount } => {
-                let (x, y) = if sky.is_empty() {
+                let (x, y) = if let Some(p) = self.ui.harvest_at.take() {
+                    p
+                } else if sky.is_empty() {
                     // Ciel replié : les étincelles partent du compteur.
                     let h = self.ui.layout.header;
                     (h.x as f64 + h.width as f64 / 3.0, h.y as f64 + 2.0)
@@ -2933,7 +2936,7 @@ impl App {
 
     pub fn render_buffer(&mut self, buf: &mut Buffer, area: Rect) {
         let now = self.now;
-        if !self.mobile && is_too_small(area) {
+        if self.mobile.is_none() && is_too_small(area) {
             too_small::render(buf, area, now);
             return;
         }
@@ -2943,6 +2946,7 @@ impl App {
             .map(|d| d.as_secs() / 86_400)
             .unwrap_or(0);
         let version = display_version(self.updates.current_version());
+        let legacy = self.legacy_open();
         let App {
             service,
             snap,
@@ -2954,6 +2958,7 @@ impl App {
             toasts,
             spark_scratch,
             dt,
+            mobile,
             ..
         } = self;
         let ctx = Ctx {
@@ -2977,6 +2982,27 @@ impl App {
                         n.render_reveal(buf, area, now, &vis.stars);
                     }
                     vis.particles.draw(buf, area);
+                } else if let Some(m) = mobile.as_mut().filter(|_| !legacy) {
+                    crate::mobile::render(
+                        buf,
+                        area,
+                        &ctx,
+                        vis,
+                        ui,
+                        m,
+                        crate::mobile::MobileView {
+                            journal,
+                            toasts,
+                            spark_scratch,
+                            version: &version,
+                        },
+                    );
+                    if let Some(n) = vis.nova.as_ref() {
+                        n.render_over_game(buf, area, now, ctx.reduced);
+                    }
+                    if let Some(b) = vis.bang.as_ref() {
+                        b.render_collapse(buf, area, now, ctx.reduced);
+                    }
                 } else {
                     game::render(
                         buf,
@@ -2993,6 +3019,9 @@ impl App {
                             spark_scratch,
                         },
                     );
+                    if let Some(m) = mobile.as_mut() {
+                        crate::mobile::render_controls(buf, area, ui, m);
+                    }
                     if let Some(n) = vis.nova.as_ref() {
                         n.render_over_game(buf, area, now, ctx.reduced);
                     }

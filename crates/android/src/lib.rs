@@ -13,8 +13,9 @@ use std::time::Instant;
 use application::GameService;
 use infrastructure::{JsonSaveRepository, SystemClock, XorShift64};
 use presentation::cells::{self, Buffer, Rect};
-use presentation::input::{Intent, Phase};
-use presentation::{App, Screen};
+use presentation::input::Intent;
+use presentation::mobile::{Request as MobileRequest, Tab as MobileTab};
+use presentation::App;
 
 uniffi::setup_scaffolding!();
 
@@ -81,6 +82,56 @@ impl From<Action> for Intent {
             Action::ToggleDebug => Intent::ToggleDebug,
         }
     }
+}
+
+/// Onglets de la barre native.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum Tab {
+    Foundry,
+    Factories,
+    Upgrade,
+    Cosmos,
+    More,
+}
+
+impl From<MobileTab> for Tab {
+    fn from(t: MobileTab) -> Self {
+        match t {
+            MobileTab::Foundry => Tab::Foundry,
+            MobileTab::Factories => Tab::Factories,
+            MobileTab::Upgrade => Tab::Upgrade,
+            MobileTab::Cosmos => Tab::Cosmos,
+            MobileTab::More => Tab::More,
+        }
+    }
+}
+
+impl From<Tab> for MobileTab {
+    fn from(t: Tab) -> Self {
+        match t {
+            Tab::Foundry => MobileTab::Foundry,
+            Tab::Factories => MobileTab::Factories,
+            Tab::Upgrade => MobileTab::Upgrade,
+            Tab::Cosmos => MobileTab::Cosmos,
+            Tab::More => MobileTab::More,
+        }
+    }
+}
+
+/// État d'un onglet : débloqué, actif, pastille.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct TabInfo {
+    pub tab: Tab,
+    pub unlocked: bool,
+    pub active: bool,
+    pub badge: bool,
+}
+
+/// Demande du jeu à la plateforme.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum Request {
+    ExportSave,
+    ImportSave,
 }
 
 struct Inner {
@@ -165,10 +216,33 @@ impl Game {
         out.clone()
     }
 
-    /// Vrai pendant les écrans plein écran qui veulent une grille dense (le
-    /// grand logo du lancement exige 72 colonnes).
+    /// Vrai quand la grille veut des cellules plus petites (≈ 88 colonnes) :
+    /// lancement, séquences plein écran, écrans hérités du terminal.
     pub fn wants_dense(&self) -> bool {
-        self.lock().app.screen() == Screen::Title
+        self.lock().app.mobile_wants_dense()
+    }
+
+    /// La barre d'onglets est visible (masquée pendant les séquences).
+    pub fn bar_visible(&self) -> bool {
+        self.lock().app.mobile_bar_visible()
+    }
+
+    pub fn tabs(&self) -> Vec<TabInfo> {
+        self.lock()
+            .app
+            .mobile_tabs()
+            .into_iter()
+            .map(|t| TabInfo {
+                tab: t.tab.into(),
+                unlocked: t.unlocked,
+                active: t.active,
+                badge: t.badge,
+            })
+            .collect()
+    }
+
+    pub fn select_tab(&self, tab: Tab) {
+        self.lock().app.mobile_select_tab(tab.into());
     }
 
     /// Images par seconde choisies dans les options (10 à 60).
@@ -176,19 +250,53 @@ impl Game {
         self.lock().app.snapshot().frame_rate.clamp(10, 60)
     }
 
-    /// Doigt posé : récolte (ou passe l'intro).
-    pub fn press(&self, _col: u16, _row: u16) {
-        self.lock().app.on_harvest_input(Phase::Press);
+    /// Doigt posé sur la cellule (`col`, `row`).
+    pub fn touch_down(&self, col: u16, row: u16) {
+        self.lock().app.touch_down(col, row);
     }
 
-    /// Doigt toujours posé : récolte continue (si l'amélioration est achetée).
-    pub fn hold(&self) {
-        self.lock().app.on_harvest_input(Phase::Repeat);
+    /// Doigt toujours posé (à chaque image) : récolte continue, achats en
+    /// rafale, appui long.
+    pub fn touch_hold(&self) {
+        self.lock().app.touch_hold();
     }
 
-    /// Doigt levé.
-    pub fn release(&self) {
-        self.lock().app.on_harvest_input(Phase::Release);
+    /// Doigt levé sans avoir glissé.
+    pub fn touch_up(&self, col: u16, row: u16) {
+        self.lock().app.touch_up(col, row);
+    }
+
+    /// Le geste est devenu un glissement : le toucher est annulé.
+    pub fn touch_cancel(&self) {
+        self.lock().app.touch_cancel();
+    }
+
+    /// Défilement vertical en lignes (> 0 : vers le bas de la liste).
+    pub fn scroll_by(&self, rows: i32) {
+        self.lock().app.scroll_by(rows);
+    }
+
+    /// Balayage horizontal : `dir` = 1 vers la droite (onglet suivant), -1 sinon.
+    pub fn swipe(&self, dir: i32) {
+        self.lock().app.swipe(dir.signum());
+    }
+
+    /// Bouton retour Android.
+    pub fn back(&self) {
+        self.lock().app.mobile_back();
+    }
+
+    /// Prochaine demande à traiter (sélecteur de fichiers…).
+    pub fn take_request(&self) -> Option<Request> {
+        self.lock().app.take_request().map(|r| match r {
+            MobileRequest::ExportSave => Request::ExportSave,
+            MobileRequest::ImportSave => Request::ImportSave,
+        })
+    }
+
+    /// Message à afficher en toast (résultat d'un export…).
+    pub fn notify(&self, title: String, body: String) {
+        self.lock().app.notify(&title, &body);
     }
 
     pub fn action(&self, action: Action) {
@@ -292,8 +400,8 @@ mod tests {
         let dir = temp_dir("save");
         let game = Game::new(dir.clone()).unwrap();
         game.frame(44, 43);
-        game.press(10, 10); // passe l'intro
-        game.release();
+        game.touch_down(10, 10); // passe l'intro
+        game.touch_up(10, 10);
         assert!(game.export_save().is_ok(), "export sauvegarde d'abord");
         game.pause().unwrap();
         let bytes = game.export_save().unwrap();

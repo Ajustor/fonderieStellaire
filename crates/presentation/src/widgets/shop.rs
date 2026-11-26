@@ -291,7 +291,7 @@ fn render_item(buf: &mut Buffer, inner: Rect, y: u16, ctx: &Ctx, item: ShopItem,
 }
 
 /// (ce que ça fait, indication d'achat) pour l'élément sélectionné.
-fn detail(ctx: &Ctx, item: ShopItem) -> (String, String) {
+pub(crate) fn detail(ctx: &Ctx, item: ShopItem) -> (String, String) {
     let snap = ctx.snap;
     let missing = |cost: f64| {
         format!(

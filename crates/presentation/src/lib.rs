@@ -12,6 +12,7 @@ pub mod fmt;
 pub mod fx;
 pub mod input;
 pub mod layout;
+pub mod mobile;
 pub mod screens;
 #[cfg(feature = "terminal")]
 pub mod terminal;
