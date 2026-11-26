@@ -69,6 +69,8 @@ pub struct Ui {
     /// Laboratoire (touche L) et sa sélection.
     pub lab: Option<Popup>,
     pub lab_sel: usize,
+    /// Défi du jour (touche Y).
+    pub daily: Option<Popup>,
     /// Mégastructures (touche W) et case visée.
     pub mega: Option<Popup>,
     pub mega_sel: usize,

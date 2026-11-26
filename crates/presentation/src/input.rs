@@ -47,6 +47,8 @@ pub enum Intent {
     Event,
     /// `W` : Mégastructures (Acte IV).
     Megastructures,
+    /// `Y` : Défi du jour (Acte IV).
+    Daily,
     /// `T` : activer / arrêter l'automate.
     ToggleAuto,
     /// `PgUp` / `PgDn` : remonter / redescendre dans le journal.
@@ -176,7 +178,8 @@ pub fn map_key(key: &KeyEvent) -> Option<Intent> {
             'z' => Intent::Event,
             'w' => Intent::Megastructures,
             't' => Intent::ToggleAuto,
-            'o' | 'y' => Intent::Yes,
+            'o' => Intent::Yes,
+            'y' => Intent::Daily,
             'n' => Intent::No,
             d @ '1'..='9' => Intent::QuickBuy((d as u8 - b'1') as usize),
             _ => Intent::Other,

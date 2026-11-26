@@ -67,6 +67,11 @@ fn items(snap: &GameSnapshot) -> Vec<Item> {
     if snap.universes_unlocked {
         v.push(it("V", "Univers", 9));
     }
+    if snap.daily.is_some() {
+        v.push(it("Y", "Défi en cours !", 0));
+    } else if snap.daily_unlocked {
+        v.push(it("Y", "Défi du jour", 6));
+    }
     if snap.megastructures_unlocked {
         v.push(it("W", "Méga", 6));
     }

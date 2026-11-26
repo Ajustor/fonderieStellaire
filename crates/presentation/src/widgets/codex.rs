@@ -136,6 +136,7 @@ pub fn lines(ctx: &Ctx) -> Vec<(String, Style)> {
         "✹ Événements cosmiques (Acte III) : toutes les 2 à 4 h de jeu, un dilemme. Certains choix sont risqués. Tu as 1 h pour répondre ([Z] pour y revenir).".into(),
         "✶ Convergence : carte complète et 16 reliques réunies, lance-la depuis la Fonderie sur la carte [X]. 48 h plus tard, c'est la fin de l'Acte III.".into(),
         "◈ Mégastructures [W] (Acte IV, après la Convergence) : la matière exotique s'accumule en temps réel, même jeu fermé ; bâtis sur une grille de 9×5. Les voisines comptent : Relais, Forges-mondes près des Collecteurs, Archives près des Forges, Phares au bord, Cœur entouré de variété.".into(),
+        "✧ Défi du jour [Y] (Acte IV) : dix minutes dans un univers de poche, avec deux règles tirées de la date (les mêmes pour tous). Le premier défi du jour rapporte de la matière exotique ; le code de score se partage.".into(),
         "○ Hors-ligne : ta fonderie produit à 50 % pendant ton absence (12 h max).".into(),
         "· Raccourcis : [A] tout acheter · [T] automate · [PgUp]/[PgDn] journal.".into(),
         "· Sauvegarde automatique toutes les 30 s et en quittant.".into(),

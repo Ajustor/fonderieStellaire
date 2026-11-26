@@ -10,9 +10,9 @@ use crate::error::AppError;
 use crate::ports::{Clock, LoadOutcome, RandomSource, SaveRepository};
 use crate::save_dto::{SaveData, SAVE_RESET_BELOW};
 use crate::snapshot::{
-    ActiveChallengeView, ChallengeView, ConstellationView, FleetView, ForgeView, GameSnapshot,
-    GeneratorView, LabView, NextUpgradeView, PerkView, ProgressView, RelicView, ResearchBuildView,
-    ResearchView, SystemView, TeaserView, UniverseView, UpgradeView,
+    ActiveChallengeView, ChallengeView, ConstellationView, DailyView, FleetView, ForgeView,
+    GameSnapshot, GeneratorView, LabView, NextUpgradeView, PerkView, ProgressView, RelicView,
+    ResearchBuildView, ResearchView, SystemView, TeaserView, UniverseView, UpgradeView,
 };
 
 /// Nombre d'échantillons de production conservés (1 par seconde).
@@ -49,6 +49,26 @@ pub enum GameEvent {
     FrameRateChanged(u32),
     /// 0 : normales, 1 : daltonien, 2 : contraste élevé.
     ColorModeChanged(u8),
+    /// Le Défi du jour commence.
+    DailyStarted {
+        day: u64,
+    },
+    /// Fin du Défi du jour : score, record du jour, matière exotique gagnée,
+    /// code de score à partager.
+    DailyEnded {
+        score: f64,
+        best: f64,
+        reward: f64,
+        code: String,
+    },
+    DailyUnavailable,
+}
+
+/// Défi du jour en cours : la partie principale attend de côté.
+struct DailyRun {
+    main: Box<GameState>,
+    day: u64,
+    left: f64,
 }
 
 pub struct GameService {
@@ -69,6 +89,7 @@ pub struct GameService {
     sample_timer: f64,
     autosave_timer: f64,
     scratch: Vec<DomainEvent>,
+    daily: Option<DailyRun>,
 }
 
 impl GameService {
@@ -94,6 +115,7 @@ impl GameService {
             sample_timer: 0.0,
             autosave_timer: 0.0,
             scratch: Vec::new(),
+            daily: None,
         }
     }
 
@@ -158,8 +180,13 @@ impl GameService {
 
     /// Sauvegarde immédiate.
     pub fn save(&mut self) -> Result<(), AppError> {
+        // Pendant un Défi du jour, c'est la partie principale qu'on sauvegarde.
+        let state = match &self.daily {
+            Some(d) => &*d.main,
+            None => &self.state,
+        };
         let mut data = SaveData::from_state(
-            &self.state,
+            state,
             &self.catalog,
             self.clock.now_unix_secs(),
             self.reduced_effects,
@@ -169,6 +196,45 @@ impl GameService {
         self.repo.save(&data)?;
         self.autosave_timer = 0.0;
         Ok(())
+    }
+
+    /// Jour (depuis 1970) selon l'horloge.
+    fn today(&self) -> u64 {
+        self.clock.now_unix_secs() / 86_400
+    }
+
+    fn start_daily(&mut self) -> GameEvent {
+        if self.daily.is_some() || !self.state.daily_unlocked() {
+            return GameEvent::DailyUnavailable;
+        }
+        let day = self.today();
+        let pocket = GameState::daily_pocket(&self.catalog, day);
+        let main = std::mem::replace(&mut self.state, pocket);
+        self.daily = Some(DailyRun {
+            main: Box::new(main),
+            day,
+            left: domain::daily::DAILY_SECS,
+        });
+        self.history.clear();
+        self.history_mix.clear();
+        GameEvent::DailyStarted { day }
+    }
+
+    fn end_daily(&mut self) -> GameEvent {
+        let Some(run) = self.daily.take() else {
+            return GameEvent::DailyUnavailable;
+        };
+        let score = self.state.total_all;
+        self.state = *run.main;
+        let reward = self.state.record_daily(run.day, score);
+        self.history.clear();
+        self.history_mix.clear();
+        GameEvent::DailyEnded {
+            score,
+            best: self.state.daily_best,
+            reward,
+            code: domain::daily::share_code(run.day, score),
+        }
     }
 
     fn save_event(&mut self, automatic: bool) -> GameEvent {
@@ -231,6 +297,12 @@ impl GameService {
                     .place_structure(&self.catalog, cell, kind, &mut ev)
             }
             Command::Demolish(cell) => self.state.demolish(cell, &mut ev),
+            Command::StartDaily => out.push(self.start_daily()),
+            Command::EndDaily => {
+                if self.daily.is_some() {
+                    out.push(self.end_daily());
+                }
+            }
             Command::CycleColorMode => {
                 self.color_mode = (self.color_mode + 1) % 3;
                 out.push(GameEvent::ColorModeChanged(self.color_mode));
@@ -275,6 +347,16 @@ impl GameService {
         ev.clear();
         let roll = self.rng.next_f64();
         self.state.tick(&self.catalog, dt, roll, &mut ev);
+        // Pendant le défi, la partie principale continue en temps réel
+        // (recherches, chantiers, flottes, matière exotique), comme jeu fermé.
+        if let Some(d) = self.daily.as_mut() {
+            let mut ignored = Vec::new();
+            d.main.apply_offline(&self.catalog, dt, &mut ignored);
+            d.left -= dt;
+            if d.left <= 0.0 {
+                out.push(self.end_daily());
+            }
+        }
         out.extend(ev.drain(..).map(GameEvent::Domain));
         self.scratch = ev;
 
@@ -510,6 +592,18 @@ impl GameService {
         snap.milestones = st.milestones;
         snap.color_mode = self.color_mode;
         snap.megastructures_unlocked = st.megastructures_unlocked();
+        let today = self.today();
+        snap.daily_rules = domain::daily::rules_for(today).0;
+        snap.daily = self.daily.as_ref().map(|d| DailyView {
+            left: d.left,
+            score: st.total_all,
+        });
+        // Record et récompense du jour : lus dans la partie principale.
+        let main = self.daily.as_ref().map(|d| &*d.main).unwrap_or(st);
+        snap.daily_unlocked = main.daily_unlocked();
+        let same_day = main.daily_day == today;
+        snap.daily_best = if same_day { main.daily_best } else { 0.0 };
+        snap.daily_rewarded = same_day && main.daily_rewarded;
         snap.exotic = st.exotic;
         snap.grid.clear();
         snap.grid.extend(st.grid.iter().copied());
@@ -972,5 +1066,42 @@ mod tests {
         let mut again = service(&repo, &clock, vec![0.5]);
         again.load().unwrap();
         assert_eq!(again.snapshot().frame_rate, 20);
+    }
+
+    #[test]
+    fn daily_challenge_swaps_and_restores_the_main_game() {
+        let (repo, clock) = fixture();
+        let mut s = service(&repo, &clock, vec![0.5]);
+        s.load().unwrap();
+        assert_eq!(s.handle(Command::StartDaily), [GameEvent::DailyUnavailable]);
+        s.state.converged = true;
+        s.state.fragments = 42.0;
+        let ev = s.handle(Command::StartDaily);
+        assert!(matches!(ev[0], GameEvent::DailyStarted { .. }));
+        assert_eq!(s.snapshot().fragments, 0.0, "univers de poche vierge");
+        assert!(s.snapshot().daily.is_some());
+        for _ in 0..200 {
+            s.handle(Command::Harvest);
+        }
+        // La sauvegarde pendant le défi garde la partie principale.
+        s.save().unwrap();
+        assert_eq!(repo.slot.borrow().as_ref().unwrap().fragments, 42.0);
+        // Dix minutes plus tard, fin du défi et retour à la partie principale.
+        let mut ended = None;
+        for _ in 0..(10 * 60 + 5) {
+            for e in s.tick(1.0) {
+                if let GameEvent::DailyEnded { score, code, .. } = e {
+                    ended = Some((score, code));
+                }
+            }
+        }
+        let (score, code) = ended.expect("fin du défi");
+        assert!(score >= 200.0);
+        assert!(code.starts_with("FS"));
+        let snap = s.snapshot();
+        assert!(snap.daily.is_none());
+        assert_eq!(snap.fragments, 42.0);
+        assert_eq!(snap.daily_best, score);
+        assert!(snap.daily_rewarded);
     }
 }

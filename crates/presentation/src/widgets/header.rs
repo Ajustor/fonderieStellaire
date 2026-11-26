@@ -106,6 +106,16 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
                 })
                 .map(|(f, l)| format!(" ✹ ×{} {} ·", fmt::short(f), fmt::duration(l)))
                 .unwrap_or_default();
+            let daily = snap
+                .daily
+                .map(|d| {
+                    format!(
+                        " ✧ DÉFI {} · {} ✦ [Y] ·",
+                        fmt::countdown(d.left),
+                        fmt::short(d.score)
+                    )
+                })
+                .unwrap_or_default();
             let event = if snap.pending_event.is_some() {
                 " ✹ événement [Z] ·"
             } else {
@@ -152,9 +162,10 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
                 s
             };
             variants.push(format!(
-                "{event}{converge}{boost}{exotic}{} progression {pct} [I] ",
+                "{daily}{event}{converge}{boost}{exotic}{} progression {pct} [I] ",
                 full(true)
             ));
+            variants.push(format!("{daily} {pct} "));
             variants.push(format!(
                 "{event}{converge}{boost}{} progression {pct} [I] ",
                 full(false)

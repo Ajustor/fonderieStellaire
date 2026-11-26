@@ -5,6 +5,7 @@ pub mod ceremony;
 pub mod challenges;
 pub mod codex;
 pub mod cosmos;
+pub mod daily;
 pub mod event;
 pub mod generators;
 pub mod header;

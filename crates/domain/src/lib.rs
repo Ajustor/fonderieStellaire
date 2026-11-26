@@ -10,6 +10,7 @@ pub mod comet;
 pub mod constellation;
 pub mod cosmic;
 pub mod cosmos;
+pub mod daily;
 pub mod economy;
 pub mod events;
 pub mod generator;

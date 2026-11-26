@@ -72,6 +72,14 @@ pub struct RelicView {
     pub equipped: bool,
 }
 
+/// Défi du jour en cours.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DailyView {
+    /// Secondes restantes.
+    pub left: f64,
+    pub score: f64,
+}
+
 /// Une flotte en route.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FleetView {
@@ -331,4 +339,10 @@ pub struct GameSnapshot {
     pub grid_effects: domain::GridEffects,
     /// Coût actuel de chaque type (dans l'ordre de `StructureKind::ALL`).
     pub structure_costs: [f64; 6],
+    /// Défi du jour : règles du jour, défi en cours, record et récompense.
+    pub daily_unlocked: bool,
+    pub daily_rules: Vec<&'static str>,
+    pub daily: Option<DailyView>,
+    pub daily_best: f64,
+    pub daily_rewarded: bool,
 }

@@ -381,6 +381,26 @@ impl App {
                         self.ui.mega = None;
                     }
                 }
+                if let Some(d) = self.ui.daily {
+                    if d.is_closed(now) {
+                        self.ui.daily = None;
+                    }
+                }
+                if self
+                    .vis
+                    .iris_at
+                    .is_some_and(|t| now - t > crate::widgets::daily::IRIS)
+                {
+                    self.vis.iris_at = None;
+                }
+                if self
+                    .vis
+                    .daily_result
+                    .as_ref()
+                    .is_some_and(|r| now - r.start > crate::widgets::daily::RESULT)
+                {
+                    self.vis.daily_result = None;
+                }
                 // Cartes des reliques trouvées, l'une après l'autre.
                 if self
                     .vis
@@ -583,6 +603,28 @@ impl App {
                 _ => {}
             }
             self.ui.event = Some(popup);
+            return;
+        }
+        if let Some(popup) = self.ui.daily {
+            if popup.closing_at.is_none() {
+                match intent {
+                    Intent::Buy | Intent::Yes => {
+                        self.ui.daily = None;
+                        let cmd = if self.snap.daily.is_some() {
+                            Command::EndDaily
+                        } else {
+                            Command::StartDaily
+                        };
+                        self.command(cmd);
+                    }
+                    Intent::Daily | Intent::Escape | Intent::No | Intent::Quit => {
+                        if let Some(p) = self.ui.daily.as_mut() {
+                            p.closing_at = Some(now);
+                        }
+                    }
+                    _ => {}
+                }
+            }
             return;
         }
         if let Some(popup) = self.ui.mega {
@@ -923,6 +965,21 @@ impl App {
                 }
             }
             Intent::Save => self.command(Command::Save),
+            Intent::Daily => {
+                if self.snap.daily_unlocked || self.snap.daily.is_some() {
+                    self.ui.daily = Some(Popup {
+                        opened_at: now,
+                        closing_at: None,
+                    });
+                } else {
+                    self.toasts.push(
+                        now,
+                        theme::GREY,
+                        "Défi du jour",
+                        "S'ouvre après la Convergence (Acte IV)",
+                    );
+                }
+            }
             Intent::Megastructures => {
                 if self.snap.megastructures_unlocked {
                     self.ui.mega = Some(Popup {
@@ -1513,6 +1570,57 @@ impl App {
                 self.ui = crate::ui::Ui::default();
                 self.title = TitleScreen::new(now, seed() ^ 0x7177);
                 self.screen = Screen::Title;
+            }
+            GameEvent::DailyStarted { .. } => {
+                let now = self.now;
+                self.vis.iris_at = Some(now);
+                self.vis.particles.clear();
+                self.journal.push(
+                    0.0,
+                    now,
+                    Kind::Info,
+                    "✧ Univers de poche : dix minutes pour récolter un maximum !",
+                );
+                self.toasts.push(
+                    now,
+                    crate::widgets::daily::POCKET,
+                    "✧ Défi du jour",
+                    self.snap.daily_rules.join(" · "),
+                );
+            }
+            GameEvent::DailyEnded {
+                score,
+                best,
+                reward,
+                code,
+            } => {
+                let now = self.now;
+                self.vis.iris_at = Some(now);
+                self.vis.particles.clear();
+                self.log(
+                    Kind::Achievement,
+                    format!(
+                        "✧ Défi du jour : {} ✦ (record {}) · code {code}",
+                        fmt::short(score),
+                        fmt::short(best)
+                    ),
+                );
+                self.vis.daily_result = Some(crate::widgets::daily::DailyResult {
+                    start: now + 0.6,
+                    score,
+                    best,
+                    reward,
+                    code,
+                });
+                self.vis.fireworks(now + 0.8);
+            }
+            GameEvent::DailyUnavailable => {
+                self.toasts.push(
+                    self.now,
+                    theme::GREY,
+                    "Défi du jour",
+                    "Indisponible pour le moment",
+                );
             }
             GameEvent::ColorModeChanged(mode) => {
                 self.toasts.push(
@@ -2641,6 +2749,10 @@ impl App {
             return;
         }
         let save_path = self.service.save_location();
+        let today = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs() / 86_400)
+            .unwrap_or(0);
         let version = display_version(self.updates.current_version());
         let App {
             service,
@@ -2684,6 +2796,7 @@ impl App {
                         vis,
                         ui,
                         GameView {
+                            today,
                             save_path: &save_path,
                             version: &version,
                             journal,

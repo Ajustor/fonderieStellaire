@@ -1,5 +1,28 @@
 # Journal des versions
 
+## v0.15.0 — Acte IV, partie 2 : le Défi du jour
+
+### Nouveautés
+- **Défi du jour** (touche `Y`, à l'Acte IV) : dix minutes dans un **univers
+  de poche**, une partie vierge avec **deux règles tirées de la date**, les
+  mêmes pour tous les joueurs ce jour-là (production ×3 mais générateurs plus
+  chers, comètes ×5, aucune amélioration, entropie…). Le score est la
+  poussière récoltée.
+- Ta partie principale attend de côté et **continue d'avancer en temps réel**
+  pendant le défi (recherches, chantiers, flottes, matière exotique) ; la
+  sauvegarde la protège.
+- Le **premier défi du jour** rapporte jusqu'à **12 ◈ de matière exotique**
+  selon le score ; ensuite, on rejoue pour battre son **record du jour**.
+- Un **code de score** (`FS<jour>-<score>-<contrôle>`) à partager.
+- La touche `y` n'est plus un raccourci pour « oui » (`o` le reste).
+
+### Animations
+- Entrée et sortie de l'univers de poche par un **iris** lumineux qui s'ouvre
+  depuis le centre de l'écran.
+- Compte à rebours et score dans l'en-tête pendant le défi.
+- **Carte du résultat** : le score défile, record du jour, récompense et
+  code à partager, feux d'artifice.
+
 ## v0.14.0 — Acte IV, partie 1 : les Mégastructures
 
 ### Nouveautés

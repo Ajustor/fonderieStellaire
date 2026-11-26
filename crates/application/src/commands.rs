@@ -57,4 +57,8 @@ pub enum Command {
     PlaceStructure(usize, domain::StructureKind),
     /// Démolit la mégastructure d'une case.
     Demolish(usize),
+    /// Lance le Défi du jour (univers de poche, 10 minutes).
+    StartDaily,
+    /// Termine le Défi du jour maintenant (le score compte).
+    EndDaily,
 }

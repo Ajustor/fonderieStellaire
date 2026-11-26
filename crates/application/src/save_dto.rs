@@ -99,6 +99,10 @@ pub struct SaveData {
     pub exotic: f64,
     pub exotic_total: f64,
     pub grid: Vec<i8>,
+    /// Défi du jour : jour, record, récompense touchée.
+    pub daily_day: u64,
+    pub daily_best: f64,
+    pub daily_rewarded: bool,
 }
 
 impl SaveData {
@@ -265,6 +269,9 @@ impl SaveData {
                 .iter()
                 .map(|c| c.map(|k| k.index() as i8).unwrap_or(-1))
                 .collect(),
+            daily_day: state.daily_day,
+            daily_best: state.daily_best,
+            daily_rewarded: state.daily_rewarded,
         }
     }
 
@@ -405,6 +412,9 @@ impl SaveData {
         s.converged = self.converged;
         s.auto_fleets = self.auto_fleets;
         s.exotic = self.exotic;
+        s.daily_day = self.daily_day;
+        s.daily_best = self.daily_best;
+        s.daily_rewarded = self.daily_rewarded;
         s.exotic_total = self.exotic_total;
         s.grid = self
             .grid

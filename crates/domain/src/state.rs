@@ -146,6 +146,14 @@ pub struct GameState {
     pub grid: Vec<Option<StructureKind>>,
     /// Pilote automatique des flottes (après 10 systèmes explorés).
     pub auto_fleets: bool,
+    /// Règles imposées (univers de poche du Défi du jour), à la place de
+    /// celles de l'univers en cours.
+    pub rules_override: Option<UniverseRules>,
+    /// Défi du jour : jour du dernier défi, meilleur score ce jour-là, et
+    /// récompense déjà touchée ou non.
+    pub daily_day: u64,
+    pub daily_best: f64,
+    pub daily_rewarded: bool,
     /// Historique de la production (temps de jeu, log10 de la prod/s), un
     /// point tous les quarts d'heure, et record de production.
     pub history: Vec<(f64, f32)>,
@@ -221,6 +229,10 @@ impl GameState {
             exotic_total: 0.0,
             grid: Vec::new(),
             auto_fleets: false,
+            rules_override: None,
+            daily_day: 0,
+            daily_best: 0.0,
+            daily_rewarded: false,
             history: Vec::new(),
             best_production: 0.0,
             milestones: [0.0; 5],
@@ -486,6 +498,9 @@ impl GameState {
 
     /// Règles de l'univers en cours.
     pub fn rules(&self, catalog: &Catalog) -> UniverseRules {
+        if let Some(r) = self.rules_override {
+            return r;
+        }
         catalog
             .universe(self.universe)
             .map(|u| u.rules)
@@ -1752,6 +1767,39 @@ impl GameState {
     // ------------------------------------------------------------------
     // Acte IV : Mégastructures
     // ------------------------------------------------------------------
+
+    /// Le Défi du jour s'ouvre avec l'Acte IV.
+    pub fn daily_unlocked(&self) -> bool {
+        self.converged
+    }
+
+    /// Partie vierge pour le Défi du jour `day` : règles du jour, succès tous
+    /// acquis (même bonus pour tous les joueurs, pas d'annonces).
+    pub fn daily_pocket(catalog: &Catalog, day: u64) -> GameState {
+        let mut s = GameState::new(catalog);
+        s.rules_override = Some(crate::daily::rules_for(day).1);
+        s.achievements.iter_mut().for_each(|a| *a = true);
+        s
+    }
+
+    /// Enregistre le score d'un défi ; renvoie la matière exotique gagnée
+    /// (seulement pour le premier défi du jour).
+    pub fn record_daily(&mut self, day: u64, score: f64) -> f64 {
+        if self.daily_day != day {
+            self.daily_day = day;
+            self.daily_best = 0.0;
+            self.daily_rewarded = false;
+        }
+        self.daily_best = self.daily_best.max(score);
+        if self.daily_rewarded {
+            return 0.0;
+        }
+        self.daily_rewarded = true;
+        let reward = crate::daily::reward_for(score);
+        self.exotic += reward;
+        self.exotic_total += reward;
+        reward
+    }
 
     /// Les Mégastructures s'ouvrent après la Convergence.
     pub fn megastructures_unlocked(&self) -> bool {
@@ -3916,5 +3964,21 @@ mod tests {
         assert!(s.has_achievement(c.achievement_by_key("core").unwrap()));
         s.demolish(11, &mut ev);
         assert_eq!(s.grid[11], None);
+    }
+
+    #[test]
+    fn daily_pocket_universe_and_reward_once_a_day() {
+        let c = Catalog::standard();
+        let pocket = GameState::daily_pocket(&c, 20_000);
+        assert_eq!(pocket.rules(&c), crate::daily::rules_for(20_000).1);
+        assert!(pocket.achievements.iter().all(|&a| a));
+        let mut main = GameState::new(&c);
+        main.converged = true;
+        let r = main.record_daily(20_000, 1e10);
+        assert_eq!(r, 6.0);
+        assert_eq!(main.exotic, 6.0);
+        assert_eq!(main.record_daily(20_000, 1e12), 0.0, "une fois par jour");
+        assert_eq!(main.daily_best, 1e12);
+        assert_eq!(main.record_daily(20_001, 1e10), 6.0, "le lendemain, oui");
     }
 }

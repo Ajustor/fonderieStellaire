@@ -172,6 +172,7 @@ cargo run --release -- --reset
 | `H` | Reliques : collection, emplacements et ensembles (Acte III) |
 | `Z` | Revenir à l'événement cosmique en attente (Acte III) |
 | `W` | Mégastructures : bâtir sur la grille (Acte IV) |
+| `Y` | Défi du jour : dix minutes dans un univers de poche (Acte IV) |
 | `R` | Options : couleurs (daltonien, contraste élevé), images par seconde, effets réduits, recommencer une partie |
 | `T` | Activer / arrêter l'automate (une fois acheté à l'Atelier) |
 | `I` | Infos : progression, succès et fonctionnement de chaque mécanique |

@@ -15,8 +15,8 @@ use crate::visuals::Visuals;
 use crate::widgets::journal::Journal;
 use crate::widgets::toast::Toasts;
 use crate::widgets::{
-    ceremony, challenges, codex, cosmos, event, generators, header, help_bar, journal, lab, mega,
-    modal, options, portals, relics, shop, sky, sparkline, starmap, upgrades, Ctx,
+    ceremony, challenges, codex, cosmos, daily, event, generators, header, help_bar, journal, lab,
+    mega, modal, options, portals, relics, shop, sky, sparkline, starmap, upgrades, Ctx,
 };
 
 /// Décalage entre deux panneaux de la cascade.
@@ -24,6 +24,8 @@ pub const CASCADE_STAGGER: f64 = 0.08;
 pub const CASCADE_DURATION: f64 = 0.35;
 
 pub struct GameView<'a> {
+    /// Jour (depuis 1970), pour le Défi du jour.
+    pub today: u64,
     pub save_path: &'a str,
     pub version: &'a str,
     pub journal: &'a Journal,
@@ -113,6 +115,9 @@ pub fn render(
             &info,
         );
     }
+    if let Some(popup) = ui.daily {
+        daily::render(buf, area, ctx, &popup, view.today);
+    }
     if let Some(popup) = ui.mega {
         mega::render(buf, area, ctx, &popup, ui.mega_sel, vis.mega_pop);
     }
@@ -124,6 +129,12 @@ pub fn render(
     }
     if let Some(popup) = ui.event {
         event::render(buf, area, ctx, &popup);
+    }
+    if let Some(r) = vis.daily_result.as_ref() {
+        daily::render_result(buf, area, ctx.now, r);
+    }
+    if let Some(at) = vis.iris_at {
+        daily::render_iris(buf, area, ctx.now, at);
     }
     // Relique trouvée : par-dessus tout, même la carte.
     if let Some(card) = vis.relic_card {

@@ -1345,3 +1345,60 @@ fn v0_14_megastructures_grid() {
     let text = render(&mut app, 80, 24);
     assert!(text.contains("MÉGASTRUCTURES"), "{text}");
 }
+
+#[test]
+fn v0_15_daily_challenge() {
+    let mut save = advanced_save();
+    save.big_bangs = 1;
+    save.attractor = 7;
+    save.map_seed = 42;
+    save.converged = true;
+    save.fragments = 77.0;
+    let mut app = app_with(Some(save));
+    let mut t = 100.0;
+    app.set_time(t);
+    app.enter_game_now();
+    app.update(0.033);
+    app.on_intent(Intent::Daily);
+    t += 1.0;
+    app.set_time(t);
+    let text = render(&mut app, 100, 30);
+    println!("{text}");
+    assert!(text.contains("DÉFI DU JOUR"), "{text}");
+    assert!(text.contains("Règles du jour"));
+    assert!(text.contains("univers de poche"));
+    app.on_intent(Intent::Buy);
+    app.update(0.033);
+    assert!(app.snapshot().daily.is_some());
+    assert_eq!(app.snapshot().fragments, 0.0, "partie vierge");
+    for _ in 0..50 {
+        app.on_intent(Intent::Harvest);
+    }
+    for i in 0..(30 * 3) {
+        t += 1.0 / 30.0;
+        app.set_time(t);
+        app.update(1.0 / 30.0);
+        let (w, h) = if i % 2 == 0 { (100, 30) } else { (80, 24) };
+        let _ = render(&mut app, w, h);
+    }
+    let text = render(&mut app, 100, 30);
+    assert!(
+        text.contains("DÉFI"),
+        "compte à rebours dans l'en-tête :\n{text}"
+    );
+    // Dix minutes plus tard : retour à la partie, carte du résultat.
+    app.update(600.0);
+    let snap = app.snapshot();
+    assert!(snap.daily.is_none());
+    assert_eq!(snap.fragments, 77.0);
+    assert!(snap.daily_best > 0.0);
+    let mut seen = false;
+    for _ in 0..(30 * 3) {
+        t += 1.0 / 30.0;
+        app.set_time(t);
+        app.update(1.0 / 30.0);
+        let text = render(&mut app, 100, 30);
+        seen |= text.contains("DÉFI DU JOUR TERMINÉ") && text.contains("Code à partager : FS");
+    }
+    assert!(seen, "la carte du résultat s'affiche");
+}

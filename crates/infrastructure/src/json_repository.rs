@@ -84,6 +84,9 @@ struct SaveFile {
     exotic: f64,
     exotic_total: f64,
     grid: Vec<i8>,
+    daily_day: u64,
+    daily_best: f64,
+    daily_rewarded: bool,
 }
 
 impl From<&SaveData> for SaveFile {
@@ -152,6 +155,9 @@ impl From<&SaveData> for SaveFile {
             exotic: d.exotic,
             exotic_total: d.exotic_total,
             grid: d.grid.clone(),
+            daily_day: d.daily_day,
+            daily_best: d.daily_best,
+            daily_rewarded: d.daily_rewarded,
         }
     }
 }
@@ -222,6 +228,9 @@ impl From<SaveFile> for SaveData {
             exotic: f.exotic,
             exotic_total: f.exotic_total,
             grid: f.grid,
+            daily_day: f.daily_day,
+            daily_best: f.daily_best,
+            daily_rewarded: f.daily_rewarded,
         }
     }
 }
