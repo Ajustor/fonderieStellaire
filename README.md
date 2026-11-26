@@ -183,13 +183,19 @@ Majuscules et minuscules sont acceptées.
 - **Comètes** : toutes les 90 à 240 s. Capture-les avec `C` pendant leurs 15 s de
   traversée : *Tempête solaire* (production ×7 pendant 30 s) ou *Pluie d'étoiles*
   (gain immédiat).
-- **Supernova** : `floor(√(récolte du cycle / 10 M))` fragments, chacun donnant
-  **+10 %** de production pour toujours. Remet à zéro poussière, générateurs et
-  améliorations.
+- **Supernova** : `floor(√(récolte du cycle / seuil))` fragments, avec un seuil
+  de 10 M qui augmente de 25 % à chaque Supernova. Les fragments donnent +10 % de
+  production chacun jusqu'à 5, puis le bonus croît en racine carrée. Remet à
+  zéro poussière, générateurs et améliorations.
+- **Générateurs de prestige** : *Trou blanc*, *Fabrique de quasars* et *Moteur à
+  multivers* apparaissent après 1, 5 et 15 Supernovas.
 - **Atelier stellaire** (`E`) : dépense tes fragments en 8 bonus permanents
   (départ équipé, comètes plus fréquentes, générateurs moins chers, automate
   d'achat…). Le bonus de production des fragments dépensés est **conservé**.
-- **Succès** : 24 succès, **+1 %** de production chacun.
+- **Constellations** (`E`, sous l'Atelier) : 6 améliorations à niveaux sans fin,
+  de plus en plus chères (production, clics, comètes, hors-ligne, fragments,
+  coûts). Chaque niveau allume une étoile dans le ciel.
+- **Succès** : 28 succès, **+1 %** de production chacun.
 - **Progression** : le pourcentage dans l'en-tête et l'écran `I` indiquent où tu
   en es (générateurs, succès, Atelier, poussière avant le prochain fragment).
 - **Hors-ligne** : ta fonderie produit à 50 % pendant ton absence (12 h max).

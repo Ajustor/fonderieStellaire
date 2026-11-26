@@ -44,7 +44,8 @@ grep -rlE "serde|std::fs"     crates | grep -v crates/infrastructure # → rien
 
 - **domain** — règles pures et déterministes : catalogue (`catalog.rs`), coûts et
   paliers (`generator.rs`), production (`economy.rs`), améliorations, succès,
-  comètes, prestige, Atelier stellaire (`perk.rs`) et l'agrégat `GameState`
+  comètes, prestige, Atelier stellaire (`perk.rs`), Constellations
+  (`constellation.rs`) et l'agrégat `GameState`
   (dont l'automate d'achat et « tout acheter »). Le temps (`dt`) et les tirages
   aléatoires (`roll: f64`) arrivent **en paramètre**. Chaque opération pousse des
   `DomainEvent` dans un `Vec`.
@@ -126,11 +127,13 @@ presentation/src/
 ### Ajouter un générateur
 
 1. `crates/domain/src/catalog.rs` : ajouter une ligne au tableau `GENERATORS`
-   (nom, pluriel, symbole à largeur simple, coût de base, prod/s). Les 4
-   améliorations du générateur sont générées automatiquement (`gen{N}_t{0..3}`).
+   (nom, pluriel, symbole à largeur simple, coût de base, prod/s), sa
+   description dans `GENERATOR_FLAVORS` et son verrou dans `GENERATOR_UNLOCKS`
+   (nombre de Supernovas nécessaires, 0 sinon). Les 4 améliorations du
+   générateur sont générées automatiquement (`gen{N}_t{0..3}`).
 2. `crates/presentation/src/theme.rs` : ajouter sa couleur à `GENERATOR_COLORS`.
-3. Les tableaux d'effets indexés par générateur (`[f64; 9]` dans `visuals.rs`,
-   `gen_rows` dans `ui.rs`) sont dimensionnés à 9 : les agrandir.
+3. Les effets visuels par générateur sont dimensionnés par `theme::GEN_SLOTS`
+   (16) : l'augmenter au-delà de 16 générateurs.
 4. Optionnel : un glyphe d'orbite particulier dans `widgets/sky.rs`
    (`orbit_glyph`).
 
@@ -163,6 +166,15 @@ L'identifiant texte (`key`) doit rester **stable** : c'est lui qui est sauvegard
 2. Pour un nouvel **effet** : une variante dans `perk::PerkEffect`, appliquée
    dans `GameState` (ou `economy.rs`), avec un test. Le `match` de l'écran
    Atelier n'a rien à changer : il affiche le catalogue.
+
+### Ajouter une Constellation
+
+1. `crates/domain/src/catalog.rs` : une ligne dans `CONSTELLATIONS` (clé
+   stable, nom, description d'un niveau, symbole, coût de base, croissance du
+   coût, niveau max éventuel, effet **par niveau**).
+2. Pour un nouvel effet : une variante de `ConstellationEffect`, appliquée dans
+   `GameState` (voir `constellation_sum`), et son texte cumulé dans
+   `widgets/shop.rs` (`constellation_total`).
 
 ### Ajouter un événement de domaine
 

@@ -1,4 +1,4 @@
-use domain::{GeneratorId, PerkId, UpgradeId};
+use domain::{ConstellationId, GeneratorId, PerkId, UpgradeId};
 
 /// Intentions de jeu envoyées par la présentation au [`crate::GameService`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -19,4 +19,6 @@ pub enum Command {
     BuyPerk(PerkId),
     /// Active / arrête l'automate d'achat.
     ToggleAutoBuy,
+    /// Un niveau de Constellation.
+    BuyConstellation(ConstellationId),
 }

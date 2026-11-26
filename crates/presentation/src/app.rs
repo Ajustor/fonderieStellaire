@@ -11,7 +11,8 @@ use ratatui::Frame;
 
 use application::updates::display_version;
 use application::{Command, GameEvent, GameService, GameSnapshot, UpdateEvent, UpdateService};
-use domain::catalog::balance::{ACHIEVEMENT_BONUS, FRAGMENT_BONUS};
+use domain::catalog::balance::ACHIEVEMENT_BONUS;
+use domain::prestige::fragment_multiplier;
 use domain::{CometReward, DomainEvent, Effect, GeneratorId, PurchaseTarget, Requirement};
 
 use crate::draw;
@@ -24,9 +25,11 @@ use crate::screens::title::TitleScreen;
 use crate::screens::too_small;
 use crate::terminal::{Term, TerminalGuard};
 use crate::theme;
+use crate::theme::GEN_SLOTS;
 use crate::ui::{Panel, Popup, Ui};
 use crate::visuals::{Visuals, NEVER};
 use crate::widgets::journal::{Journal, Kind};
+use crate::widgets::shop::{self, ShopItem};
 use crate::widgets::toast::Toasts;
 use crate::widgets::{inner, Ctx};
 
@@ -356,16 +359,25 @@ impl App {
         }
         if let Some(shop) = self.ui.shop {
             if shop.closing_at.is_none() {
-                let count = self.snap.perks.len();
+                let count = shop::item_count(&self.snap);
                 match intent {
                     Intent::Up => self.ui.shop_sel = self.ui.shop_sel.saturating_sub(1),
                     Intent::Down => {
                         self.ui.shop_sel = (self.ui.shop_sel + 1).min(count.saturating_sub(1))
                     }
                     Intent::Buy | Intent::Yes => {
-                        if let Some(p) = self.snap.perks.get(self.ui.shop_sel) {
-                            let id = p.id;
-                            self.command(Command::BuyPerk(id));
+                        match shop::item_at(&self.snap, self.ui.shop_sel) {
+                            Some(ShopItem::Perk(i)) => {
+                                if let Some(id) = self.snap.perks.get(i).map(|p| p.id) {
+                                    self.command(Command::BuyPerk(id));
+                                }
+                            }
+                            Some(ShopItem::Constellation(i)) => {
+                                if let Some(id) = self.snap.constellations.get(i).map(|c| c.id) {
+                                    self.command(Command::BuyConstellation(id));
+                                }
+                            }
+                            None => {}
                         }
                     }
                     Intent::ToggleAuto => self.command(Command::ToggleAutoBuy),
@@ -502,7 +514,7 @@ impl App {
     fn start_supernova(&mut self) {
         let gained = self.snap.fragments_available;
         let old_bonus = self.snap.fragment_bonus;
-        let new_bonus = (self.snap.fragments + gained) * FRAGMENT_BONUS;
+        let new_bonus = fragment_multiplier(self.snap.fragments + gained) - 1.0;
         self.vis.nova = Some(NovaSequence::new(self.now, gained, old_bonus, new_bonus));
     }
 
@@ -569,7 +581,7 @@ impl App {
             DomainEvent::Purchased {
                 generator, count, ..
             } => {
-                let gi = generator.index().min(8);
+                let gi = generator.index().min(GEN_SLOTS - 1);
                 self.vis.gen_flash[gi] = now;
                 let color = theme::generator_color(gi);
                 if let Some(y) = self.ui.gen_rows[gi] {
@@ -619,7 +631,27 @@ impl App {
                 }
             }
             DomainEvent::PurchaseFailed { target } => match target {
-                PurchaseTarget::Generator(g) => self.vis.gen_fail[g.index().min(8)] = now,
+                PurchaseTarget::Generator(g) => {
+                    self.vis.gen_fail[g.index().min(GEN_SLOTS - 1)] = now
+                }
+                PurchaseTarget::Constellation(c) => {
+                    let name = self
+                        .service
+                        .catalog()
+                        .constellation(c)
+                        .map(|d| d.name)
+                        .unwrap_or("?");
+                    let view = self.snap.constellations.get(c.index()).copied();
+                    let body = match view {
+                        Some(v) if v.maxed => format!("« {name} » est au niveau maximal"),
+                        Some(v) => format!(
+                            "Niveau suivant de « {name} » : {} fragment(s)",
+                            fmt::short(v.cost)
+                        ),
+                        None => String::new(),
+                    };
+                    self.toasts.push(now, theme::GREY, "Constellations", body);
+                }
                 PurchaseTarget::Perk(p) => {
                     let (name, cost) = self
                         .service
@@ -653,7 +685,7 @@ impl App {
                 self.log(Kind::Milestone, format!("◆ Palier : {count} {name} (×2)"));
             }
             DomainEvent::GeneratorRevealed { generator } => {
-                self.vis.gen_reveal[generator.index().min(8)] = now;
+                self.vis.gen_reveal[generator.index().min(GEN_SLOTS - 1)] = now;
                 let name = self
                     .service
                     .catalog()
@@ -754,7 +786,7 @@ impl App {
                 self.ui.upg_sel = 0;
                 self.ui.gen_scroll = 0;
                 self.ui.upg_scroll = 0;
-                self.vis.bar_fill = [0.0; 9];
+                self.vis.bar_fill = [0.0; GEN_SLOTS];
                 self.vis.roll_counter(now);
                 self.log(
                     Kind::Supernova,
@@ -801,6 +833,27 @@ impl App {
                     "Automate arrêté"
                 };
                 self.log(Kind::Info, msg);
+            }
+            DomainEvent::ConstellationUpgraded {
+                constellation,
+                level,
+            } => {
+                let def = self.service.catalog().constellation(constellation);
+                let name = def.map(|d| d.name).unwrap_or("?");
+                let total = def
+                    .map(|d| shop::constellation_total(d.effect, level))
+                    .unwrap_or_default();
+                self.toasts.push(
+                    now,
+                    theme::GOLD,
+                    format!("★ {name} · niveau {level}"),
+                    total.clone(),
+                );
+                self.log(
+                    Kind::Achievement,
+                    format!("★ Constellation {name} niveau {level} : {total}"),
+                );
+                self.vis.constellation_pop = now;
             }
             DomainEvent::AutoBuyLocked => {
                 self.toasts.push(

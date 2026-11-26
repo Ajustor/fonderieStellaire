@@ -15,6 +15,7 @@ use crate::fx::effects;
 use crate::fx::noise::fbm;
 use crate::fx::Rgb;
 use crate::theme;
+use crate::theme::GEN_SLOTS;
 use crate::visuals::{StarField, Visuals, FLOATER_LIFE};
 
 const COMET_TRAIL: [char; 7] = ['═', '═', '═', '─', '─', '·', '·'];
@@ -125,6 +126,63 @@ pub fn draw_aurora(buf: &mut Buffer, area: Rect, now: f64, intensity: f64) {
     }
 }
 
+/// Motif de la constellation (colonne, ligne) dans le coin haut-gauche du ciel.
+const CONSTELLATION: [(i32, i32); 14] = [
+    (2, 3),
+    (5, 2),
+    (8, 3),
+    (11, 2),
+    (14, 1),
+    (17, 2),
+    (20, 1),
+    (23, 2),
+    (21, 4),
+    (18, 5),
+    (15, 4),
+    (12, 5),
+    (9, 4),
+    (6, 5),
+];
+
+/// Dessine la constellation : `lit` étoiles allumées (reliées par des points),
+/// les autres en pointillé discret. Au-delà du motif, les étoiles brillent plus fort.
+pub fn draw_constellation(buf: &mut Buffer, area: Rect, now: f64, lit: u32, pop: f64) {
+    if area.width < 26 || area.height < 6 {
+        return;
+    }
+    let lit = lit as usize;
+    let laps = lit / CONSTELLATION.len();
+    let lit_here = if laps > 0 { CONSTELLATION.len() } else { lit };
+    let ox = area.x as i32;
+    let oy = area.y as i32;
+    // Liens entre étoiles allumées.
+    for pair in CONSTELLATION.windows(2).take(lit_here.saturating_sub(1)) {
+        let (a, b) = (pair[0], pair[1]);
+        let steps = (b.0 - a.0).abs().max((b.1 - a.1).abs()).max(1);
+        for k in 1..steps {
+            let x = a.0 + (b.0 - a.0) * k / steps;
+            let y = a.1 + (b.1 - a.1) * k / steps;
+            if draw::is_blank(buf, ox + x, oy + y) {
+                draw::put(buf, area, ox + x, oy + y, '·', theme::GOLD.dim(0.6));
+            }
+        }
+    }
+    let pop_p = (now - pop) / 0.8;
+    for (i, &(x, y)) in CONSTELLATION.iter().enumerate() {
+        if i < lit_here {
+            let twinkle = 0.5 + 0.5 * (now * 1.7 + i as f64).sin();
+            let mut c = theme::GOLD.lerp(theme::WHITE, 0.2 * twinkle + 0.1 * laps.min(5) as f64);
+            let newest = i + 1 == lit_here || (laps > 0 && i == (lit % CONSTELLATION.len()));
+            if newest && (0.0..1.0).contains(&pop_p) {
+                c = theme::WHITE;
+            }
+            draw::put_styled(buf, area, ox + x, oy + y, '✦', theme::bold(c));
+        } else {
+            draw::put(buf, area, ox + x, oy + y, '·', theme::BORDER.dim(0.3));
+        }
+    }
+}
+
 fn orbit_glyph(index: usize, symbol: char) -> char {
     match index {
         0 => '·',
@@ -180,6 +238,17 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
     // 4. Étoiles.
     draw_stars(buf, inner, &vis.stars, now, 9.0, 1.0);
 
+    // 4 bis. Constellation : chaque niveau acheté allume une étoile.
+    if snap.constellation_levels > 0 || snap.fragments > 0.0 {
+        draw_constellation(
+            buf,
+            inner,
+            now,
+            snap.constellation_levels,
+            vis.constellation_pop,
+        );
+    }
+
     // 5. Soleil (en bas à droite, partiellement hors cadre).
     let cx = w - 2.0;
     let cy = h - 0.5;
@@ -225,7 +294,8 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
 
     // 6. Objets en orbite : nombre = log2(possédés) + 1.
     let first_frame = !vis.orbit_ready;
-    for (i, def) in ctx.catalog.generators.iter().enumerate().take(9) {
+    let gen_count = ctx.catalog.generators.len().clamp(1, GEN_SLOTS) as f64;
+    for (i, def) in ctx.catalog.generators.iter().enumerate().take(GEN_SLOTS) {
         let owned = snap.owned.get(i).copied().unwrap_or(0);
         let count = if owned == 0 {
             0
@@ -256,7 +326,8 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
                 };
                 (cx + rr * c, cy + rr * s * 0.5, g)
             } else {
-                let a_axis = r + 2.0 + (i as f64 + 1.0) * ((w * 0.9 - r - 2.0).max(6.0) / 9.0);
+                let a_axis =
+                    r + 2.0 + (i as f64 + 1.0) * ((w * 0.9 - r - 2.0).max(6.0) / gen_count);
                 let b_axis = a_axis * 0.42;
                 let speed = 1.3 / (1.0 + i as f64 * 0.45);
                 let a = -now * speed + k as f64 * TAU / count as f64 + i as f64 * 0.9;

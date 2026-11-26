@@ -6,11 +6,12 @@ use crate::catalog::balance::{
 };
 use crate::catalog::Catalog;
 use crate::comet::{CometReward, CometState};
+use crate::constellation::{ConstellationEffect, ConstellationId};
 use crate::economy;
 use crate::events::{DomainEvent, PurchaseTarget};
 use crate::generator::{milestones_crossed, BuyMode, GeneratorId};
 use crate::perk::{PerkEffect, PerkId};
-use crate::prestige::fragments_for;
+use crate::prestige::{fragment_divisor, fragments_for};
 use crate::stardust::Stardust;
 use crate::upgrade::{Effect, UpgradeId};
 
@@ -48,6 +49,8 @@ pub struct GameState {
     pub fragments_spent: f64,
     /// Automate d'achat activé (si acheté).
     pub autobuy: bool,
+    /// Niveau de chaque Constellation.
+    pub constellations: Vec<u32>,
     revealed: Vec<bool>,
     autobuy_timer: f64,
     achievement_timer: f64,
@@ -74,6 +77,7 @@ impl GameState {
             perks: Vec::new(),
             fragments_spent: 0.0,
             autobuy: false,
+            constellations: Vec::new(),
             revealed: Vec::new(),
             autobuy_timer: 0.0,
             achievement_timer: 0.0,
@@ -91,6 +95,12 @@ impl GameState {
         self.upgrades.resize(catalog.upgrades.len(), false);
         self.achievements.resize(catalog.achievements.len(), false);
         self.perks.resize(catalog.perks.len(), false);
+        self.constellations.resize(catalog.constellations.len(), 0);
+        for (lvl, def) in self.constellations.iter_mut().zip(&catalog.constellations) {
+            if let Some(max) = def.max_level {
+                *lvl = (*lvl).min(max);
+            }
+        }
         for v in [
             &mut self.fragments_spent,
             &mut self.total_run,
@@ -160,12 +170,24 @@ impl GameState {
 
     /// Multiplicateur appliqué au coût des générateurs (Atelier : « Ingénierie frugale »).
     pub fn generator_cost_factor(&self, catalog: &Catalog) -> f64 {
-        self.perk_effects(catalog)
+        let perks: f64 = self
+            .perk_effects(catalog)
             .filter_map(|e| match e {
                 PerkEffect::GeneratorDiscount(f) => Some(f),
                 _ => None,
             })
-            .product()
+            .product();
+        let constellations: f64 = catalog
+            .constellations
+            .iter()
+            .filter_map(|c| match c.effect {
+                ConstellationEffect::Discount(f) => {
+                    Some(f.powi(self.constellation_level(c.id) as i32))
+                }
+                _ => None,
+            })
+            .product();
+        perks * constellations
     }
 
     fn comet_interval_factor(&self, catalog: &Catalog) -> f64 {
@@ -187,22 +209,112 @@ impl GameState {
     }
 
     fn nova_factor(&self, catalog: &Catalog) -> f64 {
-        self.perk_effects(catalog)
+        let perks: f64 = self
+            .perk_effects(catalog)
             .filter_map(|e| match e {
                 PerkEffect::RichNova(f) => Some(f),
                 _ => None,
             })
-            .product()
+            .product();
+        perks
+            * (1.0
+                + self.constellation_sum(catalog, |e| match e {
+                    ConstellationEffect::Fragments(x) => Some(x),
+                    _ => None,
+                }))
+    }
+
+    pub fn constellation_level(&self, id: ConstellationId) -> u32 {
+        self.constellations.get(id.index()).copied().unwrap_or(0)
+    }
+
+    pub fn constellation_levels_total(&self) -> u32 {
+        self.constellations.iter().sum()
+    }
+
+    /// Somme « valeur par niveau × niveau » des Constellations d'un type.
+    fn constellation_sum(
+        &self,
+        catalog: &Catalog,
+        f: impl Fn(ConstellationEffect) -> Option<f64>,
+    ) -> f64 {
+        catalog
+            .constellations
+            .iter()
+            .filter_map(|c| f(c.effect).map(|x| x * self.constellation_level(c.id) as f64))
+            .sum()
+    }
+
+    /// Multiplicateur de production des Constellations.
+    pub fn constellation_production(&self, catalog: &Catalog) -> f64 {
+        1.0 + self.constellation_sum(catalog, |e| match e {
+            ConstellationEffect::Production(x) => Some(x),
+            _ => None,
+        })
+    }
+
+    /// Fraction de la prod/s ajoutée aux clics par les Constellations.
+    pub fn constellation_click(&self, catalog: &Catalog) -> f64 {
+        self.constellation_sum(catalog, |e| match e {
+            ConstellationEffect::Click(x) => Some(x),
+            _ => None,
+        })
+    }
+
+    fn comet_levels(&self, catalog: &Catalog) -> (f64, f64) {
+        catalog
+            .constellations
+            .iter()
+            .filter_map(|c| match c.effect {
+                ConstellationEffect::Comets(x) => Some((self.constellation_level(c.id) as f64, x)),
+                _ => None,
+            })
+            .fold((0.0, 0.0), |(l, s), (lvl, x)| (l + lvl, s + lvl * x))
+    }
+
+    /// Achète un niveau de Constellation avec des fragments.
+    pub fn buy_constellation(
+        &mut self,
+        catalog: &Catalog,
+        id: ConstellationId,
+        events: &mut Vec<DomainEvent>,
+    ) {
+        let fail = DomainEvent::PurchaseFailed {
+            target: PurchaseTarget::Constellation(id),
+        };
+        let Some(def) = catalog.constellation(id) else {
+            events.push(fail);
+            return;
+        };
+        let level = self.constellation_level(id);
+        let cost = def.cost_at(level);
+        if def.is_maxed(level) || self.fragments_spendable() + 1e-9 < cost {
+            events.push(fail);
+            return;
+        }
+        self.fragments_spent += cost;
+        self.constellations[id.index()] = level + 1;
+        events.push(DomainEvent::ConstellationUpgraded {
+            constellation: id,
+            level: level + 1,
+        });
+        self.check_achievements(catalog, events);
     }
 
     /// (rendement, plafond en secondes) de la production hors-ligne.
     pub fn offline_terms(&self, catalog: &Catalog) -> (f64, f64) {
-        self.perk_effects(catalog)
+        let (rate, cap) = self
+            .perk_effects(catalog)
             .find_map(|e| match e {
                 PerkEffect::OfflineMastery { rate, cap_secs } => Some((rate, cap_secs)),
                 _ => None,
             })
-            .unwrap_or((OFFLINE_RATE, OFFLINE_CAP_SECS))
+            .unwrap_or((OFFLINE_RATE, OFFLINE_CAP_SECS));
+        let extra_hours = self.constellation_sum(catalog, |e| match e {
+            ConstellationEffect::OfflineHours(h) => Some(h),
+            _ => None,
+        });
+        (rate, cap + extra_hours * 3600.0)
     }
 
     /// Vrai si l'automate d'achat a été acheté.
@@ -249,6 +361,9 @@ impl GameState {
         let Some(def) = catalog.generator(id) else {
             return false;
         };
+        if self.supernovas < def.unlock_supernovas {
+            return false;
+        }
         let i = id.index();
         i == 0
             || self.owned_of(id) > 0
@@ -268,7 +383,8 @@ impl GameState {
 
     /// Fragments gagnables maintenant (Atelier « Nova dorée » compris).
     pub fn fragments_available_with(&self, catalog: &Catalog) -> f64 {
-        let base = (fragments_for(self.total_run) * self.nova_factor(catalog)).floor();
+        let base =
+            (fragments_for(self.total_run, self.supernovas) * self.nova_factor(catalog)).floor();
         (base - self.fragments_this_run).max(0.0)
     }
 
@@ -277,12 +393,12 @@ impl GameState {
         let factor = self.nova_factor(catalog).max(1e-9);
         let next = self.fragments_available_with(catalog) + self.fragments_this_run + 1.0;
         // floor(sqrt(t / D) × facteur) ≥ next  ⇔  t ≥ (next / facteur)² × D
-        (next / factor).powi(2) * crate::catalog::balance::FRAGMENT_DIVISOR
+        (next / factor).powi(2) * fragment_divisor(self.supernovas)
     }
 
     /// Fragments gagnables sans tenir compte de l'Atelier.
     pub fn fragments_available(&self) -> f64 {
-        (fragments_for(self.total_run) - self.fragments_this_run).max(0.0)
+        (fragments_for(self.total_run, self.supernovas) - self.fragments_this_run).max(0.0)
     }
 
     fn earn(&mut self, amount: f64) {
@@ -438,18 +554,24 @@ impl GameState {
             return;
         }
         let production = economy::total_production(catalog, self);
+        let (comet_levels, shower_bonus) = self.comet_levels(catalog);
         let reward = match CometReward::from_roll(roll_reward, self.stardust.value(), production) {
             CometReward::SolarStorm {
                 multiplier,
                 duration,
             } => CometReward::SolarStorm {
-                multiplier,
+                multiplier: multiplier + comet_levels,
                 duration: duration * self.storm_factor(catalog),
             },
-            other => other,
+            CometReward::StarShower { amount } => CometReward::StarShower {
+                amount: amount * (1.0 + shower_bonus),
+            },
         };
         match reward {
-            CometReward::SolarStorm { duration, .. } => self.comet.start_storm(duration),
+            CometReward::SolarStorm {
+                duration,
+                multiplier,
+            } => self.comet.start_storm_with(duration, multiplier),
             CometReward::StarShower { amount } => self.earn(amount),
         }
         self.meteors_caught += 1;
@@ -636,6 +758,7 @@ impl GameState {
                 fragments: self.fragments,
                 perks_owned: self.perks_owned(),
                 perks_total: catalog.perks.len(),
+                constellation_levels: self.constellation_levels_total(),
             };
             for a in &catalog.achievements {
                 if !self.has_achievement(a.id) && a.condition.is_met(&ctx) {
@@ -862,6 +985,84 @@ mod tests {
         );
     }
 
+    fn constellation(c: &Catalog, key: &str) -> ConstellationId {
+        c.constellation_by_key(key).unwrap()
+    }
+
+    #[test]
+    fn late_generators_unlock_with_supernovas() {
+        let (c, mut s, _) = setup();
+        s.total_run = 1e15; // largement assez pour tout dévoiler… sauf les verrous
+        s.owned[8] = 1;
+        assert!(s.is_visible(&c, GeneratorId(8)));
+        assert!(
+            !s.is_visible(&c, GeneratorId(9)),
+            "Trou blanc : 1 Supernova"
+        );
+        s.supernovas = 1;
+        assert!(s.is_visible(&c, GeneratorId(9)));
+        assert!(!s.is_visible(&c, GeneratorId(10)), "Quasars : 5 Supernovas");
+        s.supernovas = 15;
+        assert!(s.is_visible(&c, GeneratorId(11)));
+    }
+
+    #[test]
+    fn supernovas_get_harder() {
+        let (c, mut s, _) = setup();
+        s.total_run = 1e9;
+        assert_eq!(s.fragments_available_with(&c), 10.0);
+        s.supernovas = 4; // seuil × 2
+        assert_eq!(s.fragments_available_with(&c), 7.0);
+    }
+
+    #[test]
+    fn constellations_level_up_with_growing_costs() {
+        let (c, mut s, mut ev) = setup();
+        let forge = constellation(&c, "const_forge");
+        s.fragments = 10.0;
+        let prod_before = economy::permanent_multiplier(&c, &s);
+        s.buy_constellation(&c, forge, &mut ev); // coût 2
+        s.buy_constellation(&c, forge, &mut ev); // coût 4 (3.2 arrondi)
+        assert_eq!(s.constellation_level(forge), 2);
+        assert_eq!(s.fragments_spendable(), 4.0);
+        assert!(ev.contains(&DomainEvent::ConstellationUpgraded {
+            constellation: forge,
+            level: 2
+        }));
+        // +40 % de production (et +1 % du succès « Première étoile »).
+        let ratio = economy::permanent_multiplier(&c, &s) / prod_before;
+        assert!((ratio - 1.4 * 1.01).abs() < 1e-9, "{ratio}");
+        assert!(s.has_achievement(c.achievement_by_key("const1").unwrap()));
+        ev.clear();
+        s.buy_constellation(&c, forge, &mut ev); // coût 6 (5.12 → 6) > 4 libres
+        assert!(matches!(ev[0], DomainEvent::PurchaseFailed { .. }));
+    }
+
+    #[test]
+    fn constellation_effects() {
+        let (c, mut s, mut ev) = setup();
+        s.fragments = 1000.0;
+        let full = s.generator_cost(&c, GeneratorId(0), 1);
+        for _ in 0..2 {
+            s.buy_constellation(&c, constellation(&c, "const_builder"), &mut ev);
+            s.buy_constellation(&c, constellation(&c, "const_comet"), &mut ev);
+            s.buy_constellation(&c, constellation(&c, "const_hourglass"), &mut ev);
+            s.buy_constellation(&c, constellation(&c, "const_hand"), &mut ev);
+        }
+        assert!((s.generator_cost(&c, GeneratorId(0), 1) - full * 0.97 * 0.97).abs() < 1e-9);
+        assert_eq!(s.offline_terms(&c).1, OFFLINE_CAP_SECS + 4.0 * 3600.0);
+        assert!((economy::click_percent(&c, &s) - 0.02).abs() < 1e-12);
+        s.tick(&c, 50.0, 0.0, &mut ev);
+        s.catch_comet(&c, 0.1, 0.0, &mut ev); // Tempête : ×7 + 2 niveaux
+        assert_eq!(s.comet.boost(), 9.0);
+        // Niveau max respecté.
+        let hourglass = constellation(&c, "const_hourglass");
+        for _ in 0..30 {
+            s.buy_constellation(&c, hourglass, &mut ev);
+        }
+        assert_eq!(s.constellation_level(hourglass), 12);
+    }
+
     #[test]
     fn purchase_fails_without_funds() {
         let (c, mut s, mut ev) = setup();
@@ -1029,7 +1230,7 @@ mod tests {
         s.owned = vec![3];
         s.total_run = f64::NAN;
         s.normalize(&c);
-        assert_eq!(s.owned.len(), 9);
+        assert_eq!(s.owned.len(), 12);
         assert_eq!(s.total_run, 0.0);
     }
 }

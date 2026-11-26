@@ -65,7 +65,7 @@ pub struct Ui {
     pub debug: bool,
     pub layout: GameLayout,
     /// Ligne écran de chaque générateur affiché (pour les étincelles d'achat).
-    pub gen_rows: [Option<u16>; 9],
+    pub gen_rows: [Option<u16>; crate::theme::GEN_SLOTS],
     /// Ligne écran de chaque amélioration affichée.
     pub upg_rows: Vec<(UpgradeId, u16)>,
     /// Instant du dernier changement de focus.

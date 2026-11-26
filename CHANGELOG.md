@@ -1,5 +1,39 @@
 # Journal des versions
 
+## v0.4.0
+
+### Nouveautés
+- **Constellations** (dans l'Atelier, `E`) : 6 améliorations **à niveaux**,
+  payées en fragments, dont le coût augmente à chaque niveau. Les fragments ont
+  toujours une utilité, même une fois l'Atelier complet.
+  - *Le Forgeron* : +20 % de production par niveau.
+  - *La Main* : +1 % de la prod/s par clic, par niveau.
+  - *La Comète* : tempête solaire +1× et pluie d'étoiles +25 %, par niveau.
+  - *Le Sablier* : +2 h de production hors-ligne par niveau.
+  - *La Nova* : +10 % de fragments par Supernova, par niveau.
+  - *Le Bâtisseur* : générateurs 3 % moins chers par niveau.
+- Chaque niveau de Constellation allume une étoile d'une constellation
+  dessinée dans le ciel.
+- **3 nouveaux générateurs** débloqués par les Supernovas : *Trou blanc*
+  (1re Supernova), *Fabrique de quasars* (5e) et *Moteur à multivers* (15e),
+  avec leurs 4 améliorations chacun.
+- **4 nouveaux succès** (28 au total).
+
+### Équilibrage
+- Fin de l'emballement des Supernovas : jusqu'ici les fragments doublaient à
+  chaque cycle et les cycles tombaient à moins d'une minute après ~4 h de jeu.
+  - Le bonus des fragments reste de +10 % chacun jusqu'à 5 fragments, puis
+    croît en racine carrée (40 fragments : +140 % au lieu de +400 %).
+  - Chaque Supernova rend la suivante 25 % plus exigeante.
+  - Résultat (simulation) : le début de partie ne change pas, et les cycles se
+    stabilisent autour de 15–25 min ; le Multivers arrive vers 9 h de jeu.
+- Les sauvegardes existantes sont conservées, mais leur bonus de fragments est
+  recalculé avec la nouvelle courbe.
+
+### Corrections
+- La ligne mystère « ??? » reste visible quand la liste des générateurs remplit
+  tout le panneau.
+
 ## v0.3.1
 
 ### Corrections

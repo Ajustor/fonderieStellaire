@@ -1,6 +1,7 @@
 //! Données du jeu : générateurs, améliorations, succès et constantes d'équilibrage.
 
 use crate::achievement::{AchievementCondition, AchievementDef, AchievementId};
+use crate::constellation::{ConstellationDef, ConstellationEffect, ConstellationId};
 use crate::generator::{GeneratorDef, GeneratorId};
 use crate::perk::{PerkDef, PerkEffect, PerkId};
 use crate::upgrade::{Effect, Requirement, UpgradeDef, UpgradeId};
@@ -13,6 +14,10 @@ pub mod balance {
     pub const ACHIEVEMENT_BONUS: f64 = 0.01;
     /// Diviseur de la formule des fragments : `floor(sqrt(total_run / 1e7))`.
     pub const FRAGMENT_DIVISOR: f64 = 1e7;
+    /// Chaque Supernova augmente ce diviseur de 25 %.
+    pub const FRAGMENT_SCALING: f64 = 0.25;
+    /// Au-delà de ce nombre de fragments, leur bonus croît en racine carrée.
+    pub const FRAGMENT_KNEE: f64 = 5.0;
     /// Plafond du temps hors-ligne pris en compte (12 h).
     pub const OFFLINE_CAP_SECS: f64 = 12.0 * 3600.0;
     /// Rendement de la production hors-ligne.
@@ -26,7 +31,7 @@ pub mod balance {
 }
 
 /// Ligne de la table des générateurs : (nom, pluriel, symbole, coût, prod/s).
-const GENERATORS: [(&str, &str, char, f64, f64); 9] = [
+const GENERATORS: [(&str, &str, char, f64, f64); 12] = [
     ("Sonde", "Sondes", '✧', 15.0, 0.1),
     ("Drone collecteur", "Drones collecteurs", '◇', 100.0, 1.0),
     (
@@ -60,10 +65,28 @@ const GENERATORS: [(&str, &str, char, f64, f64); 9] = [
         5.1e9,
         260_000.0,
     ),
+    ("Trou blanc", "Trous blancs", '◎', 7.5e10, 1.6e6),
+    (
+        "Fabrique de quasars",
+        "Fabriques de quasars",
+        '✶',
+        1.1e12,
+        1.0e7,
+    ),
+    (
+        "Moteur à multivers",
+        "Moteurs à multivers",
+        '▣',
+        1.6e13,
+        6.5e7,
+    ),
 ];
 
+/// Nombre de Supernovas nécessaires pour débloquer chaque générateur.
+const GENERATOR_UNLOCKS: [u32; 12] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 5, 15];
+
 /// Ce que fait chaque générateur (affiché dans le détail de la sélection).
-const GENERATOR_FLAVORS: [&str; 9] = [
+const GENERATOR_FLAVORS: [&str; 12] = [
     "Petite sonde autonome qui aspire la poussière en orbite basse.",
     "Essaim de drones qui ratissent les ceintures d'astéroïdes.",
     "Vaisseau-usine qui fauche les nuages de poussière interstellaire.",
@@ -73,6 +96,9 @@ const GENERATOR_FLAVORS: [&str; 9] = [
     "Condense des nébuleuses entières en poussière d'étoile pure.",
     "Extrait la poussière des fluctuations du vide quantique.",
     "Tisse des galaxies neuves, fil d'étoile après fil d'étoile.",
+    "Recrache la matière qu'avalent les trous noirs, en poussière d'étoile.",
+    "Allume des quasars pour en récolter la lumière condensée.",
+    "Puise la poussière dans des univers parallèles.",
 ];
 
 /// Textes d'ambiance des niveaux d'amélioration par générateur.
@@ -121,7 +147,7 @@ const CLICK_UPGRADES: [(&str, f64, f64, f64); 3] = [
 /// Amélioration « maintenir Espace pour récolter » : (nom, total_run requis, coût).
 const HOLD_UPGRADE: (&str, f64, f64) = ("Récolte continue", 150.0, 300.0);
 
-const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 24] = [
+const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 28] = [
     (
         "first",
         "Premier pas",
@@ -138,7 +164,7 @@ const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 24] = [
         "all_types",
         "Collectionneur",
         "Au moins un générateur de chaque type",
-        AchievementCondition::AllTypes,
+        AchievementCondition::AllTypes(9),
     ),
     (
         "m1",
@@ -266,6 +292,108 @@ const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 24] = [
         "Acheter toutes les améliorations de l'Atelier",
         AchievementCondition::AllPerks,
     ),
+    (
+        "whitehole1",
+        "Fontaine cosmique",
+        "Posséder un Trou blanc",
+        AchievementCondition::OwnGenerator { index: 9, count: 1 },
+    ),
+    (
+        "multiverse1",
+        "Voyageur des mondes",
+        "Posséder un Moteur à multivers",
+        AchievementCondition::OwnGenerator {
+            index: 11,
+            count: 1,
+        },
+    ),
+    (
+        "const1",
+        "Première étoile",
+        "Monter une Constellation d'un niveau",
+        AchievementCondition::ConstellationLevels(1),
+    ),
+    (
+        "const50",
+        "Cartographe du ciel",
+        "Atteindre 50 niveaux de Constellations au total",
+        AchievementCondition::ConstellationLevels(50),
+    ),
+];
+
+/// Constellations : (clé, nom, description d'un niveau, symbole, coût de base,
+/// croissance du coût, niveau max, effet par niveau).
+#[allow(clippy::type_complexity)]
+const CONSTELLATIONS: [(
+    &str,
+    &str,
+    &str,
+    char,
+    f64,
+    f64,
+    Option<u32>,
+    ConstellationEffect,
+); 6] = [
+    (
+        "const_forge",
+        "Le Forgeron",
+        "+20 % de production par niveau",
+        '▲',
+        2.0,
+        1.6,
+        None,
+        ConstellationEffect::Production(0.20),
+    ),
+    (
+        "const_hand",
+        "La Main",
+        "+1 % de la prod/s par clic, par niveau",
+        '•',
+        1.0,
+        1.5,
+        None,
+        ConstellationEffect::Click(0.01),
+    ),
+    (
+        "const_comet",
+        "La Comète",
+        "Tempête solaire +1×, Pluie d'étoiles +25 %, par niveau",
+        '●',
+        2.0,
+        1.7,
+        Some(20),
+        ConstellationEffect::Comets(0.25),
+    ),
+    (
+        "const_hourglass",
+        "Le Sablier",
+        "+2 h de production hors-ligne par niveau",
+        '○',
+        1.0,
+        1.5,
+        Some(12),
+        ConstellationEffect::OfflineHours(2.0),
+    ),
+    (
+        "const_nova",
+        "La Nova",
+        "+10 % de fragments à chaque Supernova, par niveau",
+        '★',
+        5.0,
+        2.0,
+        None,
+        ConstellationEffect::Fragments(0.10),
+    ),
+    (
+        "const_builder",
+        "Le Bâtisseur",
+        "Générateurs 3 % moins chers par niveau",
+        '◇',
+        3.0,
+        1.8,
+        Some(15),
+        ConstellationEffect::Discount(0.97),
+    ),
 ];
 
 /// Atelier stellaire : (clé, nom, description, symbole, coût en fragments, effet).
@@ -349,6 +477,7 @@ pub struct Catalog {
     pub upgrades: Vec<UpgradeDef>,
     pub achievements: Vec<AchievementDef>,
     pub perks: Vec<PerkDef>,
+    pub constellations: Vec<ConstellationDef>,
 }
 
 impl Catalog {
@@ -366,6 +495,7 @@ impl Catalog {
                     base_cost,
                     base_prod,
                     description: GENERATOR_FLAVORS.get(i).copied().unwrap_or(""),
+                    unlock_supernovas: GENERATOR_UNLOCKS.get(i).copied().unwrap_or(0),
                 },
             )
             .collect();
@@ -474,11 +604,32 @@ impl Catalog {
             )
             .collect();
 
+        let constellations = CONSTELLATIONS
+            .iter()
+            .enumerate()
+            .map(
+                |(i, &(key, name, description, symbol, base_cost, growth, max_level, effect))| {
+                    ConstellationDef {
+                        id: ConstellationId(i),
+                        key,
+                        name,
+                        description,
+                        symbol,
+                        base_cost,
+                        growth,
+                        max_level,
+                        effect,
+                    }
+                },
+            )
+            .collect();
+
         Catalog {
             generators,
             upgrades,
             achievements,
             perks,
+            constellations,
         }
     }
 
@@ -500,6 +651,17 @@ impl Catalog {
 
     pub fn perk(&self, id: PerkId) -> Option<&PerkDef> {
         self.perks.get(id.index())
+    }
+
+    pub fn constellation(&self, id: ConstellationId) -> Option<&ConstellationDef> {
+        self.constellations.get(id.index())
+    }
+
+    pub fn constellation_by_key(&self, key: &str) -> Option<ConstellationId> {
+        self.constellations
+            .iter()
+            .find(|c| c.key == key)
+            .map(|c| c.id)
     }
 
     pub fn perk_by_key(&self, key: &str) -> Option<PerkId> {
@@ -529,10 +691,12 @@ mod tests {
     #[test]
     fn catalog_sizes_and_keys() {
         let c = Catalog::standard();
-        assert_eq!(c.generators.len(), 9);
-        assert_eq!(c.upgrades.len(), 9 * 4 + 4 + 3 + 1);
+        assert_eq!(c.generators.len(), 12);
+        assert_eq!(c.upgrades.len(), 12 * 4 + 4 + 3 + 1);
         assert!(c.upgrade_by_key("hold_0").is_some());
-        assert_eq!(c.achievements.len(), 24);
+        assert_eq!(c.achievements.len(), 28);
+        assert_eq!(c.constellations.len(), 6);
+        assert_eq!(c.generators[11].unlock_supernovas, 15);
         assert_eq!(c.perks.len(), 8);
         assert!(c.perk_by_key("perk_auto").is_some());
         assert!(c.upgrade_by_key("gen3_t2").is_some());

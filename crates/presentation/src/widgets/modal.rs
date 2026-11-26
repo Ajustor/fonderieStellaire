@@ -41,7 +41,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup) {
     }
     let snap = ctx.snap;
     let gained = snap.fragments_available;
-    let new_bonus = (snap.fragments + gained) * domain::catalog::balance::FRAGMENT_BONUS;
+    let new_bonus = domain::prestige::fragment_multiplier(snap.fragments + gained) - 1.0;
     let lines: [(String, ratatui::style::Style); 7] = [
         (
             "Faire exploser ta fonderie en Supernova ?".into(),

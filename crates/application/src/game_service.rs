@@ -10,7 +10,8 @@ use crate::error::AppError;
 use crate::ports::{Clock, LoadOutcome, RandomSource, SaveRepository};
 use crate::save_dto::SaveData;
 use crate::snapshot::{
-    GameSnapshot, GeneratorView, NextUpgradeView, PerkView, ProgressView, TeaserView, UpgradeView,
+    ConstellationView, GameSnapshot, GeneratorView, NextUpgradeView, PerkView, ProgressView,
+    TeaserView, UpgradeView,
 };
 
 /// Nombre d'échantillons de production conservés (1 par seconde).
@@ -168,6 +169,9 @@ impl GameService {
             Command::BuyAllUpgrades => self.state.buy_all_upgrades(&self.catalog, &mut ev),
             Command::BuyPerk(id) => self.state.buy_perk(&self.catalog, id, &mut ev),
             Command::ToggleAutoBuy => self.state.toggle_autobuy(&self.catalog, &mut ev),
+            Command::BuyConstellation(id) => {
+                self.state.buy_constellation(&self.catalog, id, &mut ev)
+            }
             Command::ToggleReducedEffects => {
                 self.reduced_effects = !self.reduced_effects;
                 out.push(GameEvent::ReducedEffectsChanged(self.reduced_effects));
@@ -264,6 +268,20 @@ impl GameService {
             owned: st.has_perk(p.id),
             affordable: !st.has_perk(p.id) && st.fragments_spendable() + 1e-9 >= p.cost,
         }));
+        snap.constellations.clear();
+        snap.constellations.extend(c.constellations.iter().map(|k| {
+            let level = st.constellation_level(k.id);
+            let cost = k.cost_at(level);
+            let maxed = k.is_maxed(level);
+            ConstellationView {
+                id: k.id,
+                level,
+                cost,
+                affordable: !maxed && st.fragments_spendable() + 1e-9 >= cost,
+                maxed,
+            }
+        }));
+        snap.constellation_levels = st.constellation_levels_total();
         snap.next_upgrade = st.next_locked_upgrade(c).and_then(|id| {
             let def = c.upgrade(id)?;
             let (current, needed) = match def.requirement {
@@ -324,6 +342,11 @@ impl GameService {
                     remaining: (g.base_cost * domain::catalog::balance::REVEAL_RATIO
                         - st.total_run)
                         .max(0.0),
+                    supernovas_needed: if st.supernovas < g.unlock_supernovas {
+                        g.unlock_supernovas
+                    } else {
+                        0
+                    },
                 });
             }
         }
@@ -590,12 +613,24 @@ mod tests {
         assert_eq!(snap.stardust, 0.0);
         assert_eq!(snap.fragments, 6.0);
         assert_eq!(snap.fragments_spendable, 6.0);
-        assert!((snap.fragment_bonus - 0.6).abs() < 1e-12);
+        // 6 fragments : 1 + 0.5 × √(6/5) (courbe en racine au-delà de 5).
+        assert!((snap.fragment_bonus - 0.5 * (6.0f64 / 5.0).sqrt()).abs() < 1e-12);
         assert_eq!(snap.perks.len(), 8);
         assert!(snap.perks.iter().any(|p| p.affordable));
-        // Nouveau cycle : le prochain fragment demande 1e7 récoltés.
-        assert!((snap.progress.next_fragment_at - 1.0e7).abs() < 1.0);
+        // Nouveau cycle, 1 Supernova faite : le seuil passe de 1e7 à 1.25e7.
+        assert!((snap.progress.next_fragment_at - 1.25e7).abs() < 1.0);
         let _ = Stardust::ZERO;
+
+        // Constellation : achat puis aller-retour par la sauvegarde.
+        let forge = s.catalog().constellation_by_key("const_forge").unwrap();
+        s.handle(Command::BuyConstellation(forge));
+        assert_eq!(s.snapshot().constellations[forge.index()].level, 1);
+        assert_eq!(s.snapshot().fragments_spendable, 4.0);
+        s.handle(Command::Save);
+        s.load().unwrap();
+        let snap = s.snapshot();
+        assert_eq!(snap.constellations[forge.index()].level, 1);
+        assert_eq!(snap.fragments_spendable, 4.0);
     }
 
     #[test]

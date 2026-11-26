@@ -1,6 +1,6 @@
 //! Vue en lecture seule de l'état du jeu, destinée à la présentation.
 
-use domain::{BuyMode, GeneratorId, PerkId, UpgradeId};
+use domain::{BuyMode, ConstellationId, GeneratorId, PerkId, UpgradeId};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GeneratorView {
@@ -23,6 +23,8 @@ pub struct TeaserView {
     pub id: GeneratorId,
     /// Poussière restant à récolter avant le dévoilement.
     pub remaining: f64,
+    /// Supernovas requises pour ce générateur (0 si aucune).
+    pub supernovas_needed: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -38,6 +40,17 @@ pub struct PerkView {
     pub id: PerkId,
     pub owned: bool,
     pub affordable: bool,
+}
+
+/// Un niveau de Constellation.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ConstellationView {
+    pub id: ConstellationId,
+    pub level: u32,
+    /// Coût du niveau suivant, en fragments.
+    pub cost: f64,
+    pub affordable: bool,
+    pub maxed: bool,
 }
 
 /// Prochaine amélioration encore verrouillée et où on en est de sa condition.
@@ -110,6 +123,9 @@ pub struct GameSnapshot {
     pub fragments_spendable: f64,
     /// Atelier stellaire, dans l'ordre du catalogue.
     pub perks: Vec<PerkView>,
+    /// Constellations, dans l'ordre du catalogue.
+    pub constellations: Vec<ConstellationView>,
+    pub constellation_levels: u32,
     pub autobuy_unlocked: bool,
     pub autobuy: bool,
     pub next_upgrade: Option<NextUpgradeView>,

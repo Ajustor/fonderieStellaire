@@ -125,7 +125,7 @@ fn game_screen_100x30() {
     assert!(text.contains("Production"));
     assert!(text.contains("Journal"));
     assert!(text.contains("Supernova : +6 fragments"));
-    assert!(text.contains("◆ 12 (+120%)"));
+    assert!(text.contains("◆ 12 (+77%)"));
     assert!(text.contains("[Espace] Récolter"));
     assert!(text.contains('▶'));
     // Bordures droites alignées sur la dernière colonne.
@@ -403,7 +403,7 @@ fn descriptions_and_info_screen() {
     app.set_time(101.0);
     let text = render(&mut app, 100, 30);
     println!("{text}");
-    assert!(text.contains("SUCCÈS  2/24"));
+    assert!(text.contains("SUCCÈS  2/28"));
     assert!(text.contains("★ Premier pas"));
     assert!(text.contains("○ Centurion"));
     app.on_intent(Intent::Down);
@@ -540,4 +540,59 @@ fn click_value_and_constant_bar_width() {
         app.on_intent(Intent::CycleMode); // ×1 → ×10 → ×25 → MAX
         app.update(0.033);
     }
+}
+
+#[test]
+fn v0_4_constellations_and_new_generators() {
+    // Sauvegarde avancée : 12 fragments, aucune Supernova encore.
+    let mut app = game_app();
+    let text = render(&mut app, 100, 30);
+    // Le Trou blanc n'est pas encore là : il attend la première Supernova.
+    assert!(!text.contains("Trou blanc"));
+
+    // Atelier : la section Constellations est sous les améliorations uniques.
+    app.on_intent(Intent::Shop);
+    app.set_time(101.0);
+    let count = 8 + 6;
+    for _ in 0..8 {
+        app.on_intent(Intent::Down); // → première Constellation (Le Forgeron)
+    }
+    let text = render(&mut app, 100, 30);
+    println!("{text}");
+    assert!(text.contains("CONSTELLATIONS"));
+    assert!(text.contains("Le Forgeron"));
+    assert!(text.contains("niv. 0 · 2 ◆"));
+    assert!(text.contains("[Entrée] → niveau 1 : +20% de production"));
+    app.on_intent(Intent::Buy);
+    app.update(0.033);
+    assert_eq!(app.snapshot().constellations[0].level, 1);
+    assert_eq!(app.snapshot().fragments_spendable, 10.0);
+    for _ in 0..count {
+        app.on_intent(Intent::Down); // borné en bas de liste, sans paniquer
+    }
+    let _ = render(&mut app, 80, 24);
+    app.on_intent(Intent::Escape);
+    app.set_time(102.0);
+    app.update(0.033);
+
+    // Le ciel montre la constellation (une étoile allumée au moins).
+    let text = render(&mut app, 100, 30);
+    assert!(text.contains("Constellation") || text.contains('✦'));
+}
+
+#[test]
+fn locked_generator_teaser_mentions_supernovas() {
+    // Tous les générateurs de base possédés, aucune Supernova : le suivant est verrouillé.
+    let mut save = advanced_save();
+    save.owned = vec![1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0];
+    save.total_run = 1e15;
+    let mut app = app_with(Some(save));
+    app.enter_game_now();
+    app.update(0.033);
+    let mut text = String::new();
+    for _ in 0..12 {
+        app.on_intent(Intent::Down); // fait défiler jusqu'en bas de la liste
+        text = render(&mut app, 100, 30);
+    }
+    assert!(text.contains("??? ─ apparaît après 1 Supernova"), "{text}");
 }

@@ -25,7 +25,10 @@ pub const BLACK: Rgb = Rgb(0, 0, 0);
 pub const LOGO_GRADIENT: [Rgb; 3] = [Rgb(150, 90, 255), Rgb(255, 100, 190), Rgb(255, 200, 80)];
 
 /// Couleurs des générateurs (index = générateur).
-pub const GENERATOR_COLORS: [Rgb; 9] = [
+/// Nombre d'emplacements d'effets par générateur.
+pub const GEN_SLOTS: usize = 16;
+
+pub const GENERATOR_COLORS: [Rgb; 12] = [
     Rgb(160, 200, 255),
     Rgb(120, 220, 200),
     Rgb(130, 230, 130),
@@ -35,6 +38,9 @@ pub const GENERATOR_COLORS: [Rgb; 9] = [
     Rgb(240, 110, 180),
     Rgb(180, 120, 255),
     Rgb(255, 255, 255),
+    Rgb(200, 235, 255),
+    Rgb(255, 235, 110),
+    Rgb(255, 90, 150),
 ];
 
 pub const NEBULA: [Rgb; 3] = [Rgb(22, 12, 42), Rgb(40, 22, 70), Rgb(28, 30, 80)];

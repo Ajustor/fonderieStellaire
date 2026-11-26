@@ -1,6 +1,7 @@
 //! Sauvegarde JSON sur disque : écriture atomique (`.tmp` puis renommage),
 //! sauvegarde corrompue mise de côté en `.bak`.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -33,6 +34,8 @@ struct SaveFile {
     perks: Vec<String>,
     fragments_spent: f64,
     autobuy: bool,
+    /// Niveaux de Constellations : { "const_forge": 3, … }.
+    constellations: BTreeMap<String, u32>,
 }
 
 impl From<&SaveData> for SaveFile {
@@ -56,6 +59,7 @@ impl From<&SaveData> for SaveFile {
             perks: d.perks.clone(),
             fragments_spent: d.fragments_spent,
             autobuy: d.autobuy,
+            constellations: d.constellations.iter().cloned().collect(),
         }
     }
 }
@@ -81,6 +85,7 @@ impl From<SaveFile> for SaveData {
             perks: f.perks,
             fragments_spent: f.fragments_spent,
             autobuy: f.autobuy,
+            constellations: f.constellations.into_iter().collect(),
         }
     }
 }

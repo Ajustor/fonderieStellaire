@@ -26,6 +26,8 @@ pub struct GeneratorDef {
     pub base_prod: f64,
     /// Ce que fait ce générateur, en une phrase.
     pub description: &'static str,
+    /// Supernovas nécessaires pour qu'il apparaisse (0 = dès le début).
+    pub unlock_supernovas: u32,
 }
 
 impl GeneratorDef {
@@ -130,6 +132,7 @@ mod tests {
             base_cost: 15.0,
             base_prod: 0.1,
             description: "",
+            unlock_supernovas: 0,
         }
     }
 

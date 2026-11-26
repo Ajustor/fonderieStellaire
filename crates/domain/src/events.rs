@@ -3,6 +3,7 @@
 
 use crate::achievement::AchievementId;
 use crate::comet::CometReward;
+use crate::constellation::ConstellationId;
 use crate::generator::GeneratorId;
 use crate::perk::PerkId;
 use crate::upgrade::UpgradeId;
@@ -13,6 +14,8 @@ pub enum PurchaseTarget {
     Upgrade(UpgradeId),
     /// Amélioration de l'Atelier stellaire.
     Perk(PerkId),
+    /// Niveau de Constellation.
+    Constellation(ConstellationId),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -77,6 +80,11 @@ pub enum DomainEvent {
     },
     /// Automate demandé sans l'avoir acheté à l'Atelier.
     AutoBuyLocked,
+    /// Une Constellation gagne un niveau.
+    ConstellationUpgraded {
+        constellation: ConstellationId,
+        level: u32,
+    },
     OfflineGains {
         seconds: f64,
         amount: f64,

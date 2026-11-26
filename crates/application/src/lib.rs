@@ -17,6 +17,7 @@ pub use game_service::{GameEvent, GameService, AUTOSAVE_INTERVAL, HISTORY_LEN};
 pub use ports::{Clock, LoadOutcome, RandomSource, RepositoryError, SaveRepository};
 pub use save_dto::{SaveData, SAVE_VERSION};
 pub use snapshot::{
-    GameSnapshot, GeneratorView, NextUpgradeView, PerkView, ProgressView, TeaserView, UpgradeView,
+    ConstellationView, GameSnapshot, GeneratorView, NextUpgradeView, PerkView, ProgressView,
+    TeaserView, UpgradeView,
 };
 pub use updates::{ReleaseInfo, UpdateError, UpdateEvent, UpdateProvider, UpdateService};

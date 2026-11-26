@@ -66,6 +66,8 @@ pub struct CometState {
     pub storm_remaining: f64,
     /// Multiplie l'intervalle entre deux comètes (Atelier : « Aimant à comètes »).
     pub interval_factor: f64,
+    /// Multiplicateur de la tempête en cours (×7, plus avec « La Comète »).
+    pub storm_multiplier: f64,
 }
 
 impl Default for CometState {
@@ -75,6 +77,7 @@ impl Default for CometState {
             active: None,
             storm_remaining: 0.0,
             interval_factor: 1.0,
+            storm_multiplier: STORM_MULTIPLIER,
         }
     }
 }
@@ -83,7 +86,7 @@ impl CometState {
     /// Multiplicateur de production apporté par une tempête en cours.
     pub fn boost(&self) -> f64 {
         if self.storm_remaining > 0.0 {
-            STORM_MULTIPLIER
+            self.storm_multiplier
         } else {
             1.0
         }
@@ -137,7 +140,12 @@ impl CometState {
     }
 
     pub fn start_storm(&mut self, duration: f64) {
+        self.start_storm_with(duration, STORM_MULTIPLIER);
+    }
+
+    pub fn start_storm_with(&mut self, duration: f64, multiplier: f64) {
         self.storm_remaining = self.storm_remaining.max(0.0) + duration;
+        self.storm_multiplier = multiplier.max(1.0);
     }
 }
 

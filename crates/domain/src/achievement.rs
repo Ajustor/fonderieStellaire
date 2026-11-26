@@ -15,8 +15,8 @@ pub enum AchievementCondition {
     GeneratorsOwned(u64),
     /// Au moins N exemplaires d'un même générateur.
     SameGenerator(u64),
-    /// Au moins un exemplaire de chaque générateur.
-    AllTypes,
+    /// Au moins un exemplaire de chacun des N premiers générateurs.
+    AllTypes(usize),
     TotalAll(f64),
     Clicks(u64),
     CometsCaught(u32),
@@ -34,6 +34,8 @@ pub enum AchievementCondition {
     PerksOwned(usize),
     /// Toutes les améliorations de l'Atelier.
     AllPerks,
+    /// Niveaux de Constellations au total.
+    ConstellationLevels(u32),
 }
 
 /// Données nécessaires pour évaluer une condition de succès.
@@ -48,6 +50,7 @@ pub struct AchievementContext<'a> {
     pub fragments: f64,
     pub perks_owned: usize,
     pub perks_total: usize,
+    pub constellation_levels: u32,
 }
 
 impl AchievementCondition {
@@ -55,8 +58,8 @@ impl AchievementCondition {
         match *self {
             AchievementCondition::GeneratorsOwned(n) => ctx.owned.iter().sum::<u64>() >= n,
             AchievementCondition::SameGenerator(n) => ctx.owned.iter().any(|&o| o >= n),
-            AchievementCondition::AllTypes => {
-                !ctx.owned.is_empty() && ctx.owned.iter().all(|&o| o >= 1)
+            AchievementCondition::AllTypes(n) => {
+                ctx.owned.len() >= n && ctx.owned.iter().take(n).all(|&o| o >= 1)
             }
             AchievementCondition::TotalAll(v) => ctx.total_all >= v,
             AchievementCondition::Clicks(n) => ctx.clicks >= n,
@@ -71,6 +74,7 @@ impl AchievementCondition {
             AchievementCondition::AllPerks => {
                 ctx.perks_total > 0 && ctx.perks_owned >= ctx.perks_total
             }
+            AchievementCondition::ConstellationLevels(n) => ctx.constellation_levels >= n,
         }
     }
 }
@@ -100,6 +104,7 @@ mod tests {
             fragments: 0.0,
             perks_owned: 0,
             perks_total: 0,
+            constellation_levels: 0,
         }
     }
 
@@ -109,9 +114,9 @@ mod tests {
         assert!(AchievementCondition::GeneratorsOwned(1).is_met(&ctx(&[0, 1])));
         assert!(AchievementCondition::SameGenerator(100).is_met(&ctx(&[3, 100])));
         assert!(!AchievementCondition::SameGenerator(100).is_met(&ctx(&[99, 99])));
-        assert!(AchievementCondition::AllTypes.is_met(&ctx(&[1, 2, 3])));
-        assert!(!AchievementCondition::AllTypes.is_met(&ctx(&[1, 0, 3])));
-        assert!(!AchievementCondition::AllTypes.is_met(&ctx(&[])));
+        assert!(AchievementCondition::AllTypes(3).is_met(&ctx(&[1, 2, 3])));
+        assert!(!AchievementCondition::AllTypes(3).is_met(&ctx(&[1, 0, 3])));
+        assert!(!AchievementCondition::AllTypes(3).is_met(&ctx(&[])));
     }
 
     #[test]

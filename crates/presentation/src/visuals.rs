@@ -9,6 +9,7 @@ use crate::fx::particles::{Glyph, Particle};
 use crate::fx::{FxRng, ParticleSystem, Rgb, Tween};
 use crate::screens::supernova::NovaSequence;
 use crate::theme;
+use crate::theme::GEN_SLOTS;
 
 /// « Jamais » pour les horodatages d'effets.
 pub const NEVER: f64 = -1.0e9;
@@ -109,14 +110,14 @@ pub struct Visuals {
     pub digits_prev: String,
     /// Instant du dernier changement de chaque chiffre (index depuis la droite).
     pub digit_changed: [f64; 40],
-    pub gen_flash: [f64; 9],
-    pub gen_fail: [f64; 9],
-    pub gen_reveal: [f64; 9],
-    pub bar_fill: [f64; 9],
+    pub gen_flash: [f64; GEN_SLOTS],
+    pub gen_fail: [f64; GEN_SLOTS],
+    pub gen_reveal: [f64; GEN_SLOTS],
+    pub bar_fill: [f64; GEN_SLOTS],
     pub upg_flash: Vec<f64>,
     pub upg_fail: Vec<f64>,
-    pub orbit_count: [usize; 9],
-    pub orbit_pop: [f64; 9],
+    pub orbit_count: [usize; GEN_SLOTS],
+    pub orbit_pop: [f64; GEN_SLOTS],
     pub orbit_ready: bool,
     pub comet: CometVisual,
     pub shooting: Vec<ShootingStar>,
@@ -126,6 +127,8 @@ pub struct Visuals {
     pub sky_flash_color: Rgb,
     pub cascade_start: f64,
     pub mode_flash: f64,
+    /// Dernier niveau de Constellation acheté (étoile qui s'allume).
+    pub constellation_pop: f64,
     pub nova: Option<NovaSequence>,
     pub sun_scale: f64,
 }
@@ -143,14 +146,14 @@ impl Visuals {
             bump_at: NEVER,
             digits_prev: String::new(),
             digit_changed: [NEVER; 40],
-            gen_flash: [NEVER; 9],
-            gen_fail: [NEVER; 9],
-            gen_reveal: [NEVER; 9],
-            bar_fill: [0.0; 9],
+            gen_flash: [NEVER; GEN_SLOTS],
+            gen_fail: [NEVER; GEN_SLOTS],
+            gen_reveal: [NEVER; GEN_SLOTS],
+            bar_fill: [0.0; GEN_SLOTS],
             upg_flash: vec![NEVER; upgrade_count],
             upg_fail: vec![NEVER; upgrade_count],
-            orbit_count: [0; 9],
-            orbit_pop: [NEVER; 9],
+            orbit_count: [0; GEN_SLOTS],
+            orbit_pop: [NEVER; GEN_SLOTS],
             orbit_ready: false,
             comet: CometVisual {
                 y0: 3.0,
@@ -165,6 +168,7 @@ impl Visuals {
             sky_flash_color: theme::WHITE,
             cascade_start: NEVER,
             mode_flash: NEVER,
+            constellation_pop: NEVER,
             nova: None,
             sun_scale: 1.0,
         }

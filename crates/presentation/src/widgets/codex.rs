@@ -64,11 +64,11 @@ pub fn lines(ctx: &Ctx) -> Vec<(String, Style)> {
     ));
     out.push((
         format!(
-            " ▲ Améliorations ce cycle : {}/{} · Supernovas : {} · Comètes : {} · Temps : {}",
+            " ▲ Améliorations ce cycle : {}/{} · Supernovas : {} · Constellations : {} niv. · Temps : {}",
             pr.upgrades_bought,
             pr.upgrades_total,
             snap.supernovas,
-            snap.meteors_caught,
+            snap.constellation_levels,
             fmt::duration(snap.play_time)
         ),
         text,
@@ -102,15 +102,18 @@ pub fn lines(ctx: &Ctx) -> Vec<(String, Style)> {
         "▲ Améliorations : multiplient un générateur, toute la production ou tes clics.".into(),
         "● Comètes : toutes les 1m30 à 4m ; [C] pour la capturer (tempête ×7 ou pluie).".into(),
         format!(
-            "✦ Supernova : repart de zéro contre des fragments (+{} de prod chacun).",
+            "✦ Supernova : repart de zéro contre des fragments (+{} chacun, puis moins vite).",
             fmt::percent(FRAGMENT_BONUS)
         ),
+        "✦ Chaque Supernova rend la suivante un peu plus exigeante (+25 % de seuil).".into(),
+        "◎ Nouveaux générateurs : Trou blanc (1 Supernova), Quasars (5), Multivers (15).".into(),
         format!(
             "★ Succès : +{} de production chacun, pour toujours.",
             fmt::percent(ACHIEVEMENT_BONUS)
         ),
         "◆ Atelier [E] : dépense tes fragments en bonus permanents (le bonus de prod reste)."
             .into(),
+        "★ Constellations [E] : niveaux sans fin pour tes fragments, de plus en plus chers.".into(),
         "○ Hors-ligne : ta fonderie produit à 50 % pendant ton absence (12 h max).".into(),
         "· Raccourcis : [A] tout acheter · [T] automate · [PgUp]/[PgDn] journal.".into(),
         "· Sauvegarde automatique toutes les 30 s et en quittant.".into(),

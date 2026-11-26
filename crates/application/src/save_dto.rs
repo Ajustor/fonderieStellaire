@@ -31,6 +31,8 @@ pub struct SaveData {
     pub fragments_spent: f64,
     /// Automate d'achat activé.
     pub autobuy: bool,
+    /// Niveaux de Constellations (clé texte, niveau).
+    pub constellations: Vec<(String, u32)>,
 }
 
 impl SaveData {
@@ -74,6 +76,12 @@ impl SaveData {
                 .collect(),
             fragments_spent: state.fragments_spent,
             autobuy: state.autobuy,
+            constellations: catalog
+                .constellations
+                .iter()
+                .map(|c| (c.key.to_string(), state.constellation_level(c.id)))
+                .filter(|(_, lvl)| *lvl > 0)
+                .collect(),
         }
     }
 
@@ -109,6 +117,11 @@ impl SaveData {
         }
         s.fragments_spent = self.fragments_spent;
         s.autobuy = self.autobuy;
+        for (key, level) in &self.constellations {
+            if let Some(id) = catalog.constellation_by_key(key) {
+                s.constellations[id.index()] = *level;
+            }
+        }
         s.normalize(catalog);
         s
     }
@@ -157,7 +170,7 @@ mod tests {
             ..SaveData::default()
         };
         let s = dto.to_state(&c);
-        assert_eq!(s.owned.len(), 9);
+        assert_eq!(s.owned.len(), 12);
         assert_eq!(s.stardust.value(), 0.0);
         assert!(s.upgrades.iter().all(|&u| !u));
     }

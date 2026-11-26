@@ -17,6 +17,7 @@ use crate::fx::easing::ease_out_cubic;
 use crate::fx::effects;
 use crate::fx::rng::hash3;
 use crate::theme;
+use crate::theme::GEN_SLOTS;
 use crate::ui::{keep_visible, Panel, Ui};
 use crate::visuals::Visuals;
 
@@ -60,7 +61,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
         ),
     ]);
     let inner = draw::panel(buf, area, title, focused);
-    ui.gen_rows = [None; 9];
+    ui.gen_rows = [None; GEN_SLOTS];
     if inner.is_empty() {
         return;
     }
@@ -79,7 +80,11 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
         0
     };
     let list = Rect::new(inner.x, inner.y, inner.width, inner.height - detail_h);
-    let visible = (list.height / 2).max(1) as usize;
+    // Une ligne réservée à la ligne mystère (« ??? »), pour qu'elle reste visible
+    // même quand la liste remplit le panneau.
+    let teaser_line = u16::from(snap.teaser.is_some() && list.height >= 5);
+    let entries_bottom = list.bottom() - teaser_line;
+    let visible = ((list.height - teaser_line) / 2).max(1) as usize;
     keep_visible(ui.gen_sel, &mut ui.gen_scroll, visible);
     // Si tout tient, on ne défile pas (laisse de la place à la ligne mystère).
     if count <= visible {
@@ -88,7 +93,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
 
     let mut y = inner.y;
     for (idx, g) in snap.generators.iter().enumerate().skip(ui.gen_scroll) {
-        if y + 1 >= list.bottom() {
+        if y + 1 >= entries_bottom {
             break;
         }
         let gi = g.id.index();
@@ -98,7 +103,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
         let color = theme::generator_color(gi);
         let selected = idx == ui.gen_sel;
         let row = Rect::new(inner.x, y, inner.width, 2);
-        ui.gen_rows[gi.min(8)] = Some(y);
+        ui.gen_rows[gi.min(GEN_SLOTS - 1)] = Some(y);
 
         if selected {
             draw::fill_bg(buf, row, theme::SELECT_BG);
@@ -129,7 +134,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
         let right = format!("×{:<4} {:>8}/s", g.owned, fmt::short(g.production));
         let right_w = right.chars().count() as u16;
         let name_max = max_x.saturating_sub(right_w + 1);
-        let reveal = (now - vis.gen_reveal[gi.min(8)]) / REVEAL_TIME;
+        let reveal = (now - vis.gen_reveal[gi.min(GEN_SLOTS - 1)]) / REVEAL_TIME;
         let name_style = if selected {
             theme::bold(theme::TEXT)
         } else {
@@ -186,7 +191,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
             fmt::short(g.cost)
         };
         let pct = format!("({}%)", (g.share * 100.0).round() as i64);
-        let fail = (now - vis.gen_fail[gi.min(8)]) / 0.3;
+        let fail = (now - vis.gen_fail[gi.min(GEN_SLOTS - 1)]) / 0.3;
         let blinking = (0.0..1.0).contains(&fail) && ((now * 14.0) as i64) % 2 == 0;
         let cost_color = if blinking {
             theme::RED
@@ -207,7 +212,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
         } else {
             1.0
         };
-        let fill = &mut vis.bar_fill[gi.min(8)];
+        let fill = &mut vis.bar_fill[gi.min(GEN_SLOTS - 1)];
         let k = 1.0 - (-ctx.dt * 10.0).exp();
         *fill += (target - *fill) * k;
         if (target - *fill).abs() < 0.002 {
@@ -257,7 +262,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
         );
 
         // Flash d'achat : le fond s'estompe de la couleur du générateur vers transparent.
-        let flash = (now - vis.gen_flash[gi.min(8)]) / 0.4;
+        let flash = (now - vis.gen_flash[gi.min(GEN_SLOTS - 1)]) / 0.4;
         if (0.0..1.0).contains(&flash) {
             let base = if selected {
                 theme::SELECT_BG
@@ -280,10 +285,18 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
     // Ligne mystère (teaser).
     if let Some(t) = snap.teaser {
         if y < list.bottom() && ui.gen_scroll + visible >= count {
-            let txt = format!(
-                "   ??? ─ encore {} ✦ à récolter",
-                fmt::short(t.remaining.max(1.0))
-            );
+            let txt = if t.supernovas_needed > 0 {
+                format!(
+                    "   ??? ─ apparaît après {} Supernova{}",
+                    t.supernovas_needed,
+                    if t.supernovas_needed > 1 { "s" } else { "" }
+                )
+            } else {
+                format!(
+                    "   ??? ─ encore {} ✦ à récolter",
+                    fmt::short(t.remaining.max(1.0))
+                )
+            };
             let pulse = 0.5 + 0.5 * (now * 1.5).sin();
             let c = theme::GREY.lerp(theme::MUTED, pulse * 0.5);
             draw::text(buf, inner.x, y, &txt, theme::fg(c), inner.right());
