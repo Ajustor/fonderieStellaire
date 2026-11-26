@@ -69,6 +69,9 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew --no-daemon testReleaseUnitTest assembleRelease bundleRelease
 
+      - name: Pages mémoire de 16 Ko (exigence du Play Store)
+        run: python3 android/tools/check_16k.py android/app/build/outputs/apk/release/app-release.apk
+
       - name: Renommage
         run: |
           mkdir dist
