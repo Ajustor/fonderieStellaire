@@ -501,3 +501,43 @@ fn v0_2_features_render() {
     );
     assert!(text.contains("0 / 10 Sondes"));
 }
+
+/// Longueur de la barre (█ et ░ consécutifs) sur une ligne de générateur.
+fn bar_len(line: &str) -> usize {
+    let start = line.find(['█', '░']).unwrap_or(0);
+    line[start..]
+        .chars()
+        .take_while(|c| *c == '█' || *c == '░')
+        .count()
+}
+
+#[test]
+fn click_value_and_constant_bar_width() {
+    let mut app = game_app(); // ~123 millions : le mot d'échelle est affiché
+    for mode_presses in 0..4 {
+        for (w, h) in [(100u16, 30u16), (80, 24)] {
+            let text = render(&mut app, w, h);
+            assert!(text.contains("millions"));
+            assert!(
+                text.contains("clic : +"),
+                "valeur d'un clic visible :\n{text}"
+            );
+            let left = w as usize * 55 / 100;
+            let widths: Vec<usize> = text
+                .lines()
+                .map(|l| l.chars().take(left).collect::<String>())
+                .filter(|l| l.contains('░') || l.contains("█░") || l.contains("█ "))
+                .filter(|l| l.trim_start_matches('│').starts_with("    "))
+                .map(|l| bar_len(&l))
+                .filter(|&n| n > 0)
+                .collect();
+            assert!(widths.len() >= 4, "{widths:?}\n{text}");
+            assert!(
+                widths.windows(2).all(|p| p[0] == p[1]),
+                "barres de tailles différentes {widths:?} (mode {mode_presses}) :\n{text}"
+            );
+        }
+        app.on_intent(Intent::CycleMode); // ×1 → ×10 → ×25 → MAX
+        app.update(0.033);
+    }
+}

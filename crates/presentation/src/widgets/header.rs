@@ -60,7 +60,8 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
 
     // --- Colonne de droite (prod, tempête, supernova, fragments) ---
     let right = inner.right().saturating_sub(1);
-    let mut right_min = right;
+    // Début du texte de droite sur chacune des 3 lignes.
+    let mut row_limit = [right; 3];
     let prod = format!("+{} /s", fmt::short(snap.production));
     if snap.storm_remaining > 0.0 {
         let beat = (now * std::f64::consts::PI * 2.0).sin().abs();
@@ -75,7 +76,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
             theme::bold(theme::GREEN),
             inner.x,
         );
-        right_min = right_min.min(x);
+        row_limit[0] = x;
     } else {
         let x = draw::text_right(
             buf,
@@ -85,7 +86,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
             theme::bold(theme::GREEN),
             inner.x,
         );
-        right_min = right_min.min(x);
+        row_limit[0] = x;
     }
     let n = snap.fragments_available;
     let nova = format!(
@@ -106,10 +107,10 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
         theme::fg(nova_color),
         inner.x,
     );
-    right_min = right_min.min(x);
+    row_limit[1] = x;
     let auto = if snap.autobuy { "▲ auto   " } else { "" };
     let free = if snap.fragments_spendable >= 1.0 {
-        format!(" · {} libre(s) [E]", fmt::short(snap.fragments_spendable))
+        format!(" · {} libres [E]", fmt::short(snap.fragments_spendable))
     } else {
         String::new()
     };
@@ -128,7 +129,8 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
         theme::fg(theme::CYAN),
         inner.x,
     );
-    right_min = right_min.min(x);
+    row_limit[2] = x;
+    let right_min = row_limit.iter().copied().min().unwrap_or(right);
 
     // --- Gros compteur ---
     let shown = vis.counter_value(now, snap.stardust);
@@ -162,31 +164,31 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
         draw::put(buf, inner, x as i32, (inner.y + dy) as i32, ch, c);
     });
 
-    // --- Mot d'unité ---
+    // --- Mot d'unité et valeur d'un clic ---
+    // Chaque ligne a sa propre limite : une ligne de droite longue (fragments)
+    // ne fait plus disparaître les deux autres.
     let wx = x0 + number_w + 2;
-    if wx + 8 < max_x {
-        let unit_word = word.as_str();
-        let is_scale = !unit_word.starts_with("poussi");
-        draw::text(
-            buf,
-            wx,
-            inner.y + 1,
-            unit_word,
-            theme::bold(theme::GOLD),
-            max_x,
-        );
-        if is_scale {
-            draw::text(
-                buf,
-                wx,
-                inner.y + 2,
-                "de poussières d'étoile",
-                Style::default().fg(theme::MUTED.color()),
-                max_x,
-            );
-        } else {
-            let click = format!("clic : +{}", fmt::short(snap.click_value));
-            draw::text(buf, wx, inner.y + 2, &click, theme::fg(theme::MUTED), max_x);
+    let unit_word = word.as_str();
+    let is_scale = !unit_word.starts_with("poussi");
+    let click = format!("clic : +{}", fmt::short(snap.click_value));
+    let lines: [(&str, Style); 3] = [
+        (&click, theme::fg(theme::MUTED)),
+        (unit_word, theme::bold(theme::GOLD)),
+        (
+            if is_scale {
+                "de poussières d'étoile"
+            } else {
+                ""
+            },
+            Style::default().fg(theme::MUTED.color()),
+        ),
+    ];
+    for (row, (text, style)) in lines.iter().enumerate() {
+        let limit = row_limit[row].saturating_sub(2);
+        if text.is_empty() || wx + 6 > limit {
+            continue;
         }
+        let shown = draw::truncate(text, (limit - wx) as usize);
+        draw::text(buf, wx, inner.y + row as u16, &shown, *style, limit);
     }
 }

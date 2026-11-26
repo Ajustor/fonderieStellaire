@@ -22,6 +22,10 @@ use crate::visuals::Visuals;
 
 const DECRYPT_GLYPHS: [char; 6] = ['▓', '▒', '░', '█', '╳', '◆'];
 pub const REVEAL_TIME: f64 = 0.9;
+/// Largeur réservée au coût du lot (« ×25 999.9Qid »).
+const COST_COL: u16 = 11;
+/// Largeur réservée à la part de production (« (100%) »).
+const PCT_COL: u16 = 6;
 
 /// Texte « en cours de décryptage » : chaque caractère se fige de gauche à droite.
 pub fn decrypt_char(
@@ -193,9 +197,11 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
         } else {
             theme::GREY
         };
-        let tail_w = (cost_txt.chars().count() + pct.chars().count() + 3) as u16;
+        // Colonnes de largeur fixe : la barre garde la même taille quels que
+        // soient les nombres affichés, et les coûts s'alignent d'une ligne à l'autre.
+        let tail_w = COST_COL + PCT_COL + 3;
         let bar_x = inner.x + 4;
-        let bar_w = inner.width.saturating_sub(4 + tail_w + 1).max(4);
+        let bar_w = inner.width.saturating_sub(4 + tail_w).max(4);
         let target = if g.cost > 0.0 {
             (snap.stardust / g.cost).clamp(0.0, 1.0)
         } else {
@@ -231,22 +237,23 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
                 draw::put(buf, inner, cx as i32, y2 as i32, '░', theme::BAR_EMPTY);
             }
         }
-        let tx = bar_x + bar_w + 2;
-        let after = draw::text(
+        let cost_end = bar_x + bar_w + 2 + COST_COL;
+        let cost_txt = draw::truncate(&cost_txt, COST_COL as usize);
+        draw::text_right(
             buf,
-            tx,
+            cost_end,
             y2,
             &cost_txt,
             theme::fg(cost_color).add_modifier(Modifier::BOLD),
-            inner.right(),
+            bar_x + bar_w + 1,
         );
-        draw::text(
+        draw::text_right(
             buf,
-            after + 1,
+            cost_end + 1 + PCT_COL,
             y2,
             &pct,
             theme::fg(theme::MUTED),
-            inner.right(),
+            cost_end + 1,
         );
 
         // Flash d'achat : le fond s'estompe de la couleur du générateur vers transparent.

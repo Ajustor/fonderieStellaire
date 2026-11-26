@@ -1,5 +1,15 @@
 # Journal des versions
 
+## v0.3.1
+
+### Corrections
+- La valeur d'un clic est de nouveau affichée dans l'en-tête au-delà du million.
+- En 80 colonnes, la ligne des fragments ne fait plus disparaître la valeur d'un
+  clic ni le mot d'échelle (« millions »…) : chaque ligne de l'en-tête a sa
+  propre place.
+- Les barres de progression des générateurs gardent toutes la même largeur,
+  quels que soient le coût et le mode d'achat ; coûts et pourcentages alignés.
+
 ## v0.3.0
 
 ### Nouveautés
