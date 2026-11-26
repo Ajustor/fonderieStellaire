@@ -69,6 +69,12 @@ pub struct Ui {
     /// Laboratoire (touche L) et sa sélection.
     pub lab: Option<Popup>,
     pub lab_sel: usize,
+    /// Options (touche R), sélection, et confirmation armée de l'effacement.
+    pub options: Option<Popup>,
+    pub options_sel: usize,
+    pub options_armed: bool,
+    /// Effacement de la partie en cours : instant de départ.
+    pub wipe_at: Option<f64>,
     /// Cosmogonie (touche G), sélection, et confirmation armée du Big Bang.
     pub cosmos: Option<Popup>,
     pub cosmos_sel: usize,

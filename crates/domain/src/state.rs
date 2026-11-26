@@ -2369,9 +2369,9 @@ mod tests {
         s.big_crunch(&c, desert, &mut ev);
         s.owned[1] = 10;
         let prod_in_desert = economy::total_production(&c, &s);
-        // 20 Supernovas dans le Désert → Clé des sables.
-        s.supernovas = 19;
-        s.total_run = 1e12;
+        // 25 Supernovas dans le Désert → Clé des sables.
+        s.supernovas = 24;
+        s.total_run = 1e14;
         ev.clear();
         s.supernova(&c, &mut ev);
         assert!(ev.contains(&DomainEvent::UniverseKeyEarned { universe: desert }));

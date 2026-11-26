@@ -530,7 +530,7 @@ fn universes() -> Vec<UniverseDef> {
                 production: 4.0,
                 ..n
             },
-            20,
+            25,
             "Clé de gravité",
             Some(KeyReward::GeneratorDiscount(0.75)),
             "Générateurs 25 % moins chers partout",
@@ -545,7 +545,7 @@ fn universes() -> Vec<UniverseDef> {
                 offline: 4.0,
                 ..n
             },
-            18,
+            23,
             "Clé du temps",
             Some(KeyReward::Offline {
                 factor: 2.0,
@@ -563,7 +563,7 @@ fn universes() -> Vec<UniverseDef> {
                 storm_duration: 0.5,
                 ..n
             },
-            20,
+            25,
             "Clé des comètes",
             Some(KeyReward::Comets {
                 shower: 1.5,
@@ -581,7 +581,7 @@ fn universes() -> Vec<UniverseDef> {
                 no_upgrades: true,
                 ..n
             },
-            20,
+            25,
             "Clé des sables",
             Some(KeyReward::Production(2.0)),
             "Production ×2 partout",
@@ -596,7 +596,7 @@ fn universes() -> Vec<UniverseDef> {
                 entropy_per_min: 0.01,
                 ..n
             },
-            22,
+            28,
             "Clé de l'entropie",
             Some(KeyReward::Fragments(1.5)),
             "Fragments ×1,5 partout",

@@ -16,6 +16,8 @@ os="$(uname -s)"
 arch="$(uname -m)"
 case "$os/$arch" in
   Linux/x86_64 | Linux/amd64) target="x86_64-unknown-linux-gnu" ;;
+  Darwin/x86_64) target="x86_64-apple-darwin" ;;
+  Darwin/arm64 | Darwin/aarch64) target="aarch64-apple-darwin" ;;
   *) die "système non pris en charge ($os/$arch). Compile depuis les sources : https://github.com/$REPO" ;;
 esac
 

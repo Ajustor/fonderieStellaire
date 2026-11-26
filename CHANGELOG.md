@@ -1,5 +1,36 @@
 # Journal des versions
 
+## v0.9.1 — Options, simulateur et macOS
+
+### Nouveautés
+- **Options** (touche `R`) : images par seconde (30, 20 ou 15, pour les
+  terminaux lents), effets réduits, emplacement de la sauvegarde, et
+  **Recommencer une nouvelle partie**. L'effacement demande une double
+  confirmation, puis l'écran se consume de haut en bas, avec un front de
+  braises, avant de revenir à l'écran titre d'une partie neuve. Les réglages
+  sont gardés.
+- **Exporter / importer sa sauvegarde** : `fonderie-stellaire --export fichier`
+  puis `--import fichier` (sur un autre ordinateur, par exemple). La
+  sauvegarde remplacée est mise de côté en `.bak`.
+- **Binaires macOS** (Intel et Apple Silicon), installables avec le script
+  `install.sh` et mis à jour automatiquement comme les autres.
+- **Simulateur d'équilibrage** : `fonderie-stellaire --simulate` rejoue une
+  partie entière avec le vrai moteur du jeu et affiche quand chaque étape est
+  atteinte ; `--simulate 3` simule un joueur qui joue 3 h par jour.
+
+### Changements
+- Les **mises à jour automatiques ne peuvent plus être désactivées**
+  (`--no-update` et `FONDERIE_NO_UPDATE` retirés). Dans l'image Docker, le jeu
+  signale la nouvelle version et on met l'image à jour avec `docker pull`.
+
+### Équilibrage (mesuré avec le simulateur)
+- Les **Clés d'univers** tombaient toutes en une journée : leurs objectifs
+  passent à 25 Supernovas (Gravité forte, Nuée, Désert), 23 (Temps dilaté) et
+  28 (Entropie). Elles s'étalent maintenant sur une bonne semaine.
+- Rythme mesuré pour un joueur qui joue **3 h par jour** : 1re Supernova en
+  1 h, 10e Big Crunch au 5e jour, les 5 Clés entre le 5e et le 14e jour,
+  1er Big Bang au 14e jour, **fin de l'Acte II vers le 26e jour**.
+
 ## v0.9.0 — Acte II, fin : le Big Bang et le Grand Attracteur
 
 > **Remise à zéro des sauvegardes.** L'équilibrage a trop changé pour garder

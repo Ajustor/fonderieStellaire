@@ -44,7 +44,10 @@ use crate::widgets::{inner, Ctx};
 use crossterm::terminal::{BeginSynchronizedUpdate, EndSynchronizedUpdate};
 
 /// ≈ 30 images par seconde.
-const FRAME: Duration = Duration::from_millis(33);
+/// Durée d'une image selon le réglage (30 images/s par défaut).
+fn frame_duration(fps: u32) -> Duration {
+    Duration::from_millis(1000 / u64::from(fps.clamp(10, 60)))
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Screen {
@@ -282,7 +285,8 @@ impl App {
             crossterm::execute!(terminal.backend_mut(), EndSynchronizedUpdate)?;
             self.stats.record(dt, render_time, frame_start.elapsed());
 
-            let timeout = FRAME.saturating_sub(frame_start.elapsed());
+            let timeout =
+                frame_duration(self.snap.frame_rate).saturating_sub(frame_start.elapsed());
             if event::poll(timeout)? {
                 loop {
                     let ev = event::read()?;
@@ -356,6 +360,19 @@ impl App {
                     if c.is_closed(now) {
                         self.ui.cosmos = None;
                         self.ui.cosmos_armed = false;
+                    }
+                }
+                if let Some(o) = self.ui.options {
+                    if o.is_closed(now) {
+                        self.ui.options = None;
+                        self.ui.options_armed = false;
+                    }
+                }
+                // Fin de l'effacement : nouvelle partie, retour à l'écran titre.
+                if let Some(at) = self.ui.wipe_at {
+                    if now - at >= crate::widgets::options::WIPE_DURATION {
+                        self.ui.wipe_at = None;
+                        self.command(Command::NewGame);
                     }
                 }
                 self.update_bang(now);
@@ -511,9 +528,41 @@ impl App {
             }
             return;
         }
-        if self.vis.bang.is_some() {
+        if self.vis.bang.is_some() || self.ui.wipe_at.is_some() {
             if intent == Intent::Quit {
                 self.quit = true;
+            }
+            return;
+        }
+        if let Some(popup) = self.ui.options {
+            if popup.closing_at.is_none() {
+                match intent {
+                    Intent::Up => {
+                        self.ui.options_sel = self.ui.options_sel.saturating_sub(1);
+                        self.ui.options_armed = false;
+                    }
+                    Intent::Down => {
+                        self.ui.options_sel =
+                            (self.ui.options_sel + 1).min(crate::widgets::options::ITEMS - 1);
+                        self.ui.options_armed = false;
+                    }
+                    Intent::Buy | Intent::Yes => match self.ui.options_sel {
+                        0 => self.command(Command::CycleFrameRate),
+                        1 => self.command(Command::ToggleReducedEffects),
+                        _ if self.ui.options_armed => {
+                            self.ui.options = None;
+                            self.ui.options_armed = false;
+                            self.ui.wipe_at = Some(now);
+                        }
+                        _ => self.ui.options_armed = true,
+                    },
+                    Intent::Options | Intent::Escape | Intent::No | Intent::Quit => {
+                        if let Some(o) = self.ui.options.as_mut() {
+                            o.closing_at = Some(now);
+                        }
+                    }
+                    _ => {}
+                }
             }
             return;
         }
@@ -739,6 +788,14 @@ impl App {
                 }
             }
             Intent::Save => self.command(Command::Save),
+            Intent::Options => {
+                self.ui.options = Some(Popup {
+                    opened_at: now,
+                    closing_at: None,
+                });
+                self.ui.options_sel = 0;
+                self.ui.options_armed = false;
+            }
             Intent::Cosmos => {
                 if self.snap.lab_unlocked {
                     self.ui.cosmos = Some(Popup {
@@ -1100,6 +1157,30 @@ impl App {
                 self.log(Kind::Error, format!("Échec de la sauvegarde : {msg}"));
                 self.toasts
                     .push(now, theme::RED, "Sauvegarde impossible", msg);
+            }
+            GameEvent::NewGame => {
+                // Tout repart de zéro : écran titre, journal et effets neufs.
+                let now = self.now;
+                self.journal = Journal::default();
+                self.journal.push(
+                    0.0,
+                    now,
+                    Kind::Info,
+                    "✦ Nouvelle partie : bienvenue dans la Fonderie Stellaire !",
+                );
+                self.vis.particles.clear();
+                self.vis.floaters.clear();
+                self.ui = crate::ui::Ui::default();
+                self.title = TitleScreen::new(now, seed() ^ 0x7177);
+                self.screen = Screen::Title;
+            }
+            GameEvent::FrameRateChanged(fps) => {
+                self.toasts.push(
+                    self.now,
+                    theme::CYAN,
+                    "Options",
+                    format!("{fps} images par seconde"),
+                );
             }
             GameEvent::SaveWiped => {
                 self.title.wiped = true;
@@ -1875,6 +1956,8 @@ impl App {
             too_small::render(buf, area, now);
             return;
         }
+        let save_path = self.service.save_location();
+        let version = display_version(self.updates.current_version());
         let App {
             service,
             snap,
@@ -1917,6 +2000,8 @@ impl App {
                         vis,
                         ui,
                         GameView {
+                            save_path: &save_path,
+                            version: &version,
                             journal,
                             toasts,
                             spark_scratch,

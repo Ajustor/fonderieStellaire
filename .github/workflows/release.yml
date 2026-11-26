@@ -1,7 +1,7 @@
 name: release
 
 # Pousser un tag v* (ex. `git tag v0.1.0 && git push origin v0.1.0`) :
-#  1. vérifie et compile les binaires Windows et Linux,
+#  1. vérifie et compile les binaires Windows, Linux et macOS,
 #  2. publie une GitHub Release avec les archives et leurs sommes SHA-256,
 #  3. publie l'image Docker sur GitHub Container Registry (ghcr.io).
 
@@ -32,6 +32,17 @@ jobs:
             os: ubuntu-22.04
             archive: fonderie-stellaire-x86_64-unknown-linux-gnu.tar.gz
             raw: fonderie-stellaire-x86_64-unknown-linux-gnu
+            binary: fonderie-stellaire
+          # macOS : Intel (compilé de façon croisée) et Apple Silicon.
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            archive: fonderie-stellaire-x86_64-apple-darwin.tar.gz
+            raw: fonderie-stellaire-x86_64-apple-darwin
+            binary: fonderie-stellaire
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            archive: fonderie-stellaire-aarch64-apple-darwin.tar.gz
+            raw: fonderie-stellaire-aarch64-apple-darwin
             binary: fonderie-stellaire
     steps:
       - uses: actions/checkout@v4
@@ -64,15 +75,17 @@ jobs:
             (Get-FileHash $f -Algorithm SHA256).Hash.ToLower() + "  $f" | Out-File -Encoding ascii "$f.sha256"
           }
 
-      - name: Archive (Linux)
-        if: runner.os == 'Linux'
+      - name: Archive (Linux, macOS)
+        if: runner.os != 'Windows'
         run: |
           dir="target/${{ matrix.target }}/release"
           cp README.md "$dir/"
           tar -czf ${{ matrix.archive }} -C "$dir" ${{ matrix.binary }} README.md
           # Binaire brut : utilisé par la mise à jour automatique.
           cp "$dir/${{ matrix.binary }}" "${{ matrix.raw }}"
-          for f in "${{ matrix.archive }}" "${{ matrix.raw }}"; do sha256sum "$f" > "$f.sha256"; done
+          for f in "${{ matrix.archive }}" "${{ matrix.raw }}"; do
+            shasum -a 256 "$f" > "$f.sha256"
+          done
 
       - uses: actions/upload-artifact@v4
         with:

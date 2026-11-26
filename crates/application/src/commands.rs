@@ -37,4 +37,8 @@ pub enum Command {
     Forge(GeneratorId),
     /// Lance la prochaine étape du Grand Attracteur.
     BuildAttractor,
+    /// Images par seconde : 30 → 20 → 15 → 30.
+    CycleFrameRate,
+    /// Efface la partie et repart de zéro (les réglages sont gardés).
+    NewGame,
 }

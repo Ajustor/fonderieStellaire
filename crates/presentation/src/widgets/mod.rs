@@ -11,6 +11,7 @@ pub mod help_bar;
 pub mod journal;
 pub mod lab;
 pub mod modal;
+pub mod options;
 pub mod portals;
 pub mod shop;
 pub mod sky;

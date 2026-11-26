@@ -40,6 +40,9 @@ pub enum GameEvent {
     },
     /// La sauvegarde datait d'un ancien équilibrage : effacée, nouvelle partie.
     SaveWiped,
+    /// Le joueur a effacé sa partie pour recommencer.
+    NewGame,
+    FrameRateChanged(u32),
 }
 
 pub struct GameService {
@@ -47,6 +50,8 @@ pub struct GameService {
     state: GameState,
     buy_mode: BuyMode,
     reduced_effects: bool,
+    /// Images par seconde choisies (0 : par défaut, 30).
+    frame_rate: u32,
     repo: Box<dyn SaveRepository>,
     clock: Box<dyn Clock>,
     rng: Box<dyn RandomSource>,
@@ -71,6 +76,7 @@ impl GameService {
             state,
             buy_mode: BuyMode::One,
             reduced_effects: false,
+            frame_rate: 0,
             repo,
             clock,
             rng,
@@ -110,12 +116,14 @@ impl GameService {
                 // est écrasée tout de suite par la nouvelle.
                 self.state = GameState::new(&self.catalog);
                 self.reduced_effects = data.reduced_effects;
+                self.frame_rate = data.frame_rate;
                 self.save()?;
                 out.push(GameEvent::SaveWiped);
             }
             LoadOutcome::Loaded(data) => {
                 self.state = data.to_state(&self.catalog);
                 self.reduced_effects = data.reduced_effects;
+                self.frame_rate = data.frame_rate;
                 let now = self.clock.now_unix_secs();
                 let elapsed = now.saturating_sub(data.last_saved);
                 if data.last_saved > 0 && elapsed >= MIN_OFFLINE_SECS {
@@ -135,12 +143,13 @@ impl GameService {
 
     /// Sauvegarde immédiate.
     pub fn save(&mut self) -> Result<(), AppError> {
-        let data = SaveData::from_state(
+        let mut data = SaveData::from_state(
             &self.state,
             &self.catalog,
             self.clock.now_unix_secs(),
             self.reduced_effects,
         );
+        data.frame_rate = self.frame_rate;
         self.repo.save(&data)?;
         self.autosave_timer = 0.0;
         Ok(())
@@ -188,6 +197,22 @@ impl GameService {
             Command::BigBang => self.state.big_bang(&self.catalog, &mut ev),
             Command::Forge(id) => self.state.forge(&self.catalog, id, &mut ev),
             Command::BuildAttractor => self.state.build_attractor(&self.catalog, &mut ev),
+            Command::CycleFrameRate => {
+                self.frame_rate = match self.frame_rate {
+                    0 | 30 => 20,
+                    20 => 15,
+                    _ => 30,
+                };
+                out.push(GameEvent::FrameRateChanged(self.frame_rate));
+            }
+            Command::NewGame => {
+                self.state = GameState::new(&self.catalog);
+                self.history.clear();
+                self.history_mix.clear();
+                self.sample_timer = 0.0;
+                out.push(self.save_event(false));
+                out.push(GameEvent::NewGame);
+            }
             Command::BuyConstellation(id) => {
                 self.state.buy_constellation(&self.catalog, id, &mut ev)
             }
@@ -277,6 +302,11 @@ impl GameService {
         snap.storm_remaining = st.comet.storm_remaining;
         snap.comet_progress = st.comet.progress();
         snap.reduced_effects = self.reduced_effects;
+        snap.frame_rate = if self.frame_rate == 0 {
+            30
+        } else {
+            self.frame_rate
+        };
         snap.hold_harvest = economy::hold_harvest_unlocked(c, st);
         snap.fragments_spendable = st.fragments_spendable();
         snap.autobuy_unlocked = st.autobuy_unlocked(c);
@@ -804,5 +834,31 @@ mod tests {
         assert_eq!(saved.supernovas, 0);
         // Au lancement suivant, rien n'est effacé.
         assert!(!s.load().unwrap().contains(&GameEvent::SaveWiped));
+    }
+
+    #[test]
+    fn new_game_wipes_progress_but_keeps_settings() {
+        let (repo, clock) = fixture();
+        let mut s = service(&repo, &clock, vec![0.5]);
+        s.load().unwrap();
+        for _ in 0..30 {
+            s.handle(Command::Harvest);
+        }
+        s.handle(Command::ToggleReducedEffects);
+        let ev = s.handle(Command::CycleFrameRate);
+        assert!(ev.contains(&GameEvent::FrameRateChanged(20)));
+        let ev = s.handle(Command::NewGame);
+        assert!(ev.contains(&GameEvent::NewGame));
+        let snap = s.snapshot();
+        assert_eq!(snap.stardust, 0.0);
+        assert!(snap.reduced_effects);
+        assert_eq!(snap.frame_rate, 20);
+        // La partie effacée est écrasée sur le disque, réglages compris.
+        let saved = repo.slot.borrow().clone().unwrap();
+        assert_eq!(saved.clicks, 0);
+        assert_eq!(saved.frame_rate, 20);
+        let mut again = service(&repo, &clock, vec![0.5]);
+        again.load().unwrap();
+        assert_eq!(again.snapshot().frame_rate, 20);
     }
 }

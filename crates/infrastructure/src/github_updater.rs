@@ -19,9 +19,18 @@ pub fn current_target() -> Option<&'static str> {
         Some("x86_64-pc-windows-msvc")
     } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
         Some("x86_64-unknown-linux-gnu")
+    } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
+        Some("x86_64-apple-darwin")
+    } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        Some("aarch64-apple-darwin")
     } else {
         None
     }
+}
+
+/// Vrai dans un conteneur Docker ou Podman.
+fn in_container() -> bool {
+    Path::new("/.dockerenv").exists() || Path::new("/run/.containerenv").exists()
 }
 
 /// Nom de l'asset « binaire brut » publié pour une plateforme.
@@ -199,6 +208,10 @@ impl UpdateProvider for GitHubUpdater {
         }
         if is_dev_build(exe) {
             return Some("version de développement (cargo)".into());
+        }
+        // Dans un conteneur, on met à jour l'image, pas l'exécutable.
+        if in_container() {
+            return Some("image Docker : mets-la à jour avec `docker pull`".into());
         }
         // Peut-on écrire à côté de l'exécutable ?
         let dir = exe.parent()?;

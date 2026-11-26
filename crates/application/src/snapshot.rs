@@ -188,6 +188,8 @@ pub struct GameSnapshot {
     /// Nombre de générateurs par échantillon de `history_mix`.
     pub history_mix_width: usize,
     pub reduced_effects: bool,
+    /// Images par seconde (30, 20 ou 15).
+    pub frame_rate: u32,
     /// « Récolte continue » achetée : maintenir Espace récolte en continu.
     pub hold_harvest: bool,
     /// Fragments disponibles pour l'Atelier.

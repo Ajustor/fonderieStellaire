@@ -29,6 +29,8 @@ pub struct SaveData {
     pub last_saved: u64,
     /// Option « effets réduits ».
     pub reduced_effects: bool,
+    /// Images par seconde choisies (0 : par défaut).
+    pub frame_rate: u32,
     /// Identifiants texte des améliorations de l'Atelier achetées.
     pub perks: Vec<String>,
     pub fragments_spent: f64,
@@ -99,6 +101,7 @@ impl SaveData {
             play_time: state.play_time,
             last_saved: now,
             reduced_effects,
+            frame_rate: 0,
             perks: catalog
                 .perks
                 .iter()

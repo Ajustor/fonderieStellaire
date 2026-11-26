@@ -786,7 +786,7 @@ fn v0_8_portals_universes_and_key_ceremony() {
     println!("{text}");
     assert!(text.contains("CHOISIS TON UNIVERS"));
     assert!(text.contains("Gravité forte"));
-    assert!(text.contains("Clé : 20 Supernovas"));
+    assert!(text.contains("Clé : 25 Supernovas"));
     assert!(
         text.contains('▓') || text.contains('▒'),
         "les vortex sont dessinés"
@@ -981,4 +981,47 @@ fn v0_9_big_bang_forge_attractor_and_ending() {
     app.update(0.033);
     let text = render(&mut app, 100, 30);
     assert!(!text.contains("FIN DE L'ACTE II"), "retour au jeu");
+}
+
+#[test]
+fn options_and_new_game_with_double_confirmation() {
+    let mut app = game_app();
+    let mut t = 200.0;
+    app.set_time(t);
+    app.on_intent(Intent::Options);
+    t += 1.0;
+    app.set_time(t);
+    let text = render(&mut app, 100, 30);
+    println!("{text}");
+    assert!(text.contains("OPTIONS"), "{text}");
+    assert!(text.contains("Images par seconde"));
+    assert!(text.contains("Recommencer une nouvelle partie"));
+    assert!(text.contains("mises à jour automatiques"));
+    // Images par seconde : 30 → 20.
+    app.on_intent(Intent::Buy);
+    app.update(0.033);
+    assert_eq!(app.snapshot().frame_rate, 20);
+    // Recommencer : une première Entrée arme, Échap annule.
+    app.on_intent(Intent::Down);
+    app.on_intent(Intent::Down);
+    app.on_intent(Intent::Buy);
+    let text = render(&mut app, 100, 30);
+    assert!(text.contains("TOUT effacer"), "{text}");
+    app.on_intent(Intent::Up);
+    app.on_intent(Intent::Down);
+    app.on_intent(Intent::Buy);
+    app.on_intent(Intent::Buy);
+    // L'effacement, image par image, puis l'écran titre d'une partie neuve.
+    for i in 0..(3 * 30) {
+        t += 1.0 / 30.0;
+        app.set_time(t);
+        app.update(1.0 / 30.0);
+        let (w, h) = if i % 2 == 0 { (100, 30) } else { (80, 24) };
+        let _ = render(&mut app, w, h);
+    }
+    assert_eq!(app.screen(), presentation::app::Screen::Title);
+    let snap = app.snapshot();
+    assert_eq!(snap.stardust, 0.0);
+    assert_eq!(snap.fragments, 0.0);
+    assert_eq!(snap.frame_rate, 20, "les réglages sont gardés");
 }

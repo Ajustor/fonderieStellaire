@@ -8,6 +8,7 @@ pub mod error;
 pub mod game_service;
 pub mod ports;
 pub mod save_dto;
+pub mod simulator;
 pub mod snapshot;
 pub mod updates;
 

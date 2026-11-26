@@ -72,7 +72,8 @@ grep -rlE "serde|std::fs"     crates | grep -v crates/infrastructure # → rien
   purement visuels (tweens, particules, focus, défilement, toasts, journal)
   vivent ici.
 - **bin** — composition root : instancie les adapters, les injecte dans
-  `GameService`, gère `--reset`, `--no-update` et `--version` (version injectée
+  `GameService`, gère `--reset`, `--export`, `--import`, `--simulate` et
+  `--version` (version injectée
   par la CI depuis le tag via `FONDERIE_VERSION`), lance `presentation::run`.
 
 ## Flux d'une action
@@ -219,6 +220,13 @@ L'identifiant texte (`key`) doit rester **stable** : c'est lui qui est sauvegard
    la fin de l'Acte II.
 2. Un nouvel `AttractorEffect` s'applique dans `GameState` (voir
    `attractor_product`).
+
+### Vérifier le rythme d'une version
+
+`cargo run --release -- --simulate 3` rejoue une partie complète (vrai code du
+domaine, stratégie automatique de `application::simulator`) pour un joueur qui
+joue 3 h par jour, et affiche quand chaque étape est atteinte. Sans argument :
+jeu continu. À relancer après tout changement d'équilibrage.
 
 ### Écrire un texte sans qu'il soit coupé
 

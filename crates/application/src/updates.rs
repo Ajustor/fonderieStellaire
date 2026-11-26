@@ -124,7 +124,7 @@ pub struct UpdateService {
 }
 
 impl UpdateService {
-    /// Aucune vérification (option `--no-update`, tests…).
+    /// Aucune vérification (tests, captures d'écran…).
     pub fn disabled(current: impl Into<String>) -> Self {
         UpdateService {
             current: current.into(),

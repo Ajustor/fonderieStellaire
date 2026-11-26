@@ -16,7 +16,7 @@ use crate::widgets::journal::Journal;
 use crate::widgets::toast::Toasts;
 use crate::widgets::{
     ceremony, challenges, codex, cosmos, generators, header, help_bar, journal, lab, modal,
-    portals, shop, sky, sparkline, upgrades, Ctx,
+    options, portals, shop, sky, sparkline, upgrades, Ctx,
 };
 
 /// Décalage entre deux panneaux de la cascade.
@@ -24,6 +24,8 @@ pub const CASCADE_STAGGER: f64 = 0.08;
 pub const CASCADE_DURATION: f64 = 0.35;
 
 pub struct GameView<'a> {
+    pub save_path: &'a str,
+    pub version: &'a str,
     pub journal: &'a Journal,
     pub toasts: &'a Toasts,
     pub spark_scratch: &'a mut Vec<u64>,
@@ -95,6 +97,24 @@ pub fn render(
     }
     if let Some(popup) = ui.cosmos {
         cosmos::render(buf, area, ctx, &popup, ui.cosmos_sel, ui.cosmos_armed);
+    }
+    if let Some(popup) = ui.options {
+        let info = options::OptionsInfo {
+            save_path: view.save_path,
+            version: view.version,
+        };
+        options::render(
+            buf,
+            area,
+            ctx,
+            &popup,
+            ui.options_sel,
+            ui.options_armed,
+            &info,
+        );
+    }
+    if let Some(at) = ui.wipe_at {
+        options::render_wipe(buf, area, ctx.now, at);
     }
     if let Some(popup) = ui.challenges {
         challenges::render(

@@ -168,6 +168,7 @@ cargo run --release -- --reset
 | `L` | Laboratoire de matière noire (après 10 Big Crunch) |
 | `V` | Univers parallèles et leurs Clés (après 10 Big Crunch) |
 | `G` | Cosmogonie : Big Bang, forge primordiale, Grand Attracteur (après 10 Big Crunch) |
+| `R` | Options : images par seconde, effets réduits, recommencer une partie |
 | `T` | Activer / arrêter l'automate (une fois acheté à l'Atelier) |
 | `I` | Infos : progression, succès et fonctionnement de chaque mécanique |
 | `PgUp` / `PgDn` | Remonter / redescendre dans le journal |
@@ -234,11 +235,10 @@ sur la nouvelle version (après un compte à rebours de 5 s, et jamais au milieu
 d'une Supernova ou d'un Big Bang). L'état s'affiche en bas à droite de l'écran
 titre (`v0.9.0 · à jour`), et un message apparaît dans le journal.
 
-- Pas de droits d'écriture sur le dossier du jeu, ou version compilée avec
-  `cargo` : le jeu signale simplement qu'une nouvelle version existe.
+- Pas de droits d'écriture sur le dossier du jeu, version compilée avec
+  `cargo` ou image Docker : le jeu signale simplement qu'une nouvelle version
+  existe (pour Docker : `docker pull`).
 - Hors-ligne : rien ne se passe, le jeu démarre normalement.
-- Pour désactiver : `fonderie-stellaire --no-update` ou la variable
-  d'environnement `FONDERIE_NO_UPDATE=1` (déjà le cas dans l'image Docker).
 - `fonderie-stellaire --version` affiche la version installée.
 
 ## Sauvegarde
@@ -252,6 +252,11 @@ Sauvegarde automatique toutes les 30 s et à la fermeture, dans :
 
 L'écriture est atomique (fichier `.tmp` puis renommage). Une sauvegarde
 corrompue est renommée en `save.json.bak` et une nouvelle partie démarre.
+
+- **Recommencer** : touche `R` (Options) → « Recommencer une nouvelle
+  partie », ou `fonderie-stellaire --reset` (l'ancienne passe en `.bak`).
+- **Changer d'ordinateur** : `fonderie-stellaire --export ma-partie.json`, puis
+  sur l'autre machine `fonderie-stellaire --import ma-partie.json`.
 
 Quand l'équilibrage change trop (comme en v0.9.0), les sauvegardes d'un
 format plus ancien (`SAVE_RESET_BELOW`) sont effacées au lancement, et un

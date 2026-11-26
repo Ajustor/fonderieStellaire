@@ -198,6 +198,7 @@ fn no_text_is_cut_anywhere() {
     report.extend(audit("supernova", late.clone(), &[Intent::Supernova], 0));
     report.extend(audit("big crunch", late.clone(), &[Intent::BigCrunch], 0));
     report.extend(audit("univers", late.clone(), &[Intent::Universes], 0));
+    report.extend(audit("options", late.clone(), &[Intent::Options], 2));
     let mut bang = late.clone();
     bang.crunches = 34;
     report.extend(audit("cosmogonie", bang, &[Intent::Cosmos], 11));
