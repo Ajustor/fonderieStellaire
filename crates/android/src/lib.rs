@@ -14,7 +14,7 @@ use application::GameService;
 use infrastructure::{JsonSaveRepository, SystemClock, XorShift64};
 use presentation::cells::{self, Buffer, Rect};
 use presentation::input::{Intent, Phase};
-use presentation::App;
+use presentation::{App, Screen};
 
 uniffi::setup_scaffolding!();
 
@@ -163,6 +163,12 @@ impl Game {
             _ => *prev = Some(buf.clone()),
         }
         out.clone()
+    }
+
+    /// Vrai pendant les écrans plein écran qui veulent une grille dense (le
+    /// grand logo du lancement exige 72 colonnes).
+    pub fn wants_dense(&self) -> bool {
+        self.lock().app.screen() == Screen::Title
     }
 
     /// Images par seconde choisies dans les options (10 à 60).

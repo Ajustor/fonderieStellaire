@@ -1,0 +1,98 @@
+import org.gradle.internal.os.OperatingSystem
+
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
+/** Racine du workspace Cargo (le dépôt). */
+val cargoRoot: File = rootDir.parentFile
+val rustJniLibs = layout.buildDirectory.dir("rustJniLibs")
+val uniffiOut = layout.buildDirectory.dir("generated/uniffi")
+val rustProfile = providers.gradleProperty("rustProfile").getOrElse("release")
+
+android {
+    namespace = "io.github.ajustor.fonderie"
+    compileSdk = 34
+    ndkVersion = "29.0.14206865"
+
+    defaultConfig {
+        applicationId = "io.github.ajustor.fonderie"
+        minSdk = 26
+        targetSdk = 34
+        versionCode = 1
+        versionName = "0.16.0"
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDir(rustJniLibs)
+            java.srcDir(uniffiOut)
+        }
+    }
+}
+
+dependencies {
+    implementation("net.java.dev.jna:jna:5.14.0@aar")
+}
+
+/** Compile `libfonderie.so` pour chaque ABI avec cargo-ndk. */
+val cargoNdk by tasks.registering(Exec::class) {
+    group = "rust"
+    workingDir = cargoRoot
+    val args = mutableListOf(
+        "cargo", "ndk",
+        "-t", "arm64-v8a", "-t", "x86_64",
+        "-P", "26",
+        "-o", rustJniLibs.get().asFile.absolutePath,
+        "build", "-p", "fonderie-android",
+    )
+    if (rustProfile == "release") args += "--release"
+    commandLine(args)
+    environment("ANDROID_NDK_HOME", android.ndkDirectory.absolutePath)
+    inputs.dir(File(cargoRoot, "crates"))
+    inputs.file(File(cargoRoot, "Cargo.lock"))
+    outputs.dir(rustJniLibs)
+}
+
+/** Génère les bindings Kotlin depuis une compilation hôte (non strippée). */
+val uniffiBindings by tasks.registering(Exec::class) {
+    group = "rust"
+    workingDir = cargoRoot
+    val ext = when {
+        OperatingSystem.current().isMacOsX -> "dylib"
+        OperatingSystem.current().isWindows -> "dll"
+        else -> "so"
+    }
+    val lib = if (OperatingSystem.current().isWindows) "fonderie.$ext" else "libfonderie.$ext"
+    commandLine(
+        "sh", "-c",
+        "cargo build -p fonderie-android && cargo run -q -p uniffi-bindgen -- generate " +
+            "--library target/debug/$lib --language kotlin --no-format " +
+            "--out-dir '${uniffiOut.get().asFile.absolutePath}'",
+    )
+    inputs.dir(File(cargoRoot, "crates/android/src"))
+    outputs.dir(uniffiOut)
+}
+
+tasks.named("preBuild") {
+    dependsOn(cargoNdk, uniffiBindings)
+}
