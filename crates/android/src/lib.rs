@@ -10,7 +10,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Instant;
 
-use application::GameService;
+use application::{GameService, SyncService};
+use infrastructure::relay_sync::{parse_code, RelaySync};
 use infrastructure::{JsonSaveRepository, SystemClock, XorShift64};
 use presentation::cells::{self, Buffer, Rect};
 use presentation::input::Intent;
@@ -132,6 +133,22 @@ pub struct TabInfo {
 pub enum Request {
     ExportSave,
     ImportSave,
+    /// Ouvrir la fenêtre de synchronisation entre appareils.
+    Sync,
+}
+
+/// État de la synchronisation, pour la fenêtre native.
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct SyncInfo {
+    /// Un relais est configuré dans cette version.
+    pub available: bool,
+    /// Code du lien (`XXXXX-XXXXX-…`), si l'appareil est lié.
+    pub code: Option<String>,
+    /// Texte du QR code à afficher.
+    pub qr_text: Option<String>,
+    pub busy: bool,
+    pub status: String,
+    pub error: bool,
 }
 
 struct Inner {
@@ -159,7 +176,8 @@ impl Game {
     /// les gains hors-ligne.
     #[uniffi::constructor]
     pub fn new(save_dir: String) -> Result<Arc<Self>, GameError> {
-        let path = PathBuf::from(save_dir).join(SAVE_FILE);
+        let dir = PathBuf::from(save_dir);
+        let path = dir.join(SAVE_FILE);
         let repo = JsonSaveRepository::new(&path);
         let mut service = GameService::new(
             Box::new(repo.clone()),
@@ -169,6 +187,9 @@ impl Game {
         let startup = service.load().map_err(|e| e.to_string())?;
         let mut app = App::new(service, startup);
         app.set_mobile(true);
+        if let Some(relay) = RelaySync::from_env(&dir) {
+            app.set_sync(SyncService::spawn(Box::new(relay)));
+        }
         Ok(Arc::new(Game {
             inner: Mutex::new(Inner {
                 app,
@@ -297,6 +318,7 @@ impl Game {
         self.lock().app.take_request().map(|r| match r {
             MobileRequest::ExportSave => Request::ExportSave,
             MobileRequest::ImportSave => Request::ImportSave,
+            MobileRequest::Sync => Request::Sync,
         })
     }
 
@@ -349,6 +371,46 @@ impl Game {
         g.last_frame = None;
         g.prev = None;
         g.app.reload_save().map_err(GameError::from)
+    }
+
+    pub fn sync_info(&self) -> SyncInfo {
+        let v = self.lock().app.sync_view();
+        SyncInfo {
+            available: v.available,
+            qr_text: v
+                .code
+                .as_deref()
+                .map(presentation::widgets::sync::qr_payload),
+            code: v.code,
+            busy: v.busy,
+            status: v.status,
+            error: v.error,
+        }
+    }
+
+    /// Crée un lien : son code et son QR code s'affichent ensuite.
+    pub fn sync_create(&self) {
+        self.lock().app.sync_create();
+    }
+
+    /// Rejoint le lien d'un autre appareil (QR code scanné ou code tapé).
+    pub fn sync_join(&self, code: String) -> Result<(), GameError> {
+        if parse_code(&code).is_none() {
+            return Err(GameError::Failed(
+                "Code invalide : vérifie les 25 caractères.".into(),
+            ));
+        }
+        self.lock().app.sync_join(&code);
+        Ok(())
+    }
+
+    pub fn sync_unlink(&self) {
+        self.lock().app.sync_unlink();
+    }
+
+    /// Synchronise tout de suite.
+    pub fn sync_now(&self) {
+        self.lock().app.sync_now();
     }
 
     /// Contenu de la sauvegarde, à partager avec la version PC.

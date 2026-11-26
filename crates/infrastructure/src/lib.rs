@@ -4,6 +4,8 @@
 #[cfg(feature = "updater")]
 pub mod github_updater;
 pub mod json_repository;
+#[cfg(feature = "sync")]
+pub mod relay_sync;
 pub mod save_crypto;
 pub mod system_clock;
 pub mod xorshift;
@@ -11,5 +13,7 @@ pub mod xorshift;
 #[cfg(feature = "updater")]
 pub use github_updater::GitHubUpdater;
 pub use json_repository::JsonSaveRepository;
+#[cfg(feature = "sync")]
+pub use relay_sync::RelaySync;
 pub use system_clock::SystemClock;
 pub use xorshift::XorShift64;

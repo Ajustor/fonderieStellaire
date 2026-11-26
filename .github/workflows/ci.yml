@@ -46,9 +46,10 @@ jobs:
         run: |
           hits=$(grep -rlE 'ratatui|crossterm' crates --include='*.rs' --include=Cargo.toml | grep -v '^crates/presentation/' || true)
           if [ -n "$hits" ]; then echo "::error::$hits"; exit 1; fi
+      # Le relais (crates/relay) est un serveur à part, hors des couches du jeu.
       - name: serde/std::fs seulement dans infrastructure
         run: |
-          hits=$(grep -rlE 'serde|std::fs' crates --include='*.rs' --include=Cargo.toml | grep -v '^crates/infrastructure/' || true)
+          hits=$(grep -rlE 'serde|std::fs' crates --include='*.rs' --include=Cargo.toml | grep -Ev '^crates/(infrastructure|relay)/' || true)
           if [ -n "$hits" ]; then echo "::error::$hits"; exit 1; fi
 
   test:

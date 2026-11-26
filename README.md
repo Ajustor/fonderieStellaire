@@ -277,6 +277,50 @@ nouvelle partie démarre.
 - **Changer d'ordinateur** : `fonderie-stellaire --export ma-partie.json`, puis
   sur l'autre machine `fonderie-stellaire --import ma-partie.json`.
 
+### Synchronisation entre appareils
+
+La même partie sur ton ordinateur et ton téléphone, **sans compte** : un code
+de lien suffit.
+
+1. Sur l'ordinateur : `R` (Options) → **Synchronisation** → `Entrée` pour créer
+   un lien. Un **QR code** et un code de 25 caractères s'affichent.
+2. Sur le téléphone : onglet *Plus* → *Sauver* → **Synchroniser entre
+   appareils** → *Scanner* (ou *Taper un code*).
+   Un autre ordinateur : `fonderie-stellaire --link XXXXX-XXXXX-XXXXX-XXXXX-XXXXX`.
+
+Ensuite, chaque appareil envoie sa partie au lancement, toutes les 2 minutes et
+à la fermeture, et reprend celle de l'autre si elle a été **plus jouée** (temps
+de jeu réel, pas les gains hors-ligne). La partie remplacée est gardée en
+`save.json.bak`. `fonderie-stellaire --unlink` (ou *Délier*) arrête la
+synchronisation.
+
+Le relais ne voit que des données **chiffrées de bout en bout** : le code ne
+quitte jamais tes appareils, seul un jeton qui en est dérivé lui parvient.
+Garde ce code pour toi : il donne accès à ta partie.
+
+#### Héberger le relais
+
+Le relais (`crates/relay`) est un petit serveur HTTP sans dépendance au jeu.
+Sur Dokploy : application de type *Dockerfile*, chemin
+`crates/relay/Dockerfile`, contexte la racine du dépôt, port **8080**, volume
+persistant sur `/data`, et un domaine en HTTPS. Ailleurs :
+
+```sh
+docker build -f crates/relay/Dockerfile -t fonderie-relay .
+docker run -d -p 8080:8080 -v fonderie-relay:/data fonderie-relay
+```
+
+Réglages (variables d'environnement) : `RATE_PER_MIN` (60 requêtes par minute
+et par adresse), `MAX_BODY_KB` (1024), `EXPIRE_DAYS` (365 : parties sans
+synchronisation depuis plus longtemps effacées), `TRUST_PROXY` (1 : adresse
+client lue dans `X-Forwarded-For`).
+
+Par défaut, le jeu utilise le relais officiel
+`https://fonderie-stellaire-sync.darthoit.eu`. Pour en utiliser un autre :
+`FONDERIE_SYNC_URL` en variable d'environnement au lancement, ou à la
+compilation (variable du dépôt GitHub, injectée par la CI dans les binaires,
+l'image Docker et l'APK).
+
 Quand l'équilibrage change trop (comme en v0.9.0), les sauvegardes d'un
 format plus ancien (`SAVE_RESET_BELOW`) sont effacées au lancement, et un
 message sur l'écran titre l'explique au joueur.

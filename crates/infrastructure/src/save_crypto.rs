@@ -70,14 +70,7 @@ fn hmac(key: &[u8; 32], parts: &[&[u8]]) -> [u8; 32] {
 /// Chiffre et signe `plain` ; `nonce` doit changer à chaque sauvegarde.
 pub fn encode(plain: &str, nonce: u64) -> String {
     let key = key();
-    let nonce = nonce.to_le_bytes();
-    let mut data = plain.as_bytes().to_vec();
-    keystream_xor(&key, &nonce, &mut data);
-    let mac = hmac(&key, &[&nonce, &data]);
-    let mut out = Vec::with_capacity(NONCE_LEN + data.len() + MAC_LEN);
-    out.extend_from_slice(&nonce);
-    out.extend_from_slice(&data);
-    out.extend_from_slice(&mac);
+    let out = seal(&key, &key, plain.as_bytes(), nonce);
     format!("{MAGIC}{}", base64_encode(&out))
 }
 
@@ -88,13 +81,32 @@ pub fn decode(text: &str) -> Result<String, CryptoError> {
         .strip_prefix(MAGIC)
         .ok_or(CryptoError::NotEncrypted)?;
     let raw = base64_decode(body).ok_or(CryptoError::Tampered)?;
-    if raw.len() < NONCE_LEN + MAC_LEN {
+    let key = key();
+    let plain = open(&key, &key, &raw)?;
+    String::from_utf8(plain).map_err(|_| CryptoError::Tampered)
+}
+
+/// `nonce (8 octets) ‖ texte chiffré ‖ HMAC-SHA256(mac_key, nonce ‖ chiffré)`.
+pub fn seal(enc_key: &[u8; 32], mac_key: &[u8; 32], plain: &[u8], nonce: u64) -> Vec<u8> {
+    let nonce = nonce.to_le_bytes();
+    let mut data = plain.to_vec();
+    keystream_xor(enc_key, &nonce, &mut data);
+    let mac = hmac(mac_key, &[&nonce, &data]);
+    let mut out = Vec::with_capacity(NONCE_LEN + data.len() + MAC_LEN);
+    out.extend_from_slice(&nonce);
+    out.extend_from_slice(&data);
+    out.extend_from_slice(&mac);
+    out
+}
+
+/// Inverse de [`seal`] : refuse tout contenu dont la signature ne correspond pas.
+pub fn open(enc_key: &[u8; 32], mac_key: &[u8; 32], sealed: &[u8]) -> Result<Vec<u8>, CryptoError> {
+    if sealed.len() < NONCE_LEN + MAC_LEN {
         return Err(CryptoError::Tampered);
     }
-    let (nonce, rest) = raw.split_at(NONCE_LEN);
+    let (nonce, rest) = sealed.split_at(NONCE_LEN);
     let (data, mac) = rest.split_at(rest.len() - MAC_LEN);
-    let key = key();
-    let expected = hmac(&key, &[nonce, data]);
+    let expected = hmac(mac_key, &[nonce, data]);
     // Comparaison en temps constant.
     let diff = expected
         .iter()
@@ -104,8 +116,8 @@ pub fn decode(text: &str) -> Result<String, CryptoError> {
         return Err(CryptoError::Tampered);
     }
     let mut plain = data.to_vec();
-    keystream_xor(&key, nonce, &mut plain);
-    String::from_utf8(plain).map_err(|_| CryptoError::Tampered)
+    keystream_xor(enc_key, nonce, &mut plain);
+    Ok(plain)
 }
 
 const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -178,6 +190,16 @@ mod tests {
         assert_eq!(decode(&tampered), Err(CryptoError::Tampered));
         assert_eq!(decode("{\"clair\": 1}"), Err(CryptoError::NotEncrypted));
         assert_eq!(decode("FSTL1:@@@@"), Err(CryptoError::Tampered));
+    }
+
+    #[test]
+    fn sealed_bytes_need_both_keys() {
+        let (k1, k2) = ([1u8; 32], [2u8; 32]);
+        let sealed = seal(&k1, &k2, b"partie", 9);
+        assert_eq!(open(&k1, &k2, &sealed).unwrap(), b"partie");
+        assert_ne!(open(&k2, &k2, &sealed), Ok(b"partie".to_vec()));
+        assert_eq!(open(&k1, &k1, &sealed), Err(CryptoError::Tampered));
+        assert_eq!(open(&k1, &k2, &sealed[..10]), Err(CryptoError::Tampered));
     }
 
     #[test]

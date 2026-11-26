@@ -26,7 +26,7 @@ Fonderie Stellaire est un idle game cosmique, entièrement animé en caractères
 • Les actions irréversibles se confirment en faisant glisser un curseur.
 
 ✦ SANS PUB, SANS ACHAT, SANS COMPTE
-Aucune publicité, aucun achat intégré, aucune connexion requise. Ta sauvegarde reste sur ton téléphone, et tu peux l'exporter pour la reprendre dans la version ordinateur (terminal).
+Aucune publicité, aucun achat intégré, aucune connexion requise. Ta sauvegarde reste sur ton téléphone ; tu peux la synchroniser avec la version ordinateur (terminal) grâce à un simple QR code, sans compte, ou l'exporter dans un fichier.
 
 CATÉGORIE
 Jeux › Simulation (ou Jeux › Occasionnels)

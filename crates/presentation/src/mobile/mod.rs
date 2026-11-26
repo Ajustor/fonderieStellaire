@@ -57,6 +57,8 @@ pub struct TabInfo {
 pub enum Request {
     ExportSave,
     ImportSave,
+    /// Synchronisation entre appareils (QR code, scan, code à taper).
+    Sync,
 }
 
 /// Ce que fait une zone touchée.

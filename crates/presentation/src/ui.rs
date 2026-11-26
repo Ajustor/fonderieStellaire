@@ -85,6 +85,8 @@ pub struct Ui {
     pub options: Option<Popup>,
     pub options_sel: usize,
     pub options_armed: bool,
+    /// Écran de synchronisation ouvert depuis les Options.
+    pub options_sync: bool,
     /// Effacement de la partie en cours : instant de départ.
     pub wipe_at: Option<f64>,
     /// Cosmogonie (touche G), sélection, et confirmation armée du Big Bang.

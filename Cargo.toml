@@ -8,10 +8,11 @@ members = [
     "crates/bin",
     "crates/android",
     "crates/uniffi-bindgen",
+    "crates/relay",
 ]
 
 [workspace.package]
-version = "0.16.0"
+version = "0.17.0"
 edition = "2021"
 license = "MIT"
 

@@ -29,9 +29,10 @@ une crate ne peut utiliser que ce qu'elle déclare dans son `Cargo.toml`.
 |---|---|---|
 | `domain` | *rien* (aucune crate externe, pas même `serde`) | I/O, horloge, aléa implicite |
 | `application` | `domain` | terminal, fichiers, `serde` |
-| `infrastructure` | `application`, `domain`, `serde`, `serde_json`, `dirs` | terminal |
-| `presentation` | `application`, `domain`, `ratatui`, `crossterm` | fichiers, `serde` |
+| `infrastructure` | `application`, `domain`, `serde`, `serde_json`, `dirs`, `ureq`, `sha2`, `getrandom` | terminal |
+| `presentation` | `application`, `domain`, `ratatui`, `crossterm`, `qrcode` | fichiers, `serde` |
 | `bin` (`fonderie-stellaire`) | toutes | logique métier |
+| `relay` (`fonderie-relay`) | `tiny_http`, `sha2` | tout le reste : serveur à part, hors des couches du jeu |
 
 Vérification rapide :
 
@@ -235,6 +236,30 @@ L'identifiant texte (`key`) doit rester **stable** : c'est lui qui est sauvegard
 domaine, stratégie automatique de `application::simulator`) pour un joueur qui
 joue 3 h par jour, et affiche quand chaque étape est atteinte. Sans argument :
 jeu continu. À relancer après tout changement d'équilibrage.
+
+### Synchronisation entre appareils
+
+- **application** (`sync.rs`) : port `SyncBackend` (lien enregistré, `pull`,
+  `push` avec la révision de base), `reconcile` (envoi optimiste ; en cas de
+  conflit, `prefer_remote` garde la partie au plus grand `play_time`, qui
+  n'avance qu'en jeu) et `SyncService` (thread, rafales fusionnées, envois
+  suspendus entre l'annonce `SyncEvent::Adopt` et `adopted()`, pour qu'une
+  partie sur le point d'être remplacée n'écrase pas le relais).
+- **infrastructure** (`relay_sync.rs`) : code de lien (120 bits en base 32 de
+  Crockford + caractère de contrôle), jeton et clés dérivés par SHA-256,
+  partie scellée avec `save_crypto::seal` (chiffrement et HMAC à clés
+  distinctes) par-dessus le chiffrement habituel, lien gardé dans `sync.json`.
+- **presentation** : `App::update_sync` (envoi toutes les `SYNC_INTERVAL`
+  secondes, à la sauvegarde immédiate et au retour d'arrière-plan ; reprise
+  d'une partie hors des grandes séquences et du Défi du jour), écran
+  `widgets/sync.rs` (QR code en demi-blocs) ; Android passe par
+  `Request::Sync` et des fenêtres natives (`SyncDialogs.kt`).
+- **relay** : `GET`/`PUT /v1/save` avec `X-Rev` / `X-Base-Rev` (409 en cas de
+  conflit), empreinte du jeton comme nom de fichier, limite de débit et
+  expiration des parties abandonnées.
+
+L'adresse du relais vient de `FONDERIE_SYNC_URL` (environnement au lancement,
+puis compilation), sinon du relais officiel (`relay_sync::DEFAULT_RELAY`).
 
 ### Chiffrement des sauvegardes
 

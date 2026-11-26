@@ -11,16 +11,27 @@ COPY crates/application/Cargo.toml crates/application/
 COPY crates/infrastructure/Cargo.toml crates/infrastructure/
 COPY crates/presentation/Cargo.toml crates/presentation/
 COPY crates/bin/Cargo.toml crates/bin/
-RUN for c in domain application infrastructure presentation; do \
+# Les autres membres du workspace (Android, bindgen, relais) ne sont pas
+# compilés ici, mais Cargo a besoin de leurs manifestes (et du test `render`
+# déclaré dans celui de presentation).
+COPY crates/android/Cargo.toml crates/android/
+COPY crates/uniffi-bindgen/Cargo.toml crates/uniffi-bindgen/
+COPY crates/relay/Cargo.toml crates/relay/
+RUN for c in domain application infrastructure presentation android; do \
         mkdir -p crates/$c/src && echo "" > crates/$c/src/lib.rs; \
     done \
-    && mkdir -p crates/bin/src && echo "fn main() {}" > crates/bin/src/main.rs \
-    && cargo build --release --locked \
-    && rm -rf crates/*/src
+    && for c in bin uniffi-bindgen relay; do \
+        mkdir -p crates/$c/src && echo "fn main() {}" > crates/$c/src/main.rs; \
+    done \
+    && mkdir -p crates/presentation/tests && touch crates/presentation/tests/render.rs \
+    && cargo build --release --locked -p fonderie-stellaire \
+    && rm -rf crates/*/src crates/presentation/tests
 COPY crates crates
+# Autre relais de synchronisation (vide : relais officiel).
+ARG FONDERIE_SYNC_URL=""
 # Force la recompilation de nos crates (les mtimes des sources factices sont plus récents).
 # La clé de chiffrement des sauvegardes arrive en secret BuildKit (vide en local).
-RUN --mount=type=secret,id=save_key touch crates/*/src/*.rs     && FONDERIE_SAVE_KEY="$(cat /run/secrets/save_key 2>/dev/null || true)"        cargo build --release --locked
+RUN --mount=type=secret,id=save_key touch crates/*/src/*.rs     && FONDERIE_SAVE_KEY="$(cat /run/secrets/save_key 2>/dev/null || true)" FONDERIE_SYNC_URL="$FONDERIE_SYNC_URL" cargo build --release --locked -p fonderie-stellaire
 
 FROM debian:bookworm-slim
 LABEL org.opencontainers.image.title="Fonderie Stellaire" \

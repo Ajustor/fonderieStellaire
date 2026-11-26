@@ -13,7 +13,10 @@ use ratatui::widgets::{Block, BorderType, Borders, Widget};
 use ratatui::Frame;
 
 use application::updates::display_version;
-use application::{Command, GameEvent, GameService, GameSnapshot, UpdateEvent, UpdateService};
+use application::{
+    Command, GameEvent, GameService, GameSnapshot, RemoteSave, SyncEvent, SyncService, SyncState,
+    UpdateEvent, UpdateService,
+};
 use domain::catalog::balance::ACHIEVEMENT_BONUS;
 use domain::prestige::fragment_multiplier;
 use domain::{
@@ -47,6 +50,7 @@ use crate::widgets::journal::{Journal, Kind};
 use crate::widgets::portals::PortalState;
 use crate::widgets::shop::{self, ShopItem};
 use crate::widgets::starmap::{self as starmap_widget, StarMapState};
+use crate::widgets::sync::SyncView;
 use crate::widgets::toast::Toasts;
 use crate::widgets::{inner, Ctx};
 
@@ -93,6 +97,12 @@ pub struct RunOutcome {
     pub restart: bool,
 }
 
+/// Intervalle entre deux envois de la partie au relais (appareil lié).
+pub const SYNC_INTERVAL: f64 = 120.0;
+/// Attente maximale des derniers envois à la fermeture du terminal.
+#[cfg(feature = "terminal")]
+const SYNC_FLUSH: Duration = Duration::from_secs(4);
+
 /// Délai entre l'installation d'une mise à jour et le redémarrage automatique.
 pub const RESTART_DELAY: f64 = 5.0;
 /// Fondu au noir juste avant de redémarrer.
@@ -128,6 +138,14 @@ pub struct App {
     /// Mode mobile (Android) : onglets, mises en page portrait, hit-test.
     /// Absent en mode terminal, qui garde ses écrans tels quels.
     pub(crate) mobile: Option<crate::mobile::MobileUi>,
+    /// Synchronisation entre appareils.
+    pub(crate) sync: SyncService,
+    /// Temps écoulé depuis le dernier envoi au relais.
+    pub(crate) sync_timer: f64,
+    /// Partie plus avancée reçue d'un autre appareil, reprise dès que possible.
+    pub(crate) sync_pending: Option<Box<RemoteSave>>,
+    /// Le joueur attend le résultat d'une action (lier, délier) : erreurs en toast.
+    pub(crate) sync_user: bool,
 }
 
 fn seed() -> u64 {
@@ -165,6 +183,10 @@ impl App {
             restart_at: None,
             restart: false,
             mobile: None,
+            sync: SyncService::disabled(),
+            sync_timer: 0.0,
+            sync_pending: None,
+            sync_user: false,
         };
         app.vis.set_reduced(app.snap.reduced_effects);
         app.journal.push(
@@ -306,9 +328,12 @@ impl App {
         }
     }
 
-    /// Sauvegarde immédiate (mise en arrière-plan sur Android, sortie du terminal).
+    /// Sauvegarde immédiate (mise en arrière-plan sur Android, sortie du
+    /// terminal), envoyée aussi aux autres appareils.
     pub fn save_now(&mut self) -> Result<(), String> {
-        self.service.save().map_err(|e| e.to_string())
+        self.service.save().map_err(|e| e.to_string())?;
+        self.sync_now();
+        Ok(())
     }
 
     /// Relit la sauvegarde (retour d'arrière-plan, import) : gains hors-ligne
@@ -340,7 +365,220 @@ impl App {
         for ev in events {
             self.react(ev);
         }
+        self.sync_now();
         Ok(())
+    }
+
+    // ------------------------------------------------------------------
+    // Synchronisation entre appareils
+    // ------------------------------------------------------------------
+
+    /// Branche la synchronisation et l'effectue tout de suite.
+    pub fn set_sync(&mut self, sync: SyncService) {
+        self.sync = sync;
+        self.sync_now();
+    }
+
+    /// Envoie la partie au relais (si l'appareil est lié). Si elle a été plus
+    /// jouée sur un autre appareil, c'est celle-là qui sera reprise ici.
+    pub fn sync_now(&mut self) {
+        self.sync_timer = 0.0;
+        if self.sync_pending.is_none() && self.sync.linked() {
+            let data = self.service.save_data();
+            self.sync.sync(data);
+        }
+    }
+
+    /// Crée un lien : son code s'affiche, à scanner sur l'autre appareil.
+    pub fn sync_create(&mut self) {
+        self.sync_user = true;
+        self.sync_pending = None;
+        let data = self.service.save_data();
+        self.sync.create_link(data);
+    }
+
+    /// Rejoint le lien d'un autre appareil (code scanné ou tapé).
+    pub fn sync_join(&mut self, code: &str) {
+        self.sync_user = true;
+        self.sync_pending = None;
+        let data = self.service.save_data();
+        self.sync.join(code, data);
+    }
+
+    pub fn sync_unlink(&mut self) {
+        self.sync_user = true;
+        self.sync_pending = None;
+        self.sync.unlink();
+    }
+
+    /// Attend les derniers envois (fermeture), au plus `timeout`.
+    pub fn sync_flush(&self, timeout: Duration) {
+        self.sync.flush(timeout);
+    }
+
+    pub fn sync_view(&self) -> SyncView {
+        let available = self.sync.available();
+        let code = self.sync.code().map(str::to_string);
+        let busy = self.sync.busy() || self.sync_pending.is_some();
+        let (status, error) = if !available {
+            (
+                "Synchronisation indisponible dans cette version.".to_string(),
+                false,
+            )
+        } else if busy {
+            ("Synchronisation en cours…".to_string(), false)
+        } else {
+            match self.sync.state() {
+                SyncState::Error(e) => (format!("⚠ {e}"), true),
+                SyncState::Done { at } if code.is_some() => (
+                    format!(
+                        "✓ Synchronisé il y a {}",
+                        fmt::duration(at.elapsed().as_secs_f64())
+                    ),
+                    false,
+                ),
+                _ if code.is_some() => ("En attente de synchronisation.".to_string(), false),
+                _ => ("Cet appareil n'est lié à aucun autre.".to_string(), false),
+            }
+        };
+        SyncView {
+            available,
+            code,
+            busy,
+            status,
+            error,
+        }
+    }
+
+    fn update_sync(&mut self, real_dt: f64) {
+        while let Some(ev) = self.sync.poll() {
+            self.react_sync(ev);
+        }
+        self.sync_timer += real_dt;
+        if self.sync_timer >= SYNC_INTERVAL {
+            self.sync_now();
+        }
+        if self.sync_pending.is_some() && !self.adoption_blocked() {
+            self.adopt_remote();
+        }
+    }
+
+    /// On ne remplace pas la partie au milieu d'une grande séquence ou d'un
+    /// Défi du jour : on attend qu'ils finissent.
+    fn adoption_blocked(&self) -> bool {
+        self.service.in_daily()
+            || self.vis.nova.is_some()
+            || self.vis.bang.is_some()
+            || self.vis.ending.is_some()
+            || self.vis.key_ceremony.is_some()
+            || self.ui.portal.is_some()
+            || self.ui.wipe_at.is_some()
+    }
+
+    fn adopt_remote(&mut self) {
+        let Some(remote) = self.sync_pending.take() else {
+            return;
+        };
+        let now = self.now;
+        let result = self
+            .service
+            .replace_save(&remote.data)
+            .map_err(|e| e.to_string())
+            .and_then(|()| self.reload_save());
+        match result {
+            Ok(()) => {
+                self.sync.adopted();
+                self.toasts.push(
+                    now,
+                    theme::CYAN,
+                    "↕ Partie synchronisée",
+                    "Reprise depuis ton autre appareil (l'ancienne est gardée en .bak)",
+                );
+            }
+            Err(e) => {
+                self.sync.adopt_failed();
+                self.toasts
+                    .push(now, theme::ORANGE, "Synchronisation impossible", e);
+            }
+        }
+    }
+
+    /// Options › Synchronisation.
+    pub(crate) fn open_sync_view(&mut self) {
+        if self.sync.available() {
+            self.ui.options_sync = true;
+            self.ui.options_armed = false;
+        } else {
+            self.toasts.push(
+                self.now,
+                theme::GREY,
+                "Synchronisation",
+                "Indisponible dans cette version (relais non configuré)",
+            );
+        }
+    }
+
+    /// Touches de l'écran de synchronisation (terminal).
+    fn on_sync_intent(&mut self, intent: Intent) {
+        match intent {
+            Intent::Buy | Intent::Yes if self.sync.linked() => {
+                if self.ui.options_armed {
+                    self.ui.options_armed = false;
+                    self.sync_unlink();
+                } else {
+                    self.ui.options_armed = true;
+                }
+            }
+            Intent::Buy | Intent::Yes if !self.sync.busy() => self.sync_create(),
+            Intent::Escape | Intent::No | Intent::Options | Intent::Quit => {
+                if self.ui.options_armed {
+                    self.ui.options_armed = false;
+                } else {
+                    self.ui.options_sync = false;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn react_sync(&mut self, ev: SyncEvent) {
+        let now = self.now;
+        match ev {
+            SyncEvent::Linked { .. } => self.toasts.push(
+                now,
+                theme::GREEN,
+                "↕ Lien créé",
+                "Scanne le QR code avec ton autre appareil",
+            ),
+            SyncEvent::Joined { .. } => self.toasts.push(
+                now,
+                theme::GREEN,
+                "↕ Appareils liés",
+                "La partie la plus jouée est gardée sur les deux",
+            ),
+            SyncEvent::Unlinked => {
+                self.sync_user = false;
+                self.toasts.push(
+                    now,
+                    theme::GREY,
+                    "↕ Appareil délié",
+                    "Ta partie reste sur cet appareil",
+                );
+            }
+            SyncEvent::Synced => self.sync_user = false,
+            SyncEvent::Adopt(remote) => {
+                self.sync_user = false;
+                self.sync_pending = Some(remote);
+            }
+            SyncEvent::Failed(msg) => {
+                // Hors ligne en arrière-plan : l'état reste visible dans les
+                // Options, sans toast toutes les deux minutes.
+                if std::mem::take(&mut self.sync_user) {
+                    self.toasts
+                        .push(now, theme::ORANGE, "Synchronisation impossible", msg);
+                }
+            }
+        }
     }
 
     /// Désactive l'écran « terminal trop petit » (mode mobile : la taille est connue).
@@ -451,6 +689,7 @@ impl App {
                     if o.is_closed(now) {
                         self.ui.options = None;
                         self.ui.options_armed = false;
+                        self.ui.options_sync = false;
                     }
                 }
                 if let Some(r) = self.ui.relics {
@@ -543,6 +782,7 @@ impl App {
         while let Some(ev) = self.updates.poll() {
             self.react_update(ev);
         }
+        self.update_sync(real_dt);
         self.update_restart(now);
     }
 
@@ -799,6 +1039,10 @@ impl App {
             return;
         }
         if let Some(popup) = self.ui.options {
+            if popup.closing_at.is_none() && self.ui.options_sync {
+                self.on_sync_intent(intent);
+                return;
+            }
             if popup.closing_at.is_none() {
                 match intent {
                     Intent::Up => {
@@ -814,6 +1058,7 @@ impl App {
                         0 => self.command(Command::CycleColorMode),
                         1 => self.command(Command::CycleFrameRate),
                         2 => self.command(Command::ToggleReducedEffects),
+                        crate::widgets::options::SYNC_ITEM => self.open_sync_view(),
                         _ if self.ui.options_armed => {
                             self.ui.options = None;
                             self.ui.options_armed = false;
@@ -1137,6 +1382,7 @@ impl App {
                 });
                 self.ui.options_sel = 0;
                 self.ui.options_armed = false;
+                self.ui.options_sync = false;
             }
             Intent::Cosmos => {
                 if self.snap.lab_unlocked {
@@ -1747,6 +1993,18 @@ impl App {
                 self.ui = crate::ui::Ui::default();
                 self.title = TitleScreen::new(now, seed() ^ 0x7177);
                 self.screen = Screen::Title;
+                // Sinon, l'ancienne partie (plus jouée) reviendrait des autres
+                // appareils : celui-ci quitte le lien, les autres la gardent.
+                if self.sync.linked() {
+                    self.sync_pending = None;
+                    self.sync.unlink();
+                    self.journal.push(
+                        0.0,
+                        now,
+                        Kind::Info,
+                        "↕ Cet appareil n'est plus synchronisé : ton ancienne partie reste sur les autres.",
+                    );
+                }
             }
             GameEvent::DailyStarted { .. } => {
                 let now = self.now;
@@ -2978,6 +3236,7 @@ impl App {
             .map(|d| d.as_secs() / 86_400)
             .unwrap_or(0);
         let version = display_version(self.updates.current_version());
+        let sync_view = self.sync_view();
         let legacy = self.legacy_open();
         let App {
             service,
@@ -3047,6 +3306,7 @@ impl App {
                             today,
                             save_path: &save_path,
                             version: &version,
+                            sync: &sync_view,
                             journal,
                             toasts,
                             spark_scratch,
@@ -3211,13 +3471,17 @@ pub fn run(
     service: GameService,
     startup: Vec<GameEvent>,
     updates: UpdateService,
+    sync: SyncService,
 ) -> io::Result<RunOutcome> {
     let mut guard = TerminalGuard::new()?;
     let mut app = App::new(service, startup);
     app.set_updates(updates);
+    app.set_sync(sync);
     let result = app.run_loop(guard.terminal());
-    let save_error = app.service.save().err().map(|e| e.to_string());
+    // Sauvegarde finale, envoyée aussi aux autres appareils.
+    let save_error = app.save_now().err();
     drop(guard);
+    app.sync_flush(SYNC_FLUSH);
     let restart = app.should_restart() && save_error.is_none();
     result.map(|_| RunOutcome {
         save_error,
