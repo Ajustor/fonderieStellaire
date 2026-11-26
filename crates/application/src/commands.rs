@@ -37,7 +37,7 @@ pub enum Command {
     Forge(GeneratorId),
     /// Lance la prochaine étape du Grand Attracteur.
     BuildAttractor,
-    /// Images par seconde : 30 → 20 → 15 → 30.
+    /// Images par seconde : 30 → 60 → 20 → 15 → 30.
     CycleFrameRate,
     /// Efface la partie et repart de zéro (les réglages sont gardés).
     NewGame,
@@ -45,4 +45,8 @@ pub enum Command {
     LaunchExpedition(usize),
     /// Équipe ou range une relique.
     ToggleRelic(domain::RelicId),
+    /// Répond à l'événement cosmique en attente (index du choix).
+    ResolveEvent(usize),
+    /// Lance la Convergence.
+    StartConvergence,
 }

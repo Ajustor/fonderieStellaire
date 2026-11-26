@@ -54,7 +54,9 @@ grep -rlE "serde|std::fs"     crates | grep -v crates/infrastructure # → rien
   réel avancées comme les recherches), Carte stellaire (`starmap.rs` : carte
   générée depuis une graine sauvegardée, expéditions dont l'issue est tirée au
   départ), Reliques (`relic.rs` : collection, rareté tirée au retour, effets
-  des reliques équipées et bonus d'ensemble) et l'agrégat `GameState`
+  des reliques équipées et bonus d'ensemble), Événements cosmiques et
+  Convergence (`cosmic.rs` : dilemmes, bonus temporaires, finale de l'Acte III)
+  et l'agrégat `GameState`
   (dont l'automate d'achat et « tout acheter »). Le temps (`dt`) et les tirages
   aléatoires (`roll: f64`) arrivent **en paramètre**. Chaque opération pousse des
   `DomainEvent` dans un `Vec`.
@@ -230,6 +232,15 @@ L'identifiant texte (`key`) doit rester **stable** : c'est lui qui est sauvegard
 domaine, stratégie automatique de `application::simulator`) pour un joueur qui
 joue 3 h par jour, et affiche quand chaque étape est atteinte. Sans argument :
 jeu continu. À relancer après tout changement d'équilibrage.
+
+### Chiffrement des sauvegardes
+
+`infrastructure/src/save_crypto.rs` chiffre (flux dérivé de SHA-256) et signe
+(HMAC-SHA256) la sauvegarde. La clé des versions officielles vient du secret
+`FONDERIE_SAVE_KEY` du dépôt, injecté à la compilation par `release.yml`
+(binaires) et en secret BuildKit (image Docker). **Ne jamais changer ce
+secret** : toutes les sauvegardes existantes deviendraient illisibles. Sans
+le secret (compilation locale), une clé de développement est utilisée.
 
 ### Écrire un texte sans qu'il soit coupé
 

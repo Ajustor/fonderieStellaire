@@ -218,6 +218,13 @@ fn no_text_is_cut_anywhere() {
     relics.equipped = vec!["r_hammer".into()];
     relics.shards = 12;
     report.extend(audit("reliques", relics, &[Intent::Relics], 8));
+    for key in ["civ_signal", "plasma_storm", "merchant", "nearby_nova"] {
+        let mut ev = act3.clone();
+        ev.map_seed = 42;
+        ev.pending_event = key.into();
+        ev.pending_left = 3000.0;
+        report.extend(audit(&format!("événement {key}"), ev, &[Intent::Event], 2));
+    }
     let mut bang = late.clone();
     bang.crunches = 34;
     report.extend(audit("cosmogonie", bang, &[Intent::Cosmos], 11));

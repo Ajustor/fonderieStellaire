@@ -36,6 +36,7 @@ use crate::theme::GEN_SLOTS;
 use crate::ui::{Panel, Popup, Ui};
 use crate::visuals::{Visuals, NEVER};
 use crate::widgets::cosmos::{self, CosmosItem, PARTICLE};
+use crate::widgets::event::EventPopup;
 use crate::widgets::journal::{Journal, Kind};
 use crate::widgets::portals::PortalState;
 use crate::widgets::shop::{self, ShopItem};
@@ -554,6 +555,30 @@ impl App {
             }
             return;
         }
+        if let Some(mut popup) = self.ui.event {
+            let count = self
+                .snap
+                .pending_event
+                .and_then(|(i, _)| self.service.catalog().events.get(i))
+                .map(|e| e.choices.len())
+                .unwrap_or(0);
+            match intent {
+                Intent::Up => popup.sel = popup.sel.saturating_sub(1),
+                Intent::Down => popup.sel = (popup.sel + 1).min(count.saturating_sub(1)),
+                Intent::Buy | Intent::Yes => {
+                    self.ui.event = None;
+                    self.command(Command::ResolveEvent(popup.sel));
+                    return;
+                }
+                Intent::Event | Intent::Escape | Intent::No | Intent::Quit => {
+                    self.ui.event = None;
+                    return;
+                }
+                _ => {}
+            }
+            self.ui.event = Some(popup);
+            return;
+        }
         if let Some(popup) = self.ui.relics {
             if popup.closing_at.is_none() {
                 let sel = self.ui.relics_sel;
@@ -591,6 +616,11 @@ impl App {
                 Intent::Buy | Intent::Yes if map.sel > 0 => {
                     self.ui.starmap = Some(map);
                     self.command(Command::LaunchExpedition(map.sel));
+                    return;
+                }
+                Intent::Buy | Intent::Yes if self.snap.convergence_ready => {
+                    self.ui.starmap = Some(map);
+                    self.command(Command::StartConvergence);
                     return;
                 }
                 Intent::StarMap | Intent::Escape | Intent::No | Intent::Quit => {
@@ -856,6 +886,17 @@ impl App {
                 }
             }
             Intent::Save => self.command(Command::Save),
+            Intent::Event => {
+                if self.snap.pending_event.is_some() {
+                    self.ui.event = Some(EventPopup {
+                        opened_at: now,
+                        sel: 0,
+                    });
+                } else {
+                    self.toasts
+                        .push(now, theme::GREY, "Événements", "Aucun événement en attente");
+                }
+            }
             Intent::Relics => {
                 if self.snap.starmap_unlocked {
                     self.ui.relics = Some(Popup {
@@ -1189,6 +1230,50 @@ impl App {
         ]
     }
 
+    /// Générique de la fin de l'Acte III.
+    fn credits_act_three(&self) -> Vec<CreditLine> {
+        let s = &self.snap;
+        let gold = theme::GOLD;
+        let text = theme::TEXT;
+        let muted = theme::MUTED;
+        let line = |t: &str, c, b| (t.to_string(), c, b);
+        let relics = s.relics.iter().filter(|r| r.rarity.is_some()).count();
+        let legendary = s.relics.iter().filter(|r| r.rarity == Some(3)).count();
+        vec![
+            line("✶  LA CONVERGENCE  ✶", gold, true),
+            line("", text, false),
+            line("Toutes les routes stellaires mènent à ta fonderie.", text, false),
+            line("Le cosmos entier forge désormais avec toi.", text, false),
+            line("", text, false),
+            line("FIN DE L'ACTE III", theme::PINK, true),
+            line("", text, false),
+            (format!("Temps de jeu : {}", fmt::duration(s.play_time)), muted, false),
+            (
+                format!(
+                    "Systèmes explorés : {} · reliques : {relics}/16 dont {legendary} légendaire(s)",
+                    s.explored
+                ),
+                muted,
+                false,
+            ),
+            (
+                format!(
+                    "Événements cosmiques : {} · succès : {}/{}",
+                    s.events_resolved, s.achievements_unlocked, s.achievements_total
+                ),
+                muted,
+                false,
+            ),
+            line("", text, false),
+            line("FONDERIE STELLAIRE", theme::CYAN, true),
+            line("Conçu et forgé par Ajustor", text, false),
+            line("", text, false),
+            line("Merci d'avoir joué jusqu'ici !", gold, true),
+            line("", text, false),
+            line("La fonderie continue : production ×10, et les reliques légendaires t'attendent.", muted, false),
+        ]
+    }
+
     fn lab_name(&self, id: domain::LabId) -> &'static str {
         self.service
             .catalog()
@@ -1291,6 +1376,20 @@ impl App {
                 self.log(
                     Kind::Error,
                     "Nouvel équilibrage : l'ancienne partie a été effacée, tout le monde repart de zéro.",
+                );
+            }
+            GameEvent::SaveTampered { backup } => {
+                self.log(
+                    Kind::Error,
+                    format!(
+                        "Sauvegarde modifiée à la main : refusée (mise de côté dans {backup}). Nouvelle partie."
+                    ),
+                );
+                self.toasts.push(
+                    self.now,
+                    theme::RED,
+                    "Sauvegarde refusée",
+                    "Elle avait été modifiée : nouvelle partie",
                 );
             }
             GameEvent::SaveRecovered { backup } => {
@@ -1399,6 +1498,14 @@ impl App {
                         format!("Pas assez de particules {PARTICLE}")
                     };
                     self.toasts.push(now, theme::GREY, "Grand Attracteur", body);
+                }
+                PurchaseTarget::Convergence => {
+                    self.toasts.push(
+                        now,
+                        theme::GREY,
+                        "Convergence",
+                        "Explore toute la carte et réunis les 16 reliques",
+                    );
                 }
                 PurchaseTarget::Relic(_) => {
                     let body = if self.snap.relics_equipped >= self.snap.relic_slots {
@@ -2020,6 +2127,108 @@ impl App {
                     self.vis.fireworks(now + 0.5);
                     self.vis.fireworks(now + 1.0);
                 }
+            }
+            DomainEvent::CosmicEventStarted { event } => {
+                let title = self
+                    .service
+                    .catalog()
+                    .events
+                    .get(event)
+                    .map(|e| e.title)
+                    .unwrap_or("?");
+                self.log(Kind::Info, format!("✹ Événement cosmique : {title} [Z]"));
+                // On l'ouvre tout de suite si rien d'autre n'occupe l'écran.
+                let busy = self.ui.shop.is_some()
+                    || self.ui.lab.is_some()
+                    || self.ui.cosmos.is_some()
+                    || self.ui.relics.is_some()
+                    || self.ui.options.is_some()
+                    || self.ui.starmap.is_some()
+                    || self.ui.portal.is_some()
+                    || self.ui.codex.is_some()
+                    || self.ui.challenges.is_some()
+                    || self.vis.nova.is_some()
+                    || self.vis.bang.is_some()
+                    || self.vis.ending.is_some();
+                if busy || self.screen != Screen::Game {
+                    self.toasts.push(
+                        now,
+                        crate::fx::Rgb(120, 230, 255),
+                        "✹ Événement cosmique",
+                        format!("{title} : [Z] pour décider"),
+                    );
+                } else {
+                    self.ui.event = Some(EventPopup {
+                        opened_at: now,
+                        sel: 0,
+                    });
+                }
+            }
+            DomainEvent::CosmicEventResolved {
+                event,
+                choice,
+                success,
+            } => {
+                let catalog = self.service.catalog();
+                let (title, label, outcome) = catalog
+                    .events
+                    .get(event)
+                    .and_then(|e| e.choices.get(choice).map(|c| (e.title, c)))
+                    .map(|(t, c)| {
+                        let effect = match (success, c.risk) {
+                            (false, Some((_, fail))) => fail,
+                            _ => c.effect,
+                        };
+                        (t, c.label, domain::cosmic::effect_text(effect))
+                    })
+                    .unwrap_or(("?", "?", String::new()));
+                let (color, head) = if success {
+                    (theme::GOLD, format!("✹ {label}"))
+                } else {
+                    (theme::RED, format!("✹ {label} : raté !"))
+                };
+                self.log(Kind::Info, format!("✹ {title} — {label} : {outcome}"));
+                self.toasts.push(now, color, head, outcome);
+            }
+            DomainEvent::CosmicEventExpired { event } => {
+                let title = self
+                    .service
+                    .catalog()
+                    .events
+                    .get(event)
+                    .map(|e| e.title)
+                    .unwrap_or("?");
+                self.ui.event = None;
+                self.log(Kind::Info, format!("✹ {title} : l'occasion est passée"));
+            }
+            DomainEvent::ConvergenceStarted => {
+                self.log(
+                    Kind::Achievement,
+                    "✶ La Convergence commence : tous les secteurs se relient à la fonderie (48 h)",
+                );
+                self.toasts.push(
+                    now,
+                    theme::GOLD,
+                    "✶ Convergence lancée",
+                    "Les routes se relient à la fonderie (48 h, même jeu fermé)",
+                );
+                self.vis.fireworks(now);
+                self.vis.fireworks(now + 0.6);
+            }
+            DomainEvent::ConvergenceDone => {
+                self.log(
+                    Kind::Achievement,
+                    "✶ La Convergence est accomplie : fin de l'Acte III !",
+                );
+                self.ui.starmap = None;
+                self.ui.event = None;
+                self.service.fill_snapshot(&mut self.snap);
+                let credits = self.credits_act_three();
+                self.vis.ending = Some(EndingSequence::new(now + 1.0, credits).with_palette([
+                    crate::fx::Rgb(120, 230, 255),
+                    crate::fx::Rgb(255, 205, 90),
+                    crate::fx::Rgb(255, 120, 200),
+                ]));
             }
             DomainEvent::RelicToggled { relic, equipped } => {
                 let name = self

@@ -66,7 +66,7 @@ pub fn render(
         ),
     ];
     let help = match selected {
-        0 => "30, 20 ou 15 images par seconde. Baisse-les si ton terminal saccade : le jeu tourne pareil, seules les animations sont moins fluides.".to_string(),
+        0 => "60, 30, 20 ou 15 images par seconde. 60 rend les animations très fluides si ton terminal suit ; baisse-les s'il saccade : le jeu tourne pareil, seules les animations changent.".to_string(),
         1 => "Moins de secousses, de flashs et de nébuleuses animées. Raccourci : [F].".to_string(),
         _ if armed => "ATTENTION : Entrée de nouveau pour TOUT effacer (fragments, Big Crunch, Laboratoire, Clés, particules, succès). C'est définitif. [Échap] pour annuler.".to_string(),
         _ => "Efface ta sauvegarde et repart de zéro. Pour en garder une copie avant : fonderie-stellaire --export fichier".to_string(),

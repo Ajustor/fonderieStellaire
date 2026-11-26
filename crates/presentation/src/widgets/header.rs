@@ -97,6 +97,24 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
                 .map(|f| f.remaining)
                 .fold(None, |a: Option<f64>, r| Some(a.map_or(r, |a| a.min(r))))
                 .map(|next| (snap.fleets.len(), fmt::duration(next)));
+            let boost = snap
+                .boosts
+                .iter()
+                .filter(|b| b.kind == domain::BoostKind::Production)
+                .fold(None, |a: Option<(f64, f64)>, b| {
+                    Some(a.map_or((b.factor, b.left), |(f, l)| (f * b.factor, l.min(b.left))))
+                })
+                .map(|(f, l)| format!(" ✹ ×{} {} ·", fmt::short(f), fmt::duration(l)))
+                .unwrap_or_default();
+            let event = if snap.pending_event.is_some() {
+                " ✹ événement [Z] ·"
+            } else {
+                ""
+            };
+            let converge = snap
+                .convergence
+                .map(|(l, _)| format!(" ✶ Convergence {} ·", fmt::duration(l)))
+                .unwrap_or_default();
             let pct = fmt::percent(snap.progress.completion);
             let room = area
                 .width
@@ -128,9 +146,16 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
                 }
                 s
             };
-            variants.push(format!("{} progression {pct} [I] ", full(true)));
-            variants.push(format!("{} progression {pct} [I] ", full(false)));
-            variants.push(format!("{} {pct} ", full(false)));
+            variants.push(format!(
+                "{event}{converge}{boost}{} progression {pct} [I] ",
+                full(true)
+            ));
+            variants.push(format!(
+                "{event}{converge}{boost}{} progression {pct} [I] ",
+                full(false)
+            ));
+            variants.push(format!("{event}{boost}{} {pct} ", full(false)));
+            variants.push(format!("{event} {pct} "));
             variants.push(format!(" {pct} "));
             let text = variants
                 .iter()

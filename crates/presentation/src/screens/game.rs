@@ -15,7 +15,7 @@ use crate::visuals::Visuals;
 use crate::widgets::journal::Journal;
 use crate::widgets::toast::Toasts;
 use crate::widgets::{
-    ceremony, challenges, codex, cosmos, generators, header, help_bar, journal, lab, modal,
+    ceremony, challenges, codex, cosmos, event, generators, header, help_bar, journal, lab, modal,
     options, portals, relics, shop, sky, sparkline, starmap, upgrades, Ctx,
 };
 
@@ -118,6 +118,9 @@ pub fn render(
     }
     if let Some(m) = ui.starmap {
         starmap::render(buf, area, ctx, &m, &vis.stars, &vis.map_pops);
+    }
+    if let Some(popup) = ui.event {
+        event::render(buf, area, ctx, &popup);
     }
     // Relique trouvée : par-dessus tout, même la carte.
     if let Some(card) = vis.relic_card {

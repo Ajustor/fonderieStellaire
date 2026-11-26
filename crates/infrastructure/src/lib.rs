@@ -3,6 +3,7 @@
 
 pub mod github_updater;
 pub mod json_repository;
+pub mod save_crypto;
 pub mod system_clock;
 pub mod xorshift;
 

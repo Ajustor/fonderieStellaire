@@ -78,6 +78,16 @@ pub struct SaveData {
     pub relics: Vec<(String, u8)>,
     pub equipped: Vec<String>,
     pub shards: u32,
+    /// Événements cosmiques : délai, événement en attente (clé, secondes),
+    /// bonus (0 production / 1 fragments, facteur, secondes), résolus.
+    pub event_timer: f64,
+    pub pending_event: String,
+    pub pending_left: f64,
+    pub boosts: Vec<(u8, f64, f64)>,
+    pub events_resolved: u32,
+    /// Convergence : secondes restantes (0 : aucune), achevée.
+    pub convergence_left: f64,
+    pub converged: bool,
 }
 
 impl SaveData {
@@ -211,6 +221,27 @@ impl SaveData {
                 .filter_map(|&id| catalog.relic(id).map(|r| r.key.to_string()))
                 .collect(),
             shards: state.shards,
+            event_timer: state.event_timer,
+            pending_event: state
+                .pending_event
+                .and_then(|(i, _)| catalog.events.get(i))
+                .map(|e| e.key.to_string())
+                .unwrap_or_default(),
+            pending_left: state.pending_event.map(|(_, l)| l).unwrap_or(0.0),
+            boosts: state
+                .boosts
+                .iter()
+                .map(|b| {
+                    let kind = match b.kind {
+                        domain::BoostKind::Production => 0,
+                        domain::BoostKind::Fragments => 1,
+                    };
+                    (kind, b.factor, b.left)
+                })
+                .collect(),
+            events_resolved: state.events_resolved,
+            convergence_left: state.convergence.unwrap_or(0.0),
+            converged: state.converged,
         }
     }
 
@@ -327,6 +358,28 @@ impl SaveData {
             .filter_map(|k| catalog.relic_by_key(k))
             .collect();
         s.shards = self.shards;
+        s.event_timer = self.event_timer;
+        s.pending_event = catalog
+            .events
+            .iter()
+            .find(|e| e.key == self.pending_event)
+            .map(|e| (e.index, self.pending_left));
+        s.boosts = self
+            .boosts
+            .iter()
+            .map(|&(kind, factor, left)| domain::Boost {
+                kind: if kind == 1 {
+                    domain::BoostKind::Fragments
+                } else {
+                    domain::BoostKind::Production
+                },
+                factor,
+                left,
+            })
+            .collect();
+        s.events_resolved = self.events_resolved;
+        s.convergence = (self.convergence_left > 0.0).then_some(self.convergence_left);
+        s.converged = self.converged;
         s.expeditions_launched = self.expeditions_launched;
         // 0 (valeur par défaut) ou négatif : aucun chantier en cours.
         s.attractor_build = (self.attractor_left > 0.0).then_some(self.attractor_left);

@@ -43,6 +43,8 @@ pub enum Intent {
     StarMap,
     /// `H` : Reliques (Acte III).
     Relics,
+    /// `Z` : revenir à l'événement cosmique en attente.
+    Event,
     /// `T` : activer / arrêter l'automate.
     ToggleAuto,
     /// `PgUp` / `PgDn` : remonter / redescendre dans le journal.
@@ -169,6 +171,7 @@ pub fn map_key(key: &KeyEvent) -> Option<Intent> {
             'r' => Intent::Options,
             'x' => Intent::StarMap,
             'h' => Intent::Relics,
+            'z' => Intent::Event,
             't' => Intent::ToggleAuto,
             'o' | 'y' => Intent::Yes,
             'n' => Intent::No,

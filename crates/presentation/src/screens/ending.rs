@@ -32,11 +32,22 @@ pub type CreditLine = (String, Rgb, bool);
 pub struct EndingSequence {
     pub start: f64,
     lines: Vec<CreditLine>,
+    palette: [Rgb; 3],
 }
 
 impl EndingSequence {
     pub fn new(now: f64, lines: Vec<CreditLine>) -> Self {
-        EndingSequence { start: now, lines }
+        EndingSequence {
+            start: now,
+            lines,
+            palette: ATTRACTOR_PALETTE,
+        }
+    }
+
+    /// Autres couleurs (fin de l'Acte III : la Convergence).
+    pub fn with_palette(mut self, palette: [Rgb; 3]) -> Self {
+        self.palette = palette;
+        self
     }
 
     pub fn t(&self, now: f64) -> f64 {
@@ -64,7 +75,7 @@ impl EndingSequence {
                 let a = a0 + p * (3.0 + 4.0 * hash3(i, 13, 3));
                 let x = cx + r * a.cos();
                 let y = cy + r * a.sin() / 2.0;
-                let c = ATTRACTOR_PALETTE[i as usize % 3].lerp(theme::WHITE, p);
+                let c = self.palette[i as usize % 3].lerp(theme::WHITE, p);
                 let ch = if r < 3.0 { '✦' } else { '·' };
                 draw::put(buf, area, x as i32, y as i32, ch, c);
             }
@@ -90,7 +101,7 @@ impl EndingSequence {
             cy,
             radius,
             now * 0.6,
-            &ATTRACTOR_PALETTE,
+            &self.palette,
             if t > CREDITS_AT { 0.45 } else { 1.0 },
         );
         // Éclair doré.

@@ -13,6 +13,9 @@ use crate::comet::{
     CometKind, CometReward, CometState, BLACK_THEFT, GOLDEN_DURATION, GOLDEN_MULTIPLIER,
 };
 use crate::constellation::{ConstellationEffect, ConstellationId};
+use crate::cosmic::{
+    next_event_delay, Boost, BoostKind, EventEffect, CONVERGENCE_SECS, EVENT_EXPIRY,
+};
 use crate::cosmos::{particles_for, AttractorEffect};
 use crate::economy;
 use crate::events::RelicOutcome;
@@ -121,6 +124,15 @@ pub struct GameState {
     pub relics: Vec<Option<u8>>,
     pub equipped: Vec<RelicId>,
     pub shards: u32,
+    /// Événements cosmiques : délai avant le prochain, événement en attente
+    /// (index, secondes pour répondre), bonus temporaires, événements résolus.
+    pub event_timer: f64,
+    pub pending_event: Option<(usize, f64)>,
+    pub boosts: Vec<Boost>,
+    pub events_resolved: u32,
+    /// Convergence : secondes restantes si elle est en cours, et achevée ou non.
+    pub convergence: Option<f64>,
+    pub converged: bool,
     /// Niveau de chaque Constellation.
     pub constellations: Vec<u32>,
     revealed: Vec<bool>,
@@ -179,6 +191,12 @@ impl GameState {
             relics: Vec::new(),
             equipped: Vec::new(),
             shards: 0,
+            event_timer: 0.0,
+            pending_event: None,
+            boosts: Vec::new(),
+            events_resolved: 0,
+            convergence: None,
+            converged: false,
             constellations: Vec::new(),
             revealed: Vec::new(),
             autobuy_timer: 0.0,
@@ -224,6 +242,21 @@ impl GameState {
         });
         let slots = self.relic_slots();
         self.equipped.truncate(slots);
+        if self
+            .pending_event
+            .is_some_and(|(i, left)| i >= catalog.events.len() || !left.is_finite())
+        {
+            self.pending_event = None;
+        }
+        self.boosts.retain(|b| {
+            b.left.is_finite() && b.left > 0.0 && b.factor.is_finite() && b.factor > 0.0
+        });
+        if !self.event_timer.is_finite() || self.event_timer < 0.0 {
+            self.event_timer = 0.0;
+        }
+        if self.converged || self.convergence.is_some_and(|l| !l.is_finite()) {
+            self.convergence = None;
+        }
         // Carte stellaire : reconstruite depuis sa graine.
         if self.map_seed != 0 && self.map.systems.is_empty() {
             self.map = starmap::generate(self.map_seed);
@@ -454,6 +487,7 @@ impl GameState {
             * self.crunch_fragments()
             * self.particle_fragments()
             * self.map_bonus(SystemKind::Cluster, 0.10)
+            * self.boost_factor(BoostKind::Fragments)
             * (1.0
                 + self.relic_sum(catalog, |e| match e {
                     RelicEffect::Fragments(x) => Some(x),
@@ -889,6 +923,9 @@ impl GameState {
         self.advance_attractor(catalog, dt, events);
         self.ensure_map(catalog, roll, events);
         self.advance_expeditions(catalog, dt, events);
+        self.advance_convergence(catalog, dt, events);
+        self.advance_boosts(dt);
+        self.advance_cosmic_events(catalog, dt, roll, events);
 
         // Filet à comètes : capture les comètes normales après 2 s de passage.
         if self.lab_active(catalog, LabEffect::CometNet)
@@ -1048,6 +1085,16 @@ impl GameState {
         self.advance_research(catalog, elapsed_secs, events);
         self.advance_attractor(catalog, elapsed_secs, events);
         self.advance_expeditions(catalog, elapsed_secs, events);
+        self.advance_convergence(catalog, elapsed_secs, events);
+        self.advance_boosts(elapsed_secs);
+        if let Some((event, left)) = self.pending_event {
+            if left <= elapsed_secs {
+                self.pending_event = None;
+                events.push(DomainEvent::CosmicEventExpired { event });
+            } else {
+                self.pending_event = Some((event, left - elapsed_secs));
+            }
+        }
         let (rate, cap) = self.offline_terms(catalog);
         let seconds = elapsed_secs.min(cap);
         let amount = economy::steady_production(catalog, self) * seconds * rate;
@@ -1443,6 +1490,187 @@ impl GameState {
             && self.is_revealed(system)
             && !self.fleets.iter().any(|f| f.target == system)
             && self.fleets.len() < self.fleets_max()
+    }
+
+    // ------------------------------------------------------------------
+    // Événements cosmiques et Convergence
+    // ------------------------------------------------------------------
+
+    /// Multiplicateur des bonus temporaires d'un type.
+    pub fn boost_factor(&self, kind: BoostKind) -> f64 {
+        self.boosts
+            .iter()
+            .filter(|b| b.kind == kind)
+            .map(|b| b.factor)
+            .product()
+    }
+
+    fn advance_boosts(&mut self, secs: f64) {
+        for b in &mut self.boosts {
+            b.left -= secs;
+        }
+        self.boosts.retain(|b| b.left > 0.0);
+    }
+
+    /// Les événements arrivent pendant le jeu (pas jeu fermé) à partir de
+    /// l'Acte III ; on a une heure pour répondre.
+    fn advance_cosmic_events(
+        &mut self,
+        catalog: &Catalog,
+        dt: f64,
+        roll: f64,
+        events: &mut Vec<DomainEvent>,
+    ) {
+        if self.map_seed == 0 || catalog.events.is_empty() {
+            return;
+        }
+        if let Some((event, left)) = self.pending_event {
+            let left = left - dt;
+            if left <= 0.0 {
+                self.pending_event = None;
+                events.push(DomainEvent::CosmicEventExpired { event });
+            } else {
+                self.pending_event = Some((event, left));
+            }
+            return;
+        }
+        if self.event_timer <= 0.0 {
+            // Premier passage : on arme le compte à rebours.
+            self.event_timer = next_event_delay(roll);
+            return;
+        }
+        self.event_timer -= dt;
+        if self.event_timer <= 0.0 {
+            let event = ((roll * 7.31).fract() * catalog.events.len() as f64) as usize;
+            let event = event.min(catalog.events.len() - 1);
+            self.pending_event = Some((event, EVENT_EXPIRY));
+            self.event_timer = next_event_delay((roll * 13.7).fract()).max(1.0);
+            events.push(DomainEvent::CosmicEventStarted { event });
+        }
+    }
+
+    /// Répond à l'événement en attente. `roll` décide d'un choix risqué.
+    pub fn resolve_event(
+        &mut self,
+        catalog: &Catalog,
+        choice: usize,
+        roll: f64,
+        events: &mut Vec<DomainEvent>,
+    ) {
+        let Some((event, _)) = self.pending_event else {
+            return;
+        };
+        let Some(c) = catalog
+            .events
+            .get(event)
+            .and_then(|e| e.choices.get(choice))
+            .copied()
+        else {
+            return;
+        };
+        self.pending_event = None;
+        let (effect, success) = match c.risk {
+            Some((chance, fail)) if roll >= chance => (fail, false),
+            _ => (c.effect, true),
+        };
+        self.apply_event_effect(catalog, effect, roll, events);
+        self.events_resolved += 1;
+        events.push(DomainEvent::CosmicEventResolved {
+            event,
+            choice,
+            success,
+        });
+        self.check_achievements(catalog, events);
+    }
+
+    fn apply_event_effect(
+        &mut self,
+        catalog: &Catalog,
+        effect: EventEffect,
+        roll: f64,
+        events: &mut Vec<DomainEvent>,
+    ) {
+        let relic = |s: &mut Self, danger: u8, events: &mut Vec<DomainEvent>| {
+            if catalog.relics.is_empty() {
+                return;
+            }
+            let pick = ((roll * 977.31).fract() * catalog.relics.len() as f64) as usize;
+            let rarity = roll_rarity((roll * 131.7).fract(), danger);
+            s.gain_relic(
+                catalog,
+                RelicId(pick.min(catalog.relics.len() - 1)),
+                rarity,
+                events,
+            );
+        };
+        match effect {
+            EventEffect::Nothing => {}
+            EventEffect::Production { factor, hours } => self.boosts.push(Boost {
+                kind: BoostKind::Production,
+                factor,
+                left: hours * 3600.0,
+            }),
+            EventEffect::Fragments { factor, hours } => self.boosts.push(Boost {
+                kind: BoostKind::Fragments,
+                factor,
+                left: hours * 3600.0,
+            }),
+            EventEffect::Stardust { hours } => {
+                let amount = economy::steady_production(catalog, self) * hours * 3600.0;
+                self.earn(amount);
+            }
+            EventEffect::Relic { danger } => relic(self, danger, events),
+            EventEffect::FleetHaste(p) => {
+                for f in &mut self.fleets {
+                    f.left = (f.left - f.total * p).max(1.0);
+                }
+            }
+            EventEffect::Shard => self.shards += 1,
+            EventEffect::LoseStardust(p) => {
+                let amount = self.stardust.value() * p;
+                self.stardust.spend(amount);
+            }
+            EventEffect::BuyRelic(p) => {
+                let amount = self.stardust.value() * p;
+                self.stardust.spend(amount);
+                relic(self, 5, events);
+            }
+        }
+    }
+
+    /// La Convergence est prête : carte complète et 16 reliques réunies.
+    pub fn convergence_ready(&self, catalog: &Catalog) -> bool {
+        !self.converged
+            && self.convergence.is_none()
+            && !self.map.systems.is_empty()
+            && self.explored_count() + 1 >= self.map.systems.len()
+            && self.relics_owned() >= catalog.relics.len()
+    }
+
+    pub fn start_convergence(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
+        if !self.convergence_ready(catalog) {
+            events.push(DomainEvent::PurchaseFailed {
+                target: PurchaseTarget::Convergence,
+            });
+            return;
+        }
+        self.convergence = Some(CONVERGENCE_SECS);
+        events.push(DomainEvent::ConvergenceStarted);
+    }
+
+    fn advance_convergence(&mut self, catalog: &Catalog, secs: f64, events: &mut Vec<DomainEvent>) {
+        let Some(left) = self.convergence else {
+            return;
+        };
+        let left = left - secs;
+        if left > 0.0 {
+            self.convergence = Some(left);
+            return;
+        }
+        self.convergence = None;
+        self.converged = true;
+        self.check_achievements(catalog, events);
+        events.push(DomainEvent::ConvergenceDone);
     }
 
     // ------------------------------------------------------------------
@@ -2083,6 +2311,8 @@ impl GameState {
                 relic_set_active: RelicSet::ALL
                     .iter()
                     .any(|&s| self.relic_set_active(catalog, s)),
+                cosmic_events: self.events_resolved,
+                converged: self.converged,
             };
             for a in &catalog.achievements {
                 if !self.has_achievement(a.id) && a.condition.is_met(&ctx) {
@@ -3273,5 +3503,71 @@ mod tests {
             .iter()
             .any(|e| matches!(e, DomainEvent::RelicFound { .. })));
         assert_eq!(s.relics_owned(), 1);
+    }
+
+    #[test]
+    fn cosmic_events_arrive_and_resolve_with_risks() {
+        let c = Catalog::standard();
+        let (mut s, mut ev) = act_three(&c);
+        // Le compte à rebours s'arme, puis un événement arrive (2 à 4 h).
+        for _ in 0..(5 * 60) {
+            s.tick(&c, 60.0, 0.5, &mut ev);
+            if s.pending_event.is_some() {
+                break;
+            }
+        }
+        assert!(ev
+            .iter()
+            .any(|e| matches!(e, DomainEvent::CosmicEventStarted { .. })));
+        // Tempête de plasma : récolter l'orage, réussi puis raté.
+        let storm = c
+            .events
+            .iter()
+            .position(|e| e.key == "plasma_storm")
+            .unwrap();
+        s.pending_event = Some((storm, 600.0));
+        s.resolve_event(&c, 1, 0.1, &mut ev);
+        assert_eq!(s.boost_factor(BoostKind::Production), 3.0);
+        s.pending_event = Some((storm, 600.0));
+        s.resolve_event(&c, 1, 0.9, &mut ev);
+        assert_eq!(s.boost_factor(BoostKind::Production), 1.5, "×3 puis ×0,5");
+        assert_eq!(s.events_resolved, 2);
+        assert!(s.has_achievement(c.achievement_by_key("event1").unwrap()));
+        // Les bonus s'éteignent avec le temps (même jeu fermé).
+        s.apply_offline(&c, 2.0 * 3600.0, &mut ev);
+        assert_eq!(s.boost_factor(BoostKind::Production), 1.0);
+        // Sans réponse dans l'heure, l'événement passe.
+        s.pending_event = Some((0, 10.0));
+        ev.clear();
+        s.tick(&c, 11.0, 0.5, &mut ev);
+        assert!(ev
+            .iter()
+            .any(|e| matches!(e, DomainEvent::CosmicEventExpired { .. })));
+    }
+
+    #[test]
+    fn convergence_needs_the_full_map_and_all_relics() {
+        let c = Catalog::standard();
+        let (mut s, mut ev) = act_three(&c);
+        assert!(!s.convergence_ready(&c));
+        s.explored.iter_mut().for_each(|e| *e = true);
+        assert!(!s.convergence_ready(&c), "il manque les reliques");
+        s.relics.iter_mut().for_each(|r| *r = Some(0));
+        assert!(s.convergence_ready(&c));
+        let before = economy::permanent_multiplier(&c, &s);
+        s.start_convergence(&c, &mut ev);
+        assert!(s.convergence.is_some());
+        ev.clear();
+        s.apply_offline(&c, 48.0 * 3600.0 + 1.0, &mut ev);
+        assert!(ev.contains(&DomainEvent::ConvergenceDone));
+        assert!(s.converged);
+        let after = economy::permanent_multiplier(&c, &s);
+        // ×10, plus le +1 % de chaque succès débloqué au passage (carte, reliques…).
+        assert!(
+            (10.0..12.0).contains(&(after / before)),
+            "{}",
+            after / before
+        );
+        assert!(s.has_achievement(c.achievement_by_key("converge").unwrap()));
     }
 }

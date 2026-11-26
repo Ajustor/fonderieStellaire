@@ -75,6 +75,12 @@ pub fn permanent_multiplier(catalog: &Catalog, state: &GameState) -> f64 {
         * state.attractor_production(catalog)
         * state.map_bonus(crate::starmap::SystemKind::Nebula, 0.10)
         * state.relic_production(catalog)
+        * state.boost_factor(crate::cosmic::BoostKind::Production)
+        * if state.converged {
+            crate::cosmic::CONVERGENCE_PRODUCTION
+        } else {
+            1.0
+        }
         * state.lab_production(catalog)
         * state.universe_production(catalog)
         * state.constellation_production(catalog)

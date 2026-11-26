@@ -189,10 +189,39 @@ fn detail_lines(ctx: &Ctx, sel: usize, width: usize) -> Vec<(String, Rgb)> {
             ),
             theme::CYAN,
         );
-        push(
-            "Choisis un système voisin d'un système exploré et envoie une flotte : plus il est dangereux, plus c'est long et risqué, et plus il rapporte.".into(),
-            theme::MUTED,
-        );
+        if snap.converged {
+            push(
+                "La Convergence est accomplie : toutes les routes mènent à ta fonderie.".into(),
+                theme::GOLD,
+            );
+        } else if let Some((left, total)) = snap.convergence {
+            let p = (1.0 - left / total.max(1.0)).clamp(0.0, 1.0);
+            let filled = (p * 20.0).round() as usize;
+            push(
+                format!(
+                    "Convergence {}{} encore {} (même jeu fermé)",
+                    "█".repeat(filled),
+                    "░".repeat(20 - filled),
+                    fmt::duration(left)
+                ),
+                theme::GOLD,
+            );
+        } else if snap.convergence_ready {
+            push(
+                "[Entrée] lancer la Convergence : relier tous les secteurs à la fonderie (48 h, même jeu fermé). C'est la fin de l'Acte III.".into(),
+                theme::GOLD,
+            );
+        } else {
+            push(
+                format!(
+                    "Convergence : explore toute la carte ({}/{}) et réunis les 16 reliques ({}/16).",
+                    snap.explored,
+                    snap.systems.len().saturating_sub(1),
+                    snap.relics.iter().filter(|r| r.rarity.is_some()).count()
+                ),
+                theme::MUTED,
+            );
+        }
         return out;
     }
     let danger: String = (1..=5)

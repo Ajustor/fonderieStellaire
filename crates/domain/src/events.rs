@@ -29,6 +29,8 @@ pub enum PurchaseTarget {
     Expedition(usize),
     /// Équiper une relique.
     Relic(crate::relic::RelicId),
+    /// Lancer la Convergence.
+    Convergence,
 }
 
 /// Ce que devient une relique trouvée.
@@ -190,6 +192,24 @@ pub enum DomainEvent {
         rarity: u8,
         outcome: RelicOutcome,
     },
+    /// Un événement cosmique se présente.
+    CosmicEventStarted {
+        event: usize,
+    },
+    /// Le joueur a choisi ; `success` vaut faux si le risque a mal tourné.
+    CosmicEventResolved {
+        event: usize,
+        choice: usize,
+        success: bool,
+    },
+    /// Personne n'a répondu à temps.
+    CosmicEventExpired {
+        event: usize,
+    },
+    /// La Convergence commence (48 h).
+    ConvergenceStarted,
+    /// Fin de l'Acte III.
+    ConvergenceDone,
     /// Relique équipée ou rangée.
     RelicToggled {
         relic: crate::relic::RelicId,

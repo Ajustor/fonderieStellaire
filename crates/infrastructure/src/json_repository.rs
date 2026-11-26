@@ -6,7 +6,11 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use application::{LoadOutcome, RepositoryError, SaveData, SaveRepository};
+
+use crate::save_crypto::{self, CryptoError};
 use serde::{Deserialize, Serialize};
 
 const APP_DIR: &str = "fonderie-stellaire";
@@ -65,6 +69,13 @@ struct SaveFile {
     relics: Vec<(String, u8)>,
     equipped: Vec<String>,
     shards: u32,
+    event_timer: f64,
+    pending_event: String,
+    pending_left: f64,
+    boosts: Vec<(u8, f64, f64)>,
+    events_resolved: u32,
+    convergence_left: f64,
+    converged: bool,
 }
 
 impl From<&SaveData> for SaveFile {
@@ -118,6 +129,13 @@ impl From<&SaveData> for SaveFile {
             relics: d.relics.clone(),
             equipped: d.equipped.clone(),
             shards: d.shards,
+            event_timer: d.event_timer,
+            pending_event: d.pending_event.clone(),
+            pending_left: d.pending_left,
+            boosts: d.boosts.clone(),
+            events_resolved: d.events_resolved,
+            convergence_left: d.convergence_left,
+            converged: d.converged,
         }
     }
 }
@@ -173,6 +191,13 @@ impl From<SaveFile> for SaveData {
             relics: f.relics,
             equipped: f.equipped,
             shards: f.shards,
+            event_timer: f.event_timer,
+            pending_event: f.pending_event,
+            pending_left: f.pending_left,
+            boosts: f.boosts,
+            events_resolved: f.events_resolved,
+            convergence_left: f.convergence_left,
+            converged: f.converged,
         }
     }
 }
@@ -220,6 +245,9 @@ impl JsonSaveRepository {
             LoadOutcome::Corrupted { backup } => Err(RepositoryError(format!(
                 "sauvegarde illisible (mise de côté dans {backup})"
             ))),
+            LoadOutcome::Tampered { backup } => Err(RepositoryError(format!(
+                "sauvegarde modifiée à la main (mise de côté dans {backup})"
+            ))),
         }
     }
 
@@ -234,6 +262,12 @@ impl JsonSaveRepository {
             LoadOutcome::Corrupted { .. } => {
                 return Err(RepositoryError(format!(
                     "{} n'est pas une sauvegarde valide",
+                    src.display()
+                )))
+            }
+            LoadOutcome::Tampered { .. } => {
+                return Err(RepositoryError(format!(
+                    "{} a été modifiée à la main : refusée",
                     src.display()
                 )))
             }
@@ -266,7 +300,19 @@ impl SaveRepository for JsonSaveRepository {
             Err(e) if e.kind() == io::ErrorKind::InvalidData => String::new(),
             Err(e) => return Err(io_err("lecture", &e)),
         };
-        match serde_json::from_str::<SaveFile>(&text) {
+        // Sauvegarde chiffrée (depuis la v0.12) ou ancienne sauvegarde en clair.
+        let json = match save_crypto::decode(&text) {
+            Ok(json) => json,
+            Err(CryptoError::NotEncrypted) => text,
+            Err(CryptoError::Tampered) => {
+                let backup = self.backup_path();
+                fs::rename(&self.path, &backup).map_err(|e| io_err("mise de côté", &e))?;
+                return Ok(LoadOutcome::Tampered {
+                    backup: backup.display().to_string(),
+                });
+            }
+        };
+        match serde_json::from_str::<SaveFile>(&json) {
             Ok(file) => Ok(LoadOutcome::Loaded(Box::new(file.into()))),
             Err(_) => {
                 let backup = self.backup_path();
@@ -282,8 +328,15 @@ impl SaveRepository for JsonSaveRepository {
         if let Some(dir) = self.path.parent() {
             fs::create_dir_all(dir).map_err(|e| io_err("création du dossier", &e))?;
         }
-        let json = serde_json::to_string_pretty(&SaveFile::from(data))
+        let json = serde_json::to_string(&SaveFile::from(data))
             .map_err(|e| RepositoryError(format!("sérialisation impossible : {e}")))?;
+        // Chiffrée et signée : une retouche à la main est détectée au chargement.
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0)
+            ^ data.last_saved.rotate_left(17);
+        let json = save_crypto::encode(&json, nonce);
         let tmp = self.sibling(".tmp");
         {
             let mut f = fs::File::create(&tmp).map_err(|e| io_err("écriture", &e))?;
@@ -426,6 +479,31 @@ mod tests {
             other => panic!("{other:?}"),
         }
         assert!(repo.import_from(&dir.join("absent.json")).is_err());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn saves_are_encrypted_and_edits_are_refused() {
+        let (dir, repo) = temp_repo("crypto");
+        let data = SaveData {
+            version: application::SAVE_VERSION,
+            fragments: 12.0,
+            ..SaveData::default()
+        };
+        repo.save(&data).unwrap();
+        let raw = fs::read_to_string(repo.path()).unwrap();
+        assert!(raw.starts_with(save_crypto::MAGIC));
+        assert!(!raw.contains("fragments"), "illisible en clair");
+        // Une retouche : la sauvegarde est refusée et mise de côté.
+        let mut bytes = raw.into_bytes();
+        let i = bytes.len() / 2;
+        bytes[i] = if bytes[i] == b'A' { b'B' } else { b'A' };
+        fs::write(repo.path(), bytes).unwrap();
+        match repo.load().unwrap() {
+            LoadOutcome::Tampered { backup } => assert!(backup.ends_with(".bak")),
+            other => panic!("{other:?}"),
+        }
+        assert!(!repo.path().exists());
         let _ = fs::remove_dir_all(dir);
     }
 }

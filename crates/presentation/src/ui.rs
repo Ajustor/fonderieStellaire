@@ -69,6 +69,8 @@ pub struct Ui {
     /// Laboratoire (touche L) et sa sélection.
     pub lab: Option<Popup>,
     pub lab_sel: usize,
+    /// Événement cosmique affiché (touche Z pour y revenir).
+    pub event: Option<crate::widgets::event::EventPopup>,
     /// Reliques (touche H) et sélection.
     pub relics: Option<Popup>,
     pub relics_sel: usize,

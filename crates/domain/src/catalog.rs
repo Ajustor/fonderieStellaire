@@ -3,6 +3,7 @@
 use crate::achievement::{AchievementCondition, AchievementDef, AchievementId};
 use crate::challenge::{ChallengeDef, ChallengeId, ChallengeReward, Restriction};
 use crate::constellation::{ConstellationDef, ConstellationEffect, ConstellationId};
+use crate::cosmic::CosmicEventDef;
 use crate::cosmos::{AttractorEffect, AttractorStage};
 use crate::generator::{GeneratorDef, GeneratorId};
 use crate::lab::{LabDef, LabEffect, LabId};
@@ -366,7 +367,7 @@ const HOLD_UPGRADE: (&str, f64, f64) = ("Récolte continue", 150.0, 300.0);
 
 /// Succès, du plus facile au plus difficile (ordre mesuré par le simulateur
 /// sur une partie à 3 h de jeu par jour).
-const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 48] = [
+const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 51] = [
     (
         "first",
         "Premier pas",
@@ -629,6 +630,18 @@ const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 48] = [
         AchievementCondition::Expeditions(1),
     ),
     (
+        "relic1",
+        "Archéologue",
+        "Trouver une relique",
+        AchievementCondition::Relics(1),
+    ),
+    (
+        "event1",
+        "Diplomate cosmique",
+        "Répondre à un événement cosmique",
+        AchievementCondition::CosmicEvents(1),
+    ),
+    (
         "map10",
         "Cartographe",
         "Explorer 10 systèmes de la Carte stellaire",
@@ -641,22 +654,28 @@ const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 48] = [
         AchievementCondition::Explored(24),
     ),
     (
-        "relic1",
-        "Archéologue",
-        "Trouver une relique",
-        AchievementCondition::Relics(1),
-    ),
-    (
         "relicset",
         "Panoplie",
         "Activer le bonus d'un ensemble de reliques",
         AchievementCondition::RelicSet,
     ),
     (
+        "event10",
+        "Maître des dilemmes",
+        "Répondre à 10 événements cosmiques",
+        AchievementCondition::CosmicEvents(10),
+    ),
+    (
         "relicall",
         "Musée du cosmos",
         "Réunir les 16 reliques",
         AchievementCondition::Relics(16),
+    ),
+    (
+        "converge",
+        "Convergence",
+        "Achever la Convergence et terminer l'Acte III",
+        AchievementCondition::Converged,
     ),
 ];
 
@@ -1150,6 +1169,8 @@ pub struct Catalog {
     pub attractor: Vec<AttractorStage>,
     /// Reliques (4 ensembles de 4).
     pub relics: Vec<RelicDef>,
+    /// Événements cosmiques.
+    pub events: Vec<CosmicEventDef>,
 }
 
 impl Catalog {
@@ -1370,6 +1391,7 @@ impl Catalog {
                     flavor,
                 })
                 .collect(),
+            events: crate::cosmic::catalog(),
             attractor: ATTRACTOR
                 .iter()
                 .enumerate()
@@ -1490,7 +1512,8 @@ mod tests {
         let cost: u32 = c.attractor.iter().map(|s| s.cost).sum();
         assert_eq!(cost, 23);
         assert!(c.upgrade_by_key("hold_0").is_some());
-        assert_eq!(c.achievements.len(), 48);
+        assert_eq!(c.achievements.len(), 51);
+        assert_eq!(c.events.len(), 8);
         assert_eq!(c.relics.len(), 16);
         assert_eq!(c.universes.len(), 6);
         assert_eq!(

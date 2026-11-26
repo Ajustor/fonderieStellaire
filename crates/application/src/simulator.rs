@@ -209,6 +209,19 @@ pub fn simulate(catalog: &Catalog, cfg: &SimConfig, mut progress: impl FnMut(f64
             }
         }
 
+        // Événements : premier choix sans risque ; Convergence dès que possible.
+        if s.pending_event.is_some() {
+            let choice = s
+                .pending_event
+                .and_then(|(i, _)| catalog.events.get(i))
+                .and_then(|e| e.choices.iter().position(|c| c.risk.is_none()))
+                .unwrap_or(0);
+            s.resolve_event(catalog, choice, rng.next(), &mut ev);
+        }
+        if s.convergence_ready(catalog) {
+            s.start_convergence(catalog, &mut ev);
+        }
+
         // Reliques : on équipe les plus rares, en privilégiant la production.
         if ev
             .iter()
@@ -317,8 +330,19 @@ pub fn simulate(catalog: &Catalog, cfg: &SimConfig, mut progress: impl FnMut(f64
                     }
                     if n >= catalog.relics.len() {
                         mark(&mut report, "Collection de reliques complète".into(), t);
-                        report.finished = true;
                     }
+                }
+                DomainEvent::CosmicEventResolved { .. } => {
+                    if s.events_resolved == 1 {
+                        mark(&mut report, "1er événement cosmique".into(), t);
+                    }
+                }
+                DomainEvent::ConvergenceStarted => {
+                    mark(&mut report, "Convergence lancée".into(), t);
+                }
+                DomainEvent::ConvergenceDone => {
+                    mark(&mut report, "Fin de l'Acte III (Convergence)".into(), t);
+                    report.finished = true;
                 }
                 _ => {}
             }

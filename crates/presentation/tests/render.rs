@@ -1001,7 +1001,10 @@ fn options_and_new_game_with_double_confirmation() {
     assert!(text.contains("Images par seconde"));
     assert!(text.contains("Recommencer une nouvelle partie"));
     assert!(text.contains("mises à jour automatiques"));
-    // Images par seconde : 30 → 20.
+    // Images par seconde : 30 → 60 → 20.
+    app.on_intent(Intent::Buy);
+    app.update(0.033);
+    assert_eq!(app.snapshot().frame_rate, 60);
     app.on_intent(Intent::Buy);
     app.update(0.033);
     assert_eq!(app.snapshot().frame_rate, 20);
@@ -1144,4 +1147,79 @@ fn v0_11_relics_found_equipped_and_card() {
     if found {
         assert!(saw_card, "la carte de la relique s'affiche");
     }
+}
+
+#[test]
+fn v0_12_cosmic_event_and_convergence_ending() {
+    // Un événement en attente : la fenêtre descend, on choisit, l'effet s'applique.
+    let mut save = advanced_save();
+    save.big_bangs = 1;
+    save.attractor = 7;
+    save.map_seed = 42;
+    save.pending_event = "plasma_storm".into();
+    save.pending_left = 1800.0;
+    let mut app = app_with(Some(save));
+    let mut t = 100.0;
+    app.set_time(t);
+    app.enter_game_now();
+    app.update(0.033);
+    app.on_intent(Intent::Event);
+    for _ in 0..45 {
+        t += 1.0 / 30.0;
+        app.set_time(t);
+        let _ = render(&mut app, 100, 30);
+    }
+    let text = render(&mut app, 100, 30);
+    println!("{text}");
+    assert!(text.contains("ÉVÉNEMENT COSMIQUE"), "{text}");
+    assert!(text.contains("TEMPÊTE DE PLASMA"));
+    assert!(text.contains("Récolter l'orage"));
+    assert!(text.contains("de chances, sinon"));
+    app.on_intent(Intent::Buy);
+    app.update(0.033);
+    assert!(app.snapshot().pending_event.is_none());
+    assert_eq!(app.snapshot().events_resolved, 1);
+
+    // Carte complète et 16 reliques : la Convergence, puis la fin de l'Acte III.
+    let mut save = advanced_save();
+    save.big_bangs = 1;
+    save.attractor = 7;
+    save.map_seed = 42;
+    save.explored = (0..25).collect();
+    let catalog = domain::Catalog::standard();
+    save.relics = catalog
+        .relics
+        .iter()
+        .map(|r| (r.key.to_string(), 0))
+        .collect();
+    let mut app = app_with(Some(save));
+    let mut t = 100.0;
+    app.set_time(t);
+    app.enter_game_now();
+    app.update(0.033);
+    assert!(app.snapshot().convergence_ready);
+    app.on_intent(Intent::StarMap);
+    // Revenir sur la fonderie.
+    for _ in 0..12 {
+        app.on_intent(Intent::PrevPanel);
+    }
+    t += 1.0;
+    app.set_time(t);
+    let text = render(&mut app, 120, 36);
+    assert!(text.contains("lancer la Convergence"), "{text}");
+    app.on_intent(Intent::Buy);
+    app.update(0.033);
+    assert!(app.snapshot().convergence.is_some());
+    app.update(48.0 * 3600.0 + 1.0);
+    assert!(app.snapshot().converged);
+    let mut text = String::new();
+    for _ in 0..(30 * 30) {
+        t += 1.0 / 30.0;
+        app.set_time(t);
+        app.update(1.0 / 30.0);
+        text = render(&mut app, 100, 30);
+    }
+    println!("{text}");
+    assert!(text.contains("FIN DE L'ACTE III"), "{text}");
+    assert!(text.contains("Conçu et forgé par Ajustor"));
 }

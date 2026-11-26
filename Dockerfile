@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Image du jeu : docker run -it --rm -v fonderie:/data ghcr.io/ajustor/fonderiestellaire
 # Le jeu est un TUI : il faut absolument -it (terminal interactif).
 
@@ -18,7 +19,8 @@ RUN for c in domain application infrastructure presentation; do \
     && rm -rf crates/*/src
 COPY crates crates
 # Force la recompilation de nos crates (les mtimes des sources factices sont plus récents).
-RUN touch crates/*/src/*.rs && cargo build --release --locked
+# La clé de chiffrement des sauvegardes arrive en secret BuildKit (vide en local).
+RUN --mount=type=secret,id=save_key touch crates/*/src/*.rs     && FONDERIE_SAVE_KEY="$(cat /run/secrets/save_key 2>/dev/null || true)"        cargo build --release --locked
 
 FROM debian:bookworm-slim
 LABEL org.opencontainers.image.title="Fonderie Stellaire" \

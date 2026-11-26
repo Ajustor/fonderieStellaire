@@ -227,7 +227,7 @@ pub struct GameSnapshot {
     /// Nombre de générateurs par échantillon de `history_mix`.
     pub history_mix_width: usize,
     pub reduced_effects: bool,
-    /// Images par seconde (30, 20 ou 15).
+    /// Images par seconde (60, 30, 20 ou 15).
     pub frame_rate: u32,
     /// « Récolte continue » achetée : maintenir Espace récolte en continu.
     pub hold_harvest: bool,
@@ -305,4 +305,13 @@ pub struct GameSnapshot {
     pub shards: u32,
     pub relic_production: f64,
     pub relic_sets: Vec<(domain::RelicSet, usize)>,
+    /// Événement cosmique en attente : (index, secondes pour répondre).
+    pub pending_event: Option<(usize, f64)>,
+    /// Bonus temporaires en cours.
+    pub boosts: Vec<domain::Boost>,
+    pub events_resolved: u32,
+    /// Convergence : prête, en cours (restant, total), achevée.
+    pub convergence_ready: bool,
+    pub convergence: Option<(f64, f64)>,
+    pub converged: bool,
 }

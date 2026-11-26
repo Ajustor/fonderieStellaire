@@ -142,6 +142,12 @@ pub fn wrap(s: &str, width: usize) -> Vec<String> {
     let width = width.max(1);
     let mut lines = Vec::new();
     for para in s.split('\n') {
+        // Le retrait en début de ligne est gardé sur toutes les lignes.
+        let indent = para.chars().take_while(|c| *c == ' ').count();
+        let pad = " ".repeat(indent);
+        let para = &para[indent..];
+        let width = width.saturating_sub(indent).max(1);
+        let start = lines.len();
         let mut cur = String::new();
         let mut cur_w = 0;
         for word in para.split(' ') {
@@ -169,6 +175,11 @@ pub fn wrap(s: &str, width: usize) -> Vec<String> {
             cur_w = ww;
         }
         lines.push(cur);
+        if indent > 0 {
+            for l in &mut lines[start..] {
+                l.insert_str(0, &pad);
+            }
+        }
     }
     lines
 }
@@ -256,6 +267,7 @@ mod tests {
         assert_eq!(wrap("abcdefghij", 4), vec!["abcd", "efgh", "ij"]);
         assert_eq!(wrap("a\nb", 10), vec!["a", "b"]);
         assert_eq!(wrap("", 10), vec![""]);
+        assert_eq!(wrap("  ab cd", 5), vec!["  ab", "  cd"], "retrait gardé");
         for l in wrap(
             "Petite sonde autonome qui aspire la poussière en orbite basse.",
             20,

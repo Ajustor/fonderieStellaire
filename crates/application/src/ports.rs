@@ -14,6 +14,8 @@ pub enum LoadOutcome {
     NotFound,
     /// Sauvegarde illisible, mise de côté dans `backup`.
     Corrupted { backup: String },
+    /// Sauvegarde modifiée à la main (signature invalide), mise de côté.
+    Tampered { backup: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

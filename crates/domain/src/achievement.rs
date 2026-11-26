@@ -59,6 +59,10 @@ pub enum AchievementCondition {
     Relics(usize),
     /// Un bonus d'ensemble de reliques actif.
     RelicSet,
+    /// Événements cosmiques résolus.
+    CosmicEvents(u32),
+    /// Convergence achevée (fin de l'Acte III).
+    Converged,
 }
 
 /// Données nécessaires pour évaluer une condition de succès.
@@ -87,6 +91,8 @@ pub struct AchievementContext<'a> {
     pub explored: usize,
     pub relics: usize,
     pub relic_set_active: bool,
+    pub cosmic_events: u32,
+    pub converged: bool,
 }
 
 impl AchievementCondition {
@@ -124,6 +130,8 @@ impl AchievementCondition {
             AchievementCondition::Explored(n) => ctx.explored >= n,
             AchievementCondition::Relics(n) => ctx.relics >= n,
             AchievementCondition::RelicSet => ctx.relic_set_active,
+            AchievementCondition::CosmicEvents(n) => ctx.cosmic_events >= n,
+            AchievementCondition::Converged => ctx.converged,
         }
     }
 }
@@ -167,6 +175,8 @@ mod tests {
             explored: 0,
             relics: 0,
             relic_set_active: false,
+            cosmic_events: 0,
+            converged: false,
         }
     }
 

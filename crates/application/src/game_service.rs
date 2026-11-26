@@ -40,6 +40,10 @@ pub enum GameEvent {
     },
     /// La sauvegarde datait d'un ancien équilibrage : effacée, nouvelle partie.
     SaveWiped,
+    /// La sauvegarde avait été modifiée à la main : refusée, nouvelle partie.
+    SaveTampered {
+        backup: String,
+    },
     /// Le joueur a effacé sa partie pour recommencer.
     NewGame,
     FrameRateChanged(u32),
@@ -110,6 +114,10 @@ impl GameService {
             LoadOutcome::Corrupted { backup } => {
                 self.state = GameState::new(&self.catalog);
                 out.push(GameEvent::SaveRecovered { backup });
+            }
+            LoadOutcome::Tampered { backup } => {
+                self.state = GameState::new(&self.catalog);
+                out.push(GameEvent::SaveTampered { backup });
             }
             LoadOutcome::Loaded(data) if data.version < SAVE_RESET_BELOW => {
                 // Ancien équilibrage : on repart de zéro et l'ancienne partie
@@ -203,9 +211,16 @@ impl GameService {
                     .launch_expedition(&self.catalog, system, roll, &mut ev)
             }
             Command::ToggleRelic(id) => self.state.toggle_relic(&self.catalog, id, &mut ev),
+            Command::ResolveEvent(choice) => {
+                let roll = self.rng.next_f64();
+                self.state
+                    .resolve_event(&self.catalog, choice, roll, &mut ev)
+            }
+            Command::StartConvergence => self.state.start_convergence(&self.catalog, &mut ev),
             Command::CycleFrameRate => {
                 self.frame_rate = match self.frame_rate {
-                    0 | 30 => 20,
+                    0 | 30 => 60,
+                    60 => 20,
                     20 => 15,
                     _ => 30,
                 };
@@ -460,6 +475,15 @@ impl GameService {
         snap.relics_equipped = st.equipped.len();
         snap.shards = st.shards;
         snap.relic_production = st.relic_production(c);
+        snap.pending_event = st.pending_event;
+        snap.boosts.clear();
+        snap.boosts.extend(st.boosts.iter().copied());
+        snap.events_resolved = st.events_resolved;
+        snap.convergence_ready = st.convergence_ready(c);
+        snap.convergence = st
+            .convergence
+            .map(|left| (left, domain::cosmic::CONVERGENCE_SECS));
+        snap.converged = st.converged;
         snap.relic_sets = domain::RelicSet::ALL
             .iter()
             .map(|&s| {
@@ -900,6 +924,8 @@ mod tests {
             s.handle(Command::Harvest);
         }
         s.handle(Command::ToggleReducedEffects);
+        let ev = s.handle(Command::CycleFrameRate);
+        assert!(ev.contains(&GameEvent::FrameRateChanged(60)));
         let ev = s.handle(Command::CycleFrameRate);
         assert!(ev.contains(&GameEvent::FrameRateChanged(20)));
         let ev = s.handle(Command::NewGame);

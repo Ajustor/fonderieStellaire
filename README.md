@@ -170,6 +170,7 @@ cargo run --release -- --reset
 | `G` | Cosmogonie : Big Bang, forge primordiale, Grand Attracteur (après 10 Big Crunch) |
 | `X` | Carte stellaire : expéditions (Acte III, après l'éveil du Grand Attracteur) |
 | `H` | Reliques : collection, emplacements et ensembles (Acte III) |
+| `Z` | Revenir à l'événement cosmique en attente (Acte III) |
 | `R` | Options : images par seconde, effets réduits, recommencer une partie |
 | `T` | Activer / arrêter l'automate (une fois acheté à l'Atelier) |
 | `I` | Infos : progression, succès et fonctionnement de chaque mécanique |
@@ -231,7 +232,11 @@ Majuscules et minuscules sont acceptées.
 - **Reliques** (Acte III) : 16 reliques en 4 ensembles et 4 raretés,
   rapportées par les expéditions et les prospections. On en équipe 3 à 5 ;
   3 reliques d'un même ensemble donnent un bonus d'ensemble.
-- **Succès** : 48 succès, **+1 %** de production chacun.
+- **Événements cosmiques** (Acte III) : des dilemmes toutes les 2 à 4 h de
+  jeu, aux conséquences parfois risquées.
+- **Convergence** : carte complète et 16 reliques réunies, 48 h de temps réel
+  pour terminer l'Acte III.
+- **Succès** : 51 succès, **+1 %** de production chacun.
 - **Progression** : le pourcentage dans l'en-tête et l'écran `I` indiquent où tu
   en es (générateurs, succès, Atelier, poussière avant le prochain fragment).
 - **Hors-ligne** : ta fonderie produit à 50 % pendant ton absence (12 h max).
@@ -260,8 +265,10 @@ Sauvegarde automatique toutes les 30 s et à la fermeture, dans :
 | Windows | `%APPDATA%\fonderie-stellaire\save.json` |
 | Linux | `~/.local/share/fonderie-stellaire/save.json` |
 
-L'écriture est atomique (fichier `.tmp` puis renommage). Une sauvegarde
-corrompue est renommée en `save.json.bak` et une nouvelle partie démarre.
+L'écriture est atomique (fichier `.tmp` puis renommage). La sauvegarde est
+**chiffrée et signée** : une sauvegarde modifiée à la main est refusée.
+Une sauvegarde corrompue ou modifiée est renommée en `save.json.bak` et une
+nouvelle partie démarre.
 
 - **Recommencer** : touche `R` (Options) → « Recommencer une nouvelle
   partie », ou `fonderie-stellaire --reset` (l'ancienne passe en `.bak`).

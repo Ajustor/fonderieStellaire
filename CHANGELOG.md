@@ -1,5 +1,42 @@
 # Journal des versions
 
+## v0.12.0 — Acte III, fin : Événements cosmiques et Convergence
+
+### Nouveautés
+- **Événements cosmiques** : à l'Acte III, toutes les 2 à 4 h de jeu, un
+  dilemme se présente (signal d'une civilisation, tempête de plasma, comète
+  géante, épave ancienne, pulsar emballé, trou de ver, marchand d'étoiles,
+  supernova voisine). Chaque choix a ses conséquences : production ou
+  fragments multipliés pendant un temps, gains immédiats, reliques, flottes
+  accélérées… certains sont **risqués** (chance affichée, et ce qui arrive
+  sinon). On a 1 h pour répondre ; `Z` pour revenir à l'événement.
+- **Convergence** : carte complète et 16 reliques réunies, on la lance depuis
+  la Fonderie sur la Carte stellaire. **48 h en temps réel** (même jeu fermé),
+  puis **fin de l'Acte III**, avec son générique. Ensuite, la production est
+  multipliée par 10, et les reliques légendaires restent à chasser.
+- **3 nouveaux succès** (51 au total), toujours triés par difficulté.
+- **Options** : nouveau réglage **60 images par seconde** (60, 30, 20 ou 15).
+  La touche `R` (Options) est maintenant toujours affichée dans la barre
+  d'aide.
+- **Sauvegarde chiffrée et signée** : elle n'est plus lisible en clair, et une
+  sauvegarde modifiée à la main est refusée (mise de côté en `.bak`, nouvelle
+  partie). Les anciennes sauvegardes en clair sont reprises puis réécrites
+  chiffrées.
+
+### Animations
+- **Événement** : la fenêtre descend du haut de l'écran avec un rebond, son
+  titre se décrypte comme un signal capté, sa bordure palpite.
+- **Fin de l'Acte III** : convergence en spirale aux couleurs de la carte,
+  galaxie qui s'ouvre, générique avec les chiffres de ta partie.
+
+### Corrections
+- Le renvoi à la ligne garde le retrait des lignes indentées.
+- Le symbole des événements occupait deux colonnes dans certains terminaux :
+  remplacé par `✹`.
+
+### Rythme (simulateur, 3 h de jeu par jour)
+- **Fin de l'Acte III vers le 40e jour.**
+
 ## v0.11.0 — Acte III, partie 2 : les Reliques
 
 ### Nouveautés
