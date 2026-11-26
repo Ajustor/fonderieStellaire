@@ -36,6 +36,9 @@ pub enum AchievementCondition {
     AllPerks,
     /// Niveaux de Constellations au total.
     ConstellationLevels(u32),
+    GoldenComets(u32),
+    BlackComets(u32),
+    ChallengesDone(usize),
 }
 
 /// Données nécessaires pour évaluer une condition de succès.
@@ -51,6 +54,9 @@ pub struct AchievementContext<'a> {
     pub perks_owned: usize,
     pub perks_total: usize,
     pub constellation_levels: u32,
+    pub golden_comets: u32,
+    pub black_comets: u32,
+    pub challenges_done: usize,
 }
 
 impl AchievementCondition {
@@ -75,6 +81,9 @@ impl AchievementCondition {
                 ctx.perks_total > 0 && ctx.perks_owned >= ctx.perks_total
             }
             AchievementCondition::ConstellationLevels(n) => ctx.constellation_levels >= n,
+            AchievementCondition::GoldenComets(n) => ctx.golden_comets >= n,
+            AchievementCondition::BlackComets(n) => ctx.black_comets >= n,
+            AchievementCondition::ChallengesDone(n) => ctx.challenges_done >= n,
         }
     }
 }
@@ -105,6 +114,9 @@ mod tests {
             perks_owned: 0,
             perks_total: 0,
             constellation_levels: 0,
+            golden_comets: 0,
+            black_comets: 0,
+            challenges_done: 0,
         }
     }
 

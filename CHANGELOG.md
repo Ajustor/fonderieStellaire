@@ -1,5 +1,30 @@
 # Journal des versions
 
+## v0.5.0
+
+### Nouveautés
+- **Défis** (`D`) : un cycle joué avec une contrainte. Réussir l'objectif
+  rapporte une récompense **permanente**. Lancer un Défi relance le cycle (une
+  Supernova a lieu d'abord si elle rapporte des fragments) ; on peut
+  l'abandonner à tout moment. Lancer et abandonner demandent une confirmation.
+
+  | Défi | Contrainte | Objectif | Récompense | Débloqué après |
+  |---|---|---|---|---|
+  | Doigts liés | aucune récolte manuelle | 100 M | production ×1,25 | 1 Supernova |
+  | Ascèse | aucune amélioration | 10 M | améliorations −25 % | 1 Supernova |
+  | Minimaliste | Sondes, Drones, Moissonneurs seulement | 100 M | ces 3 générateurs ×3 | 1 Supernova |
+  | Nuit noire | aucune comète | 1 Md | comètes 25 % plus fréquentes | 3 Supernovas |
+  | Course contre la montre | objectif en moins de 15 min | 100 M | +1 fragment par Supernova | 5 Supernovas |
+
+- Pendant un Défi, la bordure de l'en-tête montre son avancement (et le temps
+  restant pour la Course).
+- **Comètes rares** :
+  - *Comète dorée* (10 %) : capturée, production ×77 pendant 7 s.
+  - *Comète noire* (5 %) : capturée, +1 fragment permanent ; ratée, elle vole
+    10 % de ta poussière.
+  - Elles ont leurs couleurs, leur bannière et leur alerte.
+- **4 nouveaux succès** (32 au total) ; les Défis comptent dans la progression.
+
 ## v0.4.0
 
 ### Nouveautés

@@ -27,6 +27,8 @@ pub enum Intent {
     BuyAll,
     /// `E` : Atelier stellaire.
     Shop,
+    /// `D` : Défis.
+    Challenges,
     /// `T` : activer / arrêter l'automate.
     ToggleAuto,
     /// `PgUp` / `PgDn` : remonter / redescendre dans le journal.
@@ -145,6 +147,7 @@ pub fn map_key(key: &KeyEvent) -> Option<Intent> {
             'i' => Intent::Info,
             'a' => Intent::BuyAll,
             'e' => Intent::Shop,
+            'd' => Intent::Challenges,
             't' => Intent::ToggleAuto,
             'o' | 'y' => Intent::Yes,
             'n' => Intent::No,

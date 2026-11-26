@@ -60,6 +60,10 @@ pub struct Ui {
     /// Atelier stellaire (touche E) et sa sélection.
     pub shop: Option<Popup>,
     pub shop_sel: usize,
+    /// Fenêtre des Défis (touche D), sélection, et confirmation armée.
+    pub challenges: Option<Popup>,
+    pub challenges_sel: usize,
+    pub challenge_armed: bool,
     /// Lignes remontées dans le journal (0 = dernières entrées).
     pub journal_scroll: usize,
     pub debug: bool,

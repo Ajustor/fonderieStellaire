@@ -10,8 +10,8 @@ use crate::error::AppError;
 use crate::ports::{Clock, LoadOutcome, RandomSource, SaveRepository};
 use crate::save_dto::SaveData;
 use crate::snapshot::{
-    ConstellationView, GameSnapshot, GeneratorView, NextUpgradeView, PerkView, ProgressView,
-    TeaserView, UpgradeView,
+    ActiveChallengeView, ChallengeView, ConstellationView, GameSnapshot, GeneratorView,
+    NextUpgradeView, PerkView, ProgressView, TeaserView, UpgradeView,
 };
 
 /// Nombre d'échantillons de production conservés (1 par seconde).
@@ -169,6 +169,8 @@ impl GameService {
             Command::BuyAllUpgrades => self.state.buy_all_upgrades(&self.catalog, &mut ev),
             Command::BuyPerk(id) => self.state.buy_perk(&self.catalog, id, &mut ev),
             Command::ToggleAutoBuy => self.state.toggle_autobuy(&self.catalog, &mut ev),
+            Command::StartChallenge(id) => self.state.start_challenge(&self.catalog, id, &mut ev),
+            Command::AbandonChallenge => self.state.abandon_challenge(&self.catalog, &mut ev),
             Command::BuyConstellation(id) => {
                 self.state.buy_constellation(&self.catalog, id, &mut ev)
             }
@@ -282,6 +284,29 @@ impl GameService {
             }
         }));
         snap.constellation_levels = st.constellation_levels_total();
+        snap.challenges.clear();
+        snap.challenges
+            .extend(c.challenges.iter().map(|k| ChallengeView {
+                id: k.id,
+                unlocked: st.supernovas >= k.unlock_supernovas,
+                done: st.challenge_done(k.id),
+                active: st.challenge == Some(k.id),
+            }));
+        snap.active_challenge = st.challenge.and_then(|id| {
+            let def = c.challenge(id)?;
+            let elapsed = st.play_time - st.challenge_started;
+            Some(ActiveChallengeView {
+                id,
+                progress: (st.total_run / def.goal).clamp(0.0, 1.0),
+                elapsed,
+                time_left: match def.restriction {
+                    domain::Restriction::TimeLimit(l) => Some((l - elapsed).max(0.0)),
+                    _ => None,
+                },
+            })
+        });
+        snap.comet_kind = st.comet.kind;
+        snap.storm_multiplier = st.comet.boost();
         snap.next_upgrade = st.next_locked_upgrade(c).and_then(|id| {
             let def = c.upgrade(id)?;
             let (current, needed) = match def.requirement {
@@ -299,7 +324,9 @@ impl GameService {
         let generators_found = st.owned.iter().filter(|&&o| o > 0).count();
         let perks_owned = st.perks_owned();
         let achievements = st.achievements_unlocked();
-        let found_total = c.generators.len() + c.achievements.len() + c.perks.len();
+        let challenges_done = st.challenges_done.iter().filter(|&&d| d).count();
+        let found_total =
+            c.generators.len() + c.achievements.len() + c.perks.len() + c.challenges.len();
         snap.progress = ProgressView {
             generators_found,
             generators_total: c.generators.len(),
@@ -308,7 +335,8 @@ impl GameService {
             perks_owned,
             perks_total: c.perks.len(),
             completion: if found_total > 0 {
-                (generators_found + achievements + perks_owned) as f64 / found_total as f64
+                (generators_found + achievements + perks_owned + challenges_done) as f64
+                    / found_total as f64
             } else {
                 0.0
             },
@@ -352,12 +380,13 @@ impl GameService {
         }
 
         snap.upgrades.clear();
+        let upgrade_factor = st.upgrade_cost_factor(c);
         for u in &c.upgrades {
             if st.is_upgrade_available(c, u.id) {
                 snap.upgrades.push(UpgradeView {
                     id: u.id,
-                    cost: u.cost,
-                    affordable: st.stardust.can_afford(u.cost),
+                    cost: u.cost * upgrade_factor,
+                    affordable: st.stardust.can_afford(u.cost * upgrade_factor),
                 });
             }
         }
@@ -419,7 +448,7 @@ mod tests {
                 });
             }
             Ok(match self.slot.borrow().clone() {
-                Some(d) => LoadOutcome::Loaded(d),
+                Some(d) => LoadOutcome::Loaded(Box::new(d)),
                 None => LoadOutcome::NotFound,
             })
         }
@@ -582,7 +611,9 @@ mod tests {
         let mut s = service(&repo, &clock, vec![0.1]);
         s.load().unwrap();
         let ev = s.tick(46.0);
-        assert!(ev.contains(&GameEvent::Domain(DomainEvent::CometSpawned)));
+        assert!(ev
+            .iter()
+            .any(|e| matches!(e, GameEvent::Domain(DomainEvent::CometSpawned { .. }))));
         assert!(s.snapshot().comet_progress.is_some());
         let ev = s.handle(Command::CatchComet);
         assert!(ev
@@ -631,6 +662,16 @@ mod tests {
         let snap = s.snapshot();
         assert_eq!(snap.constellations[forge.index()].level, 1);
         assert_eq!(snap.fragments_spendable, 4.0);
+
+        // Défi : lancé, sauvegardé et rechargé en cours.
+        let noclick = s.catalog().challenge_by_key("ch_noclick").unwrap();
+        s.handle(Command::StartChallenge(noclick));
+        assert_eq!(s.snapshot().active_challenge.map(|a| a.id), Some(noclick));
+        s.handle(Command::Save);
+        s.load().unwrap();
+        assert_eq!(s.snapshot().active_challenge.map(|a| a.id), Some(noclick));
+        s.handle(Command::AbandonChallenge);
+        assert_eq!(s.snapshot().active_challenge, None);
     }
 
     #[test]

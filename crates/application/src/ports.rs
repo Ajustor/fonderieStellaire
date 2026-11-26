@@ -8,13 +8,12 @@ use crate::save_dto::SaveData;
 /// Résultat d'un chargement de sauvegarde.
 #[derive(Clone, Debug, PartialEq)]
 pub enum LoadOutcome {
-    Loaded(SaveData),
+    /// En `Box` : la sauvegarde est bien plus grosse que les autres variantes.
+    Loaded(Box<SaveData>),
     /// Aucune sauvegarde : nouvelle partie.
     NotFound,
     /// Sauvegarde illisible, mise de côté dans `backup`.
-    Corrupted {
-        backup: String,
-    },
+    Corrupted { backup: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

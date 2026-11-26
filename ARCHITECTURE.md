@@ -44,8 +44,9 @@ grep -rlE "serde|std::fs"     crates | grep -v crates/infrastructure # → rien
 
 - **domain** — règles pures et déterministes : catalogue (`catalog.rs`), coûts et
   paliers (`generator.rs`), production (`economy.rs`), améliorations, succès,
-  comètes, prestige, Atelier stellaire (`perk.rs`), Constellations
-  (`constellation.rs`) et l'agrégat `GameState`
+  comètes (dont les comètes rares), prestige, Atelier stellaire (`perk.rs`),
+  Constellations (`constellation.rs`), Défis (`challenge.rs`) et l'agrégat
+  `GameState`
   (dont l'automate d'achat et « tout acheter »). Le temps (`dt`) et les tirages
   aléatoires (`roll: f64`) arrivent **en paramètre**. Chaque opération pousse des
   `DomainEvent` dans un `Vec`.
@@ -175,6 +176,16 @@ L'identifiant texte (`key`) doit rester **stable** : c'est lui qui est sauvegard
 2. Pour un nouvel effet : une variante de `ConstellationEffect`, appliquée dans
    `GameState` (voir `constellation_sum`), et son texte cumulé dans
    `widgets/shop.rs` (`constellation_total`).
+
+### Ajouter un Défi
+
+1. `crates/domain/src/catalog.rs` : une ligne dans `CHALLENGES` (clé stable,
+   nom, règle et récompense en clair, symbole, objectif, Supernovas requises,
+   `Restriction`, `ChallengeReward`).
+2. Une nouvelle contrainte : variante de `challenge::Restriction`, appliquée là
+   où l'action a lieu dans `GameState` (voir `active_restriction`), en émettant
+   `ChallengeBlocked`. Une nouvelle récompense : variante de `ChallengeReward`,
+   prise en compte via `challenge_rewards` (dans `GameState` ou `economy.rs`).
 
 ### Ajouter un événement de domaine
 

@@ -32,6 +32,7 @@ fn items(mode: BuyMode) -> Vec<Item> {
         it("C", "Comète", 8),
         it("P", "Nova", 3),
         it("E", "Atelier", 6),
+        it("D", "Défis", 9),
         it("I", "Infos", 7),
         it("S", "Sauver", 12),
         it("F", "Effets", 13),

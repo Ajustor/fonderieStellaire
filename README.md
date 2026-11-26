@@ -163,6 +163,7 @@ cargo run --release -- --reset
 | `F` | Effets complets / effets réduits |
 | `A` | Acheter toutes les améliorations abordables |
 | `E` | Atelier stellaire : bonus permanents payés en fragments |
+| `D` | Défis : un cycle avec contrainte, contre une récompense permanente |
 | `T` | Activer / arrêter l'automate (une fois acheté à l'Atelier) |
 | `I` | Infos : progression, succès et fonctionnement de chaque mécanique |
 | `PgUp` / `PgDn` | Remonter / redescendre dans le journal |
@@ -182,7 +183,8 @@ Majuscules et minuscules sont acceptées.
   Elle est conservée après une Supernova.
 - **Comètes** : toutes les 90 à 240 s. Capture-les avec `C` pendant leurs 15 s de
   traversée : *Tempête solaire* (production ×7 pendant 30 s) ou *Pluie d'étoiles*
-  (gain immédiat).
+  (gain immédiat). Plus rares : la *comète dorée* (×77 pendant 7 s) et la
+  *comète noire* (+1 fragment, mais elle vole 10 % de ta poussière si tu la rates).
 - **Supernova** : `floor(√(récolte du cycle / seuil))` fragments, avec un seuil
   de 10 M qui augmente de 25 % à chaque Supernova. Les fragments donnent +10 % de
   production chacun jusqu'à 5, puis le bonus croît en racine carrée. Remet à
@@ -195,7 +197,10 @@ Majuscules et minuscules sont acceptées.
 - **Constellations** (`E`, sous l'Atelier) : 6 améliorations à niveaux sans fin,
   de plus en plus chères (production, clics, comètes, hors-ligne, fragments,
   coûts). Chaque niveau allume une étoile dans le ciel.
-- **Succès** : 28 succès, **+1 %** de production chacun.
+- **Défis** (`D`, dès la 1re Supernova) : rejoue un cycle avec une contrainte
+  (sans clic, sans amélioration, 3 générateurs, sans comète, ou contre la
+  montre) pour gagner une récompense permanente.
+- **Succès** : 32 succès, **+1 %** de production chacun.
 - **Progression** : le pourcentage dans l'en-tête et l'écran `I` indiquent où tu
   en es (générateurs, succès, Atelier, poussière avant le prochain fragment).
 - **Hors-ligne** : ta fonderie produit à 50 % pendant ton absence (12 h max).

@@ -45,16 +45,33 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
     let now = ctx.now;
 
     // Progression globale, sur la bordure haute à droite.
-    let progress = format!(
-        " progression {} [I] ",
-        fmt::percent(snap.progress.completion)
-    );
+    // Pendant un Défi, la bordure montre son avancement à la place.
+    let (progress, progress_color) = match snap.active_challenge {
+        Some(a) => {
+            let name = ctx.catalog.challenge(a.id).map(|c| c.name).unwrap_or("?");
+            let time = a
+                .time_left
+                .map(|t| format!(" · {}", fmt::countdown(t)))
+                .unwrap_or_default();
+            (
+                format!(" ◆ DÉFI {name} {}{time} [D] ", fmt::percent(a.progress)),
+                theme::PINK,
+            )
+        }
+        None => (
+            format!(
+                " progression {} [I] ",
+                fmt::percent(snap.progress.completion)
+            ),
+            theme::GOLD,
+        ),
+    };
     draw::text_right(
         buf,
         area.right().saturating_sub(2),
         area.y,
         &progress,
-        theme::fg(theme::GOLD),
+        theme::fg(progress_color),
         area.x + TITLE.chars().count() as u16 + 3,
     );
 
@@ -65,8 +82,15 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
     let prod = format!("+{} /s", fmt::short(snap.production));
     if snap.storm_remaining > 0.0 {
         let beat = (now * std::f64::consts::PI * 2.0).sin().abs();
-        let c = theme::ORANGE.lerp(theme::WHITE, 0.35 * beat);
-        let storm = format!("×7 TEMPÊTE {}", fmt::countdown(snap.storm_remaining));
+        let golden = snap.storm_multiplier >= 50.0;
+        let base = if golden { theme::GOLD } else { theme::ORANGE };
+        let c = base.lerp(theme::WHITE, 0.35 * beat);
+        let label = if golden { "FRÉNÉSIE" } else { "TEMPÊTE" };
+        let storm = format!(
+            "×{} {label} {}",
+            fmt::short(snap.storm_multiplier),
+            fmt::countdown(snap.storm_remaining)
+        );
         let x = draw::text_right(buf, right, inner.y, &storm, theme::bold(c), inner.x);
         let x = draw::text_right(
             buf,

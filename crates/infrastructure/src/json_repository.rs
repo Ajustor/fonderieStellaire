@@ -36,6 +36,11 @@ struct SaveFile {
     autobuy: bool,
     /// Niveaux de Constellations : { "const_forge": 3, … }.
     constellations: BTreeMap<String, u32>,
+    challenge: String,
+    challenge_started: f64,
+    challenges_done: Vec<String>,
+    golden_caught: u32,
+    black_caught: u32,
 }
 
 impl From<&SaveData> for SaveFile {
@@ -60,6 +65,11 @@ impl From<&SaveData> for SaveFile {
             fragments_spent: d.fragments_spent,
             autobuy: d.autobuy,
             constellations: d.constellations.iter().cloned().collect(),
+            challenge: d.challenge.clone(),
+            challenge_started: d.challenge_started,
+            challenges_done: d.challenges_done.clone(),
+            golden_caught: d.golden_caught,
+            black_caught: d.black_caught,
         }
     }
 }
@@ -86,6 +96,11 @@ impl From<SaveFile> for SaveData {
             fragments_spent: f.fragments_spent,
             autobuy: f.autobuy,
             constellations: f.constellations.into_iter().collect(),
+            challenge: f.challenge,
+            challenge_started: f.challenge_started,
+            challenges_done: f.challenges_done,
+            golden_caught: f.golden_caught,
+            black_caught: f.black_caught,
         }
     }
 }
@@ -147,7 +162,7 @@ impl SaveRepository for JsonSaveRepository {
             Err(e) => return Err(io_err("lecture", &e)),
         };
         match serde_json::from_str::<SaveFile>(&text) {
-            Ok(file) => Ok(LoadOutcome::Loaded(file.into())),
+            Ok(file) => Ok(LoadOutcome::Loaded(Box::new(file.into()))),
             Err(_) => {
                 let backup = self.backup_path();
                 fs::rename(&self.path, &backup).map_err(|e| io_err("mise de côté", &e))?;
@@ -215,7 +230,7 @@ mod tests {
         };
         repo.save(&data).unwrap();
         assert!(!repo.sibling(".tmp").exists(), "le .tmp est renommé");
-        assert_eq!(repo.load().unwrap(), LoadOutcome::Loaded(data));
+        assert_eq!(repo.load().unwrap(), LoadOutcome::Loaded(Box::new(data)));
         let _ = fs::remove_dir_all(dir);
     }
 

@@ -114,6 +114,8 @@ pub fn lines(ctx: &Ctx) -> Vec<(String, Style)> {
         "◆ Atelier [E] : dépense tes fragments en bonus permanents (le bonus de prod reste)."
             .into(),
         "★ Constellations [E] : niveaux sans fin pour tes fragments, de plus en plus chers.".into(),
+        "◆ Défis [D] : un cycle avec une contrainte, contre une récompense permanente.".into(),
+        "● Comètes rares : dorée (×77 pendant 7 s), noire (+1 fragment, ou elle te vole).".into(),
         "○ Hors-ligne : ta fonderie produit à 50 % pendant ton absence (12 h max).".into(),
         "· Raccourcis : [A] tout acheter · [T] automate · [PgUp]/[PgDn] journal.".into(),
         "· Sauvegarde automatique toutes les 30 s et en quittant.".into(),

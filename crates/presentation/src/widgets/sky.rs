@@ -17,10 +17,32 @@ use crate::fx::Rgb;
 use crate::theme;
 use crate::theme::GEN_SLOTS;
 use crate::visuals::{StarField, Visuals, FLOATER_LIFE};
+use domain::CometKind;
 
 const COMET_TRAIL: [char; 7] = ['═', '═', '═', '─', '─', '·', '·'];
 pub const COMET_BANNER: &str = "● UNE COMÈTE PASSE ! [C] pour la capturer";
 const COMET_BANNER_SHORT: &str = "● COMÈTE ! [C] capturer";
+pub const GOLDEN_BANNER: &str = "● COMÈTE DORÉE ! [C] : production ×77";
+const GOLDEN_BANNER_SHORT: &str = "● DORÉE ! [C] vite !";
+pub const BLACK_BANNER: &str = "● COMÈTE NOIRE ! [C] ou elle te vole";
+const BLACK_BANNER_SHORT: &str = "● NOIRE ! [C] vite !";
+
+/// Couleurs (traîne, tête, bannière) selon la sorte de comète.
+fn comet_palette(kind: CometKind) -> ([Rgb; 3], Rgb, Rgb) {
+    match kind {
+        CometKind::Normal => (theme::COMET_TRAIL, theme::CYAN, theme::PINK),
+        CometKind::Golden => (
+            [theme::WHITE, theme::GOLD, theme::ORANGE],
+            theme::GOLD,
+            theme::GOLD,
+        ),
+        CometKind::Black => (
+            [Rgb(200, 120, 255), Rgb(120, 40, 160), Rgb(60, 10, 50)],
+            theme::RED,
+            theme::RED,
+        ),
+    }
+}
 
 /// Nébuleuse en arrière-plan (value noise qui dérive lentement).
 pub fn draw_nebula(buf: &mut Buffer, area: Rect, now: f64, strength: f64) {
@@ -407,13 +429,11 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
             let path_y = |pp: f64| vis.comet.y0 + vis.comet.amp * (pp.clamp(0.0, 1.0) * PI).sin();
             let hx = -2.0 + p * span;
             let hy = path_y(p);
+            let (trail, head_glow, banner_color) = comet_palette(snap.comet_kind);
             for (k, ch) in COMET_TRAIL.iter().enumerate() {
                 let tx = hx - (k as f64 + 1.0);
                 let ty = path_y((tx + 2.0) / span);
-                let c = gradient(
-                    &theme::COMET_TRAIL,
-                    k as f64 / (COMET_TRAIL.len() - 1) as f64,
-                );
+                let c = gradient(&trail, k as f64 / (COMET_TRAIL.len() - 1) as f64);
                 draw::put(
                     buf,
                     inner,
@@ -430,25 +450,30 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
                 (ox + hx).floor() as i32,
                 (oy + hy).floor() as i32,
                 '●',
-                theme::WHITE.lerp(theme::CYAN, pulse * 0.6),
+                theme::WHITE.lerp(head_glow, pulse * 0.6),
             );
             let head = (ox + hx, oy + hy);
             vis.comet.head = Some(head);
             vis.comet.trail_acc += ctx.dt;
             while vis.comet.trail_acc > 0.04 {
                 vis.comet.trail_acc -= 0.04;
-                let k = vis.rng.below(theme::COMET_TRAIL.len());
+                let k = vis.rng.below(trail.len());
                 vis.particles
-                    .trail(head.0 - 3.0, head.1, -10.0, 0.0, theme::COMET_TRAIL[k]);
+                    .trail(head.0 - 3.0, head.1, -10.0, 0.0, trail[k]);
             }
             // Bannière qui clignote doucement en rose.
-            let text = if (COMET_BANNER.chars().count() as u16) + 2 <= inner.width {
-                COMET_BANNER
+            let (long, short) = match snap.comet_kind {
+                CometKind::Normal => (COMET_BANNER, COMET_BANNER_SHORT),
+                CometKind::Golden => (GOLDEN_BANNER, GOLDEN_BANNER_SHORT),
+                CometKind::Black => (BLACK_BANNER, BLACK_BANNER_SHORT),
+            };
+            let text = if (long.chars().count() as u16) + 2 <= inner.width {
+                long
             } else {
-                COMET_BANNER_SHORT
+                short
             };
             let blink = 0.5 + 0.5 * (now * 4.0).sin();
-            let c = theme::PINK.dim(0.45 * (1.0 - blink)).glow(0.25 * blink);
+            let c = banner_color.dim(0.45 * (1.0 - blink)).glow(0.25 * blink);
             let tw = text.chars().count() as u16;
             let bx = inner.x + inner.width.saturating_sub(tw) / 2;
             draw::text(buf, bx, inner.y, text, theme::bold(c), inner.right());

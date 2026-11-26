@@ -1,6 +1,6 @@
 //! Vue en lecture seule de l'état du jeu, destinée à la présentation.
 
-use domain::{BuyMode, ConstellationId, GeneratorId, PerkId, UpgradeId};
+use domain::{BuyMode, ChallengeId, CometKind, ConstellationId, GeneratorId, PerkId, UpgradeId};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GeneratorView {
@@ -51,6 +51,27 @@ pub struct ConstellationView {
     pub cost: f64,
     pub affordable: bool,
     pub maxed: bool,
+}
+
+/// Un Défi et son état.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ChallengeView {
+    pub id: ChallengeId,
+    /// Assez de Supernovas pour le lancer.
+    pub unlocked: bool,
+    pub done: bool,
+    pub active: bool,
+}
+
+/// Le Défi en cours.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ActiveChallengeView {
+    pub id: ChallengeId,
+    /// Avancement vers l'objectif (0 → 1).
+    pub progress: f64,
+    pub elapsed: f64,
+    /// Temps restant pour un Défi chronométré.
+    pub time_left: Option<f64>,
 }
 
 /// Prochaine amélioration encore verrouillée et où on en est de sa condition.
@@ -125,6 +146,13 @@ pub struct GameSnapshot {
     pub perks: Vec<PerkView>,
     /// Constellations, dans l'ordre du catalogue.
     pub constellations: Vec<ConstellationView>,
+    /// Défis, dans l'ordre du catalogue.
+    pub challenges: Vec<ChallengeView>,
+    pub active_challenge: Option<ActiveChallengeView>,
+    /// Sorte de la comète active.
+    pub comet_kind: CometKind,
+    /// Multiplicateur de la tempête (ou frénésie dorée) en cours.
+    pub storm_multiplier: f64,
     pub constellation_levels: u32,
     pub autobuy_unlocked: bool,
     pub autobuy: bool,

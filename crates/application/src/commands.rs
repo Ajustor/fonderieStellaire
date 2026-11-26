@@ -1,4 +1,4 @@
-use domain::{ConstellationId, GeneratorId, PerkId, UpgradeId};
+use domain::{ChallengeId, ConstellationId, GeneratorId, PerkId, UpgradeId};
 
 /// Intentions de jeu envoyées par la présentation au [`crate::GameService`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -21,4 +21,8 @@ pub enum Command {
     ToggleAutoBuy,
     /// Un niveau de Constellation.
     BuyConstellation(ConstellationId),
+    /// Lance un Défi (relance le cycle).
+    StartChallenge(ChallengeId),
+    /// Abandonne le Défi en cours.
+    AbandonChallenge,
 }

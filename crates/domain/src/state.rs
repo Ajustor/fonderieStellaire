@@ -5,7 +5,10 @@ use crate::catalog::balance::{
     HOLD_HARVEST_INTERVAL, OFFLINE_CAP_SECS, OFFLINE_RATE, REVEAL_RATIO,
 };
 use crate::catalog::Catalog;
-use crate::comet::{CometReward, CometState};
+use crate::challenge::{ChallengeId, ChallengeReward, Restriction};
+use crate::comet::{
+    CometKind, CometReward, CometState, BLACK_THEFT, GOLDEN_DURATION, GOLDEN_MULTIPLIER,
+};
 use crate::constellation::{ConstellationEffect, ConstellationId};
 use crate::economy;
 use crate::events::{DomainEvent, PurchaseTarget};
@@ -49,6 +52,13 @@ pub struct GameState {
     pub fragments_spent: f64,
     /// Automate d'achat activé (si acheté).
     pub autobuy: bool,
+    /// Défi en cours et `play_time` de son lancement.
+    pub challenge: Option<ChallengeId>,
+    pub challenge_started: f64,
+    /// Défis réussis (récompenses permanentes).
+    pub challenges_done: Vec<bool>,
+    pub golden_caught: u32,
+    pub black_caught: u32,
     /// Niveau de chaque Constellation.
     pub constellations: Vec<u32>,
     revealed: Vec<bool>,
@@ -77,6 +87,11 @@ impl GameState {
             perks: Vec::new(),
             fragments_spent: 0.0,
             autobuy: false,
+            challenge: None,
+            challenge_started: 0.0,
+            challenges_done: Vec::new(),
+            golden_caught: 0,
+            black_caught: 0,
             constellations: Vec::new(),
             revealed: Vec::new(),
             autobuy_timer: 0.0,
@@ -96,6 +111,13 @@ impl GameState {
         self.achievements.resize(catalog.achievements.len(), false);
         self.perks.resize(catalog.perks.len(), false);
         self.constellations.resize(catalog.constellations.len(), 0);
+        self.challenges_done.resize(catalog.challenges.len(), false);
+        if self
+            .challenge
+            .is_some_and(|c| c.index() >= catalog.challenges.len())
+        {
+            self.challenge = None;
+        }
         for (lvl, def) in self.constellations.iter_mut().zip(&catalog.constellations) {
             if let Some(max) = def.max_level {
                 *lvl = (*lvl).min(max);
@@ -191,12 +213,21 @@ impl GameState {
     }
 
     fn comet_interval_factor(&self, catalog: &Catalog) -> f64 {
-        self.perk_effects(catalog)
-            .filter_map(|e| match e {
-                PerkEffect::CometMagnet(f) => Some(f),
+        let rewards: f64 = self
+            .challenge_rewards(catalog)
+            .filter_map(|r| match r {
+                ChallengeReward::CometFrequency(f) => Some(f),
                 _ => None,
             })
-            .product()
+            .product();
+        rewards
+            * self
+                .perk_effects(catalog)
+                .filter_map(|e| match e {
+                    PerkEffect::CometMagnet(f) => Some(f),
+                    _ => None,
+                })
+                .product::<f64>()
     }
 
     fn storm_factor(&self, catalog: &Catalog) -> f64 {
@@ -364,6 +395,11 @@ impl GameState {
         if self.supernovas < def.unlock_supernovas {
             return false;
         }
+        if let Some(Restriction::OnlyFirstGenerators(n)) = self.active_restriction(catalog) {
+            if id.index() >= n {
+                return false;
+            }
+        }
         let i = id.index();
         i == 0
             || self.owned_of(id) > 0
@@ -383,8 +419,18 @@ impl GameState {
 
     /// Fragments gagnables maintenant (Atelier « Nova dorée » compris).
     pub fn fragments_available_with(&self, catalog: &Catalog) -> f64 {
-        let base =
+        let mut base =
             (fragments_for(self.total_run, self.supernovas) * self.nova_factor(catalog)).floor();
+        if base >= 1.0 {
+            // Défi « Course contre la montre » : fragments en plus.
+            base += self
+                .challenge_rewards(catalog)
+                .filter_map(|r| match r {
+                    ChallengeReward::BonusFragments(n) => Some(n),
+                    _ => None,
+                })
+                .sum::<f64>();
+        }
         (base - self.fragments_this_run).max(0.0)
     }
 
@@ -412,6 +458,12 @@ impl GameState {
 
     /// Récolte manuelle.
     pub fn harvest(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
+        if self.active_restriction(catalog) == Some(Restriction::NoClick) {
+            events.push(DomainEvent::ChallengeBlocked {
+                restriction: Restriction::NoClick,
+            });
+            return;
+        }
         let amount = economy::click_value(catalog, self);
         self.earn(amount);
         self.clicks += 1;
@@ -424,6 +476,9 @@ impl GameState {
     /// `HOLD_HARVEST_INTERVAL` secondes de jeu (indépendamment de la vitesse de
     /// répétition du clavier). Les répétitions trop rapprochées sont ignorées.
     pub fn harvest_held(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
+        if self.active_restriction(catalog) == Some(Restriction::NoClick) {
+            return;
+        }
         if !economy::hold_harvest_unlocked(catalog, self) {
             events.push(DomainEvent::HoldHarvestLocked);
             return;
@@ -491,15 +546,19 @@ impl GameState {
             events.push(fail);
             return;
         };
-        if !self.is_upgrade_available(catalog, id) || !self.stardust.spend(def.cost) {
+        if self.active_restriction(catalog) == Some(Restriction::NoUpgrades) {
+            events.push(DomainEvent::ChallengeBlocked {
+                restriction: Restriction::NoUpgrades,
+            });
+            return;
+        }
+        let cost = def.cost * self.upgrade_cost_factor(catalog);
+        if !self.is_upgrade_available(catalog, id) || !self.stardust.spend(cost) {
             events.push(fail);
             return;
         }
         self.upgrades[id.index()] = true;
-        events.push(DomainEvent::UpgradePurchased {
-            upgrade: id,
-            cost: def.cost,
-        });
+        events.push(DomainEvent::UpgradePurchased { upgrade: id, cost });
     }
 
     /// Fait avancer le jeu de `dt` secondes. `roll` est un tirage uniforme dans
@@ -513,18 +572,32 @@ impl GameState {
         self.earn(production * dt);
 
         self.comet.interval_factor = self.comet_interval_factor(catalog);
+        if self.active_restriction(catalog) == Some(Restriction::NoComets) {
+            // Nuit noire : la prochaine comète n'arrive jamais.
+            self.comet.active = None;
+            self.comet.next_in = self.comet.next_in.max(1.0) + dt;
+        }
         let comet = self.comet.advance(dt, roll);
         if comet.spawned {
-            events.push(DomainEvent::CometSpawned);
+            events.push(DomainEvent::CometSpawned {
+                kind: self.comet.kind,
+            });
         }
         if comet.missed {
             events.push(DomainEvent::CometMissed);
+            if self.comet.kind == CometKind::Black {
+                let amount = self.stardust.value() * BLACK_THEFT;
+                if amount > 0.0 && self.stardust.spend(amount) {
+                    events.push(DomainEvent::CometStole { amount });
+                }
+            }
         }
         if comet.storm_ended {
             events.push(DomainEvent::SolarStormEnded);
         }
 
         self.check_reveals(catalog, events);
+        self.check_challenge(catalog, events);
 
         if self.autobuy {
             self.autobuy_timer += dt;
@@ -555,7 +628,17 @@ impl GameState {
         }
         let production = economy::total_production(catalog, self);
         let (comet_levels, shower_bonus) = self.comet_levels(catalog);
-        let reward = match CometReward::from_roll(roll_reward, self.stardust.value(), production) {
+        let base = match self.comet.kind {
+            CometKind::Golden => CometReward::GoldenFrenzy {
+                multiplier: GOLDEN_MULTIPLIER,
+                duration: GOLDEN_DURATION,
+            },
+            CometKind::Black => CometReward::DarkShard { fragments: 1.0 },
+            CometKind::Normal => {
+                CometReward::from_roll(roll_reward, self.stardust.value(), production)
+            }
+        };
+        let reward = match base {
             CometReward::SolarStorm {
                 multiplier,
                 duration,
@@ -566,6 +649,7 @@ impl GameState {
             CometReward::StarShower { amount } => CometReward::StarShower {
                 amount: amount * (1.0 + shower_bonus),
             },
+            other => other,
         };
         match reward {
             CometReward::SolarStorm {
@@ -573,6 +657,17 @@ impl GameState {
                 multiplier,
             } => self.comet.start_storm_with(duration, multiplier),
             CometReward::StarShower { amount } => self.earn(amount),
+            CometReward::GoldenFrenzy {
+                multiplier,
+                duration,
+            } => {
+                self.comet.start_storm_with(duration, multiplier);
+                self.golden_caught += 1;
+            }
+            CometReward::DarkShard { fragments } => {
+                self.fragments += fragments;
+                self.black_caught += 1;
+            }
         }
         self.meteors_caught += 1;
         events.push(DomainEvent::CometCaught { reward });
@@ -589,6 +684,16 @@ impl GameState {
         self.fragments += gained;
         self.fragments_this_run = 0.0;
         self.supernovas += 1;
+        self.reset_run(catalog);
+        events.push(DomainEvent::Supernova {
+            fragments_gained: gained,
+            total_fragments: self.fragments,
+        });
+        self.check_achievements(catalog, events);
+    }
+
+    /// Remet le cycle à zéro (Supernova ou lancement d'un Défi).
+    fn reset_run(&mut self, catalog: &Catalog) {
         self.stardust = Stardust::ZERO;
         self.total_run = 0.0;
         self.owned.iter_mut().for_each(|o| *o = 0);
@@ -620,11 +725,6 @@ impl GameState {
             .iter()
             .map(|g| self.is_visible(catalog, g.id))
             .collect();
-        events.push(DomainEvent::Supernova {
-            fragments_gained: gained,
-            total_fragments: self.fragments,
-        });
-        self.check_achievements(catalog, events);
     }
 
     /// Gains hors-ligne : `prod × min(écoulé, 12 h) × 0.5`.
@@ -658,13 +758,21 @@ impl GameState {
 
     /// Achète toutes les améliorations abordables, de la moins chère à la plus chère.
     pub fn buy_all_upgrades(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
+        if self.active_restriction(catalog) == Some(Restriction::NoUpgrades) {
+            events.push(DomainEvent::ChallengeBlocked {
+                restriction: Restriction::NoUpgrades,
+            });
+            return;
+        }
+        let factor = self.upgrade_cost_factor(catalog);
         let mut count = 0;
         loop {
             let next = catalog
                 .upgrades
                 .iter()
                 .filter(|u| {
-                    self.is_upgrade_available(catalog, u.id) && self.stardust.can_afford(u.cost)
+                    self.is_upgrade_available(catalog, u.id)
+                        && self.stardust.can_afford(u.cost * factor)
                 })
                 .min_by(|a, b| {
                     a.cost
@@ -681,6 +789,114 @@ impl GameState {
             }
         }
         events.push(DomainEvent::BulkUpgrades { count });
+    }
+
+    /// Contrainte du Défi en cours.
+    pub fn active_restriction(&self, catalog: &Catalog) -> Option<Restriction> {
+        self.challenge
+            .and_then(|id| catalog.challenge(id))
+            .map(|c| c.restriction)
+    }
+
+    pub fn challenge_done(&self, id: ChallengeId) -> bool {
+        self.challenges_done
+            .get(id.index())
+            .copied()
+            .unwrap_or(false)
+    }
+
+    /// Récompenses des Défis réussis.
+    pub fn challenge_rewards<'a>(
+        &'a self,
+        catalog: &'a Catalog,
+    ) -> impl Iterator<Item = ChallengeReward> + 'a {
+        catalog
+            .challenges
+            .iter()
+            .filter(|c| self.challenge_done(c.id))
+            .map(|c| c.reward)
+    }
+
+    /// Multiplicateur du coût des améliorations (Défi « Ascèse » réussi).
+    pub fn upgrade_cost_factor(&self, catalog: &Catalog) -> f64 {
+        self.challenge_rewards(catalog)
+            .filter_map(|r| match r {
+                ChallengeReward::UpgradeDiscount(f) => Some(f),
+                _ => None,
+            })
+            .product()
+    }
+
+    /// Un Défi peut-il être lancé maintenant ?
+    pub fn can_start_challenge(&self, catalog: &Catalog, id: ChallengeId) -> bool {
+        catalog.challenge(id).is_some_and(|c| {
+            self.challenge.is_none()
+                && !self.challenge_done(id)
+                && self.supernovas >= c.unlock_supernovas
+        })
+    }
+
+    /// Lance un Défi : si une Supernova rapporte des fragments, elle a lieu
+    /// d'abord ; sinon le cycle est simplement relancé.
+    pub fn start_challenge(
+        &mut self,
+        catalog: &Catalog,
+        id: ChallengeId,
+        events: &mut Vec<DomainEvent>,
+    ) {
+        if !self.can_start_challenge(catalog, id) {
+            events.push(DomainEvent::ChallengeUnavailable { challenge: id });
+            return;
+        }
+        if self.fragments_available_with(catalog) >= 1.0 {
+            self.supernova(catalog, events);
+        } else {
+            self.reset_run(catalog);
+        }
+        self.challenge = Some(id);
+        self.challenge_started = self.play_time;
+        // La contrainte s'applique tout de suite (générateurs cachés…).
+        self.reset_reveals(catalog);
+        events.push(DomainEvent::ChallengeStarted { challenge: id });
+    }
+
+    /// Abandonne le Défi en cours (le cycle continue normalement).
+    pub fn abandon_challenge(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
+        if let Some(id) = self.challenge.take() {
+            self.reset_reveals(catalog);
+            events.push(DomainEvent::ChallengeAbandoned { challenge: id });
+        }
+    }
+
+    /// Avancement du Défi en cours : (objectif atteint ?, temps écoulé).
+    fn check_challenge(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
+        let Some(id) = self.challenge else { return };
+        let Some(def) = catalog.challenge(id) else {
+            self.challenge = None;
+            return;
+        };
+        let elapsed = self.play_time - self.challenge_started;
+        if self.total_run >= def.goal {
+            self.challenge = None;
+            self.challenges_done[id.index()] = true;
+            self.reset_reveals(catalog);
+            events.push(DomainEvent::ChallengeCompleted { challenge: id });
+            self.check_achievements(catalog, events);
+        } else if let Restriction::TimeLimit(limit) = def.restriction {
+            if elapsed > limit {
+                self.challenge = None;
+                events.push(DomainEvent::ChallengeFailed { challenge: id });
+            }
+        }
+    }
+
+    /// Recalcule silencieusement les générateurs visibles (après un changement de règle).
+    fn reset_reveals(&mut self, catalog: &Catalog) {
+        self.revealed = catalog
+            .generators
+            .iter()
+            .map(|g| self.is_visible(catalog, g.id))
+            .collect();
     }
 
     /// Achat à l'Atelier stellaire avec des fragments.
@@ -759,6 +975,9 @@ impl GameState {
                 perks_owned: self.perks_owned(),
                 perks_total: catalog.perks.len(),
                 constellation_levels: self.constellation_levels_total(),
+                golden_comets: self.golden_caught,
+                black_comets: self.black_caught,
+                challenges_done: self.challenges_done.iter().filter(|&&d| d).count(),
             };
             for a in &catalog.achievements {
                 if !self.has_achievement(a.id) && a.condition.is_met(&ctx) {
@@ -1063,6 +1282,181 @@ mod tests {
         assert_eq!(s.constellation_level(hourglass), 12);
     }
 
+    fn challenge(c: &Catalog, key: &str) -> ChallengeId {
+        c.challenge_by_key(key).unwrap()
+    }
+
+    #[test]
+    fn challenges_need_supernovas_and_reset_the_run() {
+        let (c, mut s, mut ev) = setup();
+        let noclick = challenge(&c, "ch_noclick");
+        s.start_challenge(&c, noclick, &mut ev);
+        assert_eq!(
+            ev,
+            [DomainEvent::ChallengeUnavailable { challenge: noclick }]
+        );
+        ev.clear();
+        s.supernovas = 1;
+        s.stardust = Stardust::new(5000.0);
+        s.total_run = 5000.0; // pas assez pour un fragment : simple relance
+        s.owned[0] = 30;
+        s.start_challenge(&c, noclick, &mut ev);
+        assert_eq!(s.challenge, Some(noclick));
+        assert_eq!(s.owned[0], 0);
+        assert_eq!(s.stardust.value(), 0.0);
+        assert_eq!(s.supernovas, 1, "pas de Supernova sans fragment");
+        assert!(ev.contains(&DomainEvent::ChallengeStarted { challenge: noclick }));
+        // Un seul Défi à la fois.
+        ev.clear();
+        s.start_challenge(&c, challenge(&c, "ch_noupgrade"), &mut ev);
+        assert!(matches!(ev[0], DomainEvent::ChallengeUnavailable { .. }));
+    }
+
+    #[test]
+    fn starting_a_challenge_cashes_in_fragments_first() {
+        let (c, mut s, mut ev) = setup();
+        s.supernovas = 1;
+        s.total_run = 1e9; // 8 fragments au seuil 1.25e7
+        s.start_challenge(&c, challenge(&c, "ch_noclick"), &mut ev);
+        assert_eq!(s.supernovas, 2);
+        assert!(s.fragments >= 8.0);
+        assert!(ev
+            .iter()
+            .any(|e| matches!(e, DomainEvent::Supernova { .. })));
+    }
+
+    #[test]
+    fn restrictions_are_enforced() {
+        let (c, mut s, mut ev) = setup();
+        s.supernovas = 3;
+        s.start_challenge(&c, challenge(&c, "ch_noclick"), &mut ev);
+        ev.clear();
+        s.harvest(&c, &mut ev);
+        assert_eq!(s.clicks, 0);
+        assert_eq!(
+            ev,
+            [DomainEvent::ChallengeBlocked {
+                restriction: Restriction::NoClick
+            }]
+        );
+        s.abandon_challenge(&c, &mut ev);
+        s.harvest(&c, &mut ev);
+        assert_eq!(s.clicks, 1, "abandonné : les clics reviennent");
+
+        ev.clear();
+        s.start_challenge(&c, challenge(&c, "ch_noupgrade"), &mut ev);
+        s.owned[0] = 10;
+        s.stardust = Stardust::new(1e6);
+        s.buy_upgrade(&c, c.upgrade_by_key("gen0_t0").unwrap(), &mut ev);
+        s.buy_all_upgrades(&c, &mut ev);
+        assert!(s.upgrades.iter().all(|&u| !u));
+        s.abandon_challenge(&c, &mut ev);
+
+        s.start_challenge(&c, challenge(&c, "ch_minimal"), &mut ev);
+        s.total_run = 1e7;
+        s.owned[2] = 1;
+        assert!(s.is_visible(&c, GeneratorId(2)));
+        assert!(
+            !s.is_visible(&c, GeneratorId(3)),
+            "Minimaliste : 3 premiers seulement"
+        );
+        s.abandon_challenge(&c, &mut ev);
+        assert!(s.is_visible(&c, GeneratorId(3)));
+
+        s.start_challenge(&c, challenge(&c, "ch_nocomet"), &mut ev);
+        ev.clear();
+        for _ in 0..600 {
+            s.tick(&c, 1.0, 0.5, &mut ev);
+        }
+        assert!(!ev
+            .iter()
+            .any(|e| matches!(e, DomainEvent::CometSpawned { .. })));
+    }
+
+    #[test]
+    fn completing_a_challenge_grants_its_reward() {
+        let (c, mut s, mut ev) = setup();
+        s.supernovas = 1;
+        let noclick = challenge(&c, "ch_noclick");
+        s.start_challenge(&c, noclick, &mut ev);
+        s.owned[1] = 10;
+        let before = economy::total_production(&c, &s);
+        s.total_run = 1e8;
+        ev.clear();
+        s.tick(&c, 0.1, 0.5, &mut ev);
+        assert!(ev.contains(&DomainEvent::ChallengeCompleted { challenge: noclick }));
+        assert!(s.challenge_done(noclick));
+        assert_eq!(s.challenge, None);
+        assert!(s.has_achievement(c.achievement_by_key("challenge1").unwrap()));
+        let ratio = economy::total_production(&c, &s) / before;
+        assert!(ratio > 1.25, "×1,25 (+ succès) : {ratio}");
+        // Déjà réussi : on ne peut pas le refaire.
+        ev.clear();
+        s.start_challenge(&c, noclick, &mut ev);
+        assert!(matches!(ev[0], DomainEvent::ChallengeUnavailable { .. }));
+    }
+
+    #[test]
+    fn timed_challenge_fails_after_15_minutes() {
+        let (c, mut s, mut ev) = setup();
+        s.supernovas = 5;
+        let speed = challenge(&c, "ch_speed");
+        s.start_challenge(&c, speed, &mut ev);
+        ev.clear();
+        s.tick(&c, 15.0 * 60.0 + 1.0, 0.5, &mut ev);
+        assert!(ev.contains(&DomainEvent::ChallengeFailed { challenge: speed }));
+        assert!(!s.challenge_done(speed));
+        // Réussi : +1 fragment à chaque Supernova.
+        s.challenges_done[speed.index()] = true;
+        s.total_run = 1e9;
+        let with_bonus = s.fragments_available_with(&c);
+        s.challenges_done[speed.index()] = false;
+        assert_eq!(with_bonus, s.fragments_available_with(&c) + 1.0);
+    }
+
+    #[test]
+    fn ascese_reward_discounts_upgrades() {
+        let (c, mut s, mut ev) = setup();
+        s.challenges_done[challenge(&c, "ch_noupgrade").index()] = true;
+        s.owned[0] = 10;
+        s.stardust = Stardust::new(225.0 * 0.75);
+        s.buy_upgrade(&c, c.upgrade_by_key("gen0_t0").unwrap(), &mut ev);
+        assert!(ev.iter().any(|e| matches!(e, DomainEvent::UpgradePurchased { cost, .. } if (*cost - 168.75).abs() < 1e-9)));
+    }
+
+    #[test]
+    fn rare_comets() {
+        assert_eq!(CometKind::from_roll(0.5), CometKind::Normal);
+        assert_eq!(CometKind::from_roll(0.90), CometKind::Golden);
+        assert_eq!(CometKind::from_roll(0.97), CometKind::Black);
+
+        // Comète dorée : ×77 pendant 7 s.
+        let (c, mut s, mut ev) = setup();
+        s.tick(&c, 50.0, 0.90, &mut ev);
+        assert!(ev.contains(&DomainEvent::CometSpawned {
+            kind: CometKind::Golden
+        }));
+        s.catch_comet(&c, 0.1, 0.5, &mut ev);
+        assert_eq!(s.comet.boost(), 77.0);
+        assert_eq!(s.golden_caught, 1);
+
+        // Comète noire capturée : +1 fragment.
+        let (c, mut s, mut ev) = setup();
+        s.tick(&c, 50.0, 0.97, &mut ev);
+        s.catch_comet(&c, 0.1, 0.5, &mut ev);
+        assert_eq!(s.fragments, 1.0);
+        assert_eq!(s.black_caught, 1);
+
+        // Comète noire ratée : elle vole 10 % de la poussière.
+        let (c, mut s, mut ev) = setup();
+        s.tick(&c, 50.0, 0.97, &mut ev);
+        s.stardust = Stardust::new(1000.0);
+        ev.clear();
+        s.tick(&c, 16.0, 0.5, &mut ev);
+        assert!(ev.contains(&DomainEvent::CometStole { amount: 100.0 }));
+        assert!((s.stardust.value() - 900.0).abs() < 1e-9);
+    }
+
     #[test]
     fn purchase_fails_without_funds() {
         let (c, mut s, mut ev) = setup();
@@ -1126,7 +1520,9 @@ mod tests {
         assert!((s.stardust.value() - 20.0).abs() < 1e-9);
         assert_eq!(s.play_time, 2.0);
         s.tick(&c, 50.0, 0.5, &mut ev);
-        assert!(ev.contains(&DomainEvent::CometSpawned));
+        assert!(ev.contains(&DomainEvent::CometSpawned {
+            kind: CometKind::Normal
+        }));
         let before = s.stardust.value();
         s.catch_comet(&c, 0.9, 0.5, &mut ev);
         assert_eq!(s.meteors_caught, 1);

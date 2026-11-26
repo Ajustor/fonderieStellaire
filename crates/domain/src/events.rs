@@ -2,7 +2,8 @@
 //! et en lignes de journal ; le domaine ne sait rien des animations.
 
 use crate::achievement::AchievementId;
-use crate::comet::CometReward;
+use crate::challenge::{ChallengeId, Restriction};
+use crate::comet::{CometKind, CometReward};
 use crate::constellation::ConstellationId;
 use crate::generator::GeneratorId;
 use crate::perk::PerkId;
@@ -53,7 +54,9 @@ pub enum DomainEvent {
     AchievementUnlocked {
         achievement: AchievementId,
     },
-    CometSpawned,
+    CometSpawned {
+        kind: CometKind,
+    },
     /// La comète a fini sa traversée sans être capturée.
     CometMissed,
     CometCaught {
@@ -80,6 +83,33 @@ pub enum DomainEvent {
     },
     /// Automate demandé sans l'avoir acheté à l'Atelier.
     AutoBuyLocked,
+    /// Une comète noire ratée a volé de la poussière.
+    CometStole {
+        amount: f64,
+    },
+    /// Un Défi commence (le cycle a été relancé).
+    ChallengeStarted {
+        challenge: ChallengeId,
+    },
+    /// Objectif atteint : la récompense est acquise pour toujours.
+    ChallengeCompleted {
+        challenge: ChallengeId,
+    },
+    /// Temps écoulé (Défi chronométré).
+    ChallengeFailed {
+        challenge: ChallengeId,
+    },
+    ChallengeAbandoned {
+        challenge: ChallengeId,
+    },
+    /// Action interdite par le Défi en cours.
+    ChallengeBlocked {
+        restriction: Restriction,
+    },
+    /// Défi impossible à lancer (verrouillé, déjà réussi, ou un autre en cours).
+    ChallengeUnavailable {
+        challenge: ChallengeId,
+    },
     /// Une Constellation gagne un niveau.
     ConstellationUpgraded {
         constellation: ConstellationId,

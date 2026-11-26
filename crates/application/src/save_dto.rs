@@ -33,6 +33,13 @@ pub struct SaveData {
     pub autobuy: bool,
     /// Niveaux de Constellations (clé texte, niveau).
     pub constellations: Vec<(String, u32)>,
+    /// Défi en cours (clé texte, vide sinon) et `play_time` de son lancement.
+    pub challenge: String,
+    pub challenge_started: f64,
+    /// Clés des Défis réussis.
+    pub challenges_done: Vec<String>,
+    pub golden_caught: u32,
+    pub black_caught: u32,
 }
 
 impl SaveData {
@@ -82,6 +89,20 @@ impl SaveData {
                 .map(|c| (c.key.to_string(), state.constellation_level(c.id)))
                 .filter(|(_, lvl)| *lvl > 0)
                 .collect(),
+            challenge: state
+                .challenge
+                .and_then(|id| catalog.challenge(id))
+                .map(|c| c.key.to_string())
+                .unwrap_or_default(),
+            challenge_started: state.challenge_started,
+            challenges_done: catalog
+                .challenges
+                .iter()
+                .filter(|c| state.challenge_done(c.id))
+                .map(|c| c.key.to_string())
+                .collect(),
+            golden_caught: state.golden_caught,
+            black_caught: state.black_caught,
         }
     }
 
@@ -122,6 +143,15 @@ impl SaveData {
                 s.constellations[id.index()] = *level;
             }
         }
+        s.challenge = catalog.challenge_by_key(&self.challenge);
+        s.challenge_started = self.challenge_started;
+        for key in &self.challenges_done {
+            if let Some(id) = catalog.challenge_by_key(key) {
+                s.challenges_done[id.index()] = true;
+            }
+        }
+        s.golden_caught = self.golden_caught;
+        s.black_caught = self.black_caught;
         s.normalize(catalog);
         s
     }

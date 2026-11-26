@@ -8,6 +8,7 @@
 
 use crate::catalog::balance::{ACHIEVEMENT_BONUS, CLICK_BASE};
 use crate::catalog::Catalog;
+use crate::challenge::ChallengeReward;
 use crate::generator::{milestones_reached, GeneratorId};
 use crate::perk::PerkEffect;
 use crate::prestige::fragment_multiplier;
@@ -34,7 +35,16 @@ pub fn generator_multiplier(catalog: &Catalog, state: &GameState, id: GeneratorI
         })
         .product();
     let owned = state.owned_of(id);
-    upgrades * 2f64.powi(milestones_reached(owned) as i32)
+    let challenges: f64 = state
+        .challenge_rewards(catalog)
+        .filter_map(|r| match r {
+            ChallengeReward::EarlyGenerators { count, factor } if id.index() < count => {
+                Some(factor)
+            }
+            _ => None,
+        })
+        .product();
+    upgrades * challenges * 2f64.powi(milestones_reached(owned) as i32)
 }
 
 /// Production d'un générateur avant multiplicateur global.
@@ -61,6 +71,13 @@ pub fn permanent_multiplier(catalog: &Catalog, state: &GameState) -> f64 {
     upgrades
         * fragment_multiplier(state.fragments)
         * state.constellation_production(catalog)
+        * state
+            .challenge_rewards(catalog)
+            .filter_map(|r| match r {
+                ChallengeReward::Production(f) => Some(f),
+                _ => None,
+            })
+            .product::<f64>()
         * (1.0 + ACHIEVEMENT_BONUS * state.achievements_unlocked() as f64)
 }
 

@@ -12,6 +12,38 @@ pub const CROSSING_TIME: f64 = 15.0;
 pub const STORM_MULTIPLIER: f64 = 7.0;
 /// Durée de la Tempête solaire.
 pub const STORM_DURATION: f64 = 30.0;
+/// Comète dorée : production ×77 pendant 7 s.
+pub const GOLDEN_MULTIPLIER: f64 = 77.0;
+pub const GOLDEN_DURATION: f64 = 7.0;
+/// Part de la poussière volée par une comète noire qu'on laisse passer.
+pub const BLACK_THEFT: f64 = 0.10;
+/// Probabilités d'apparition des comètes rares.
+pub const GOLDEN_CHANCE: f64 = 0.10;
+pub const BLACK_CHANCE: f64 = 0.05;
+
+/// Sorte de comète, tirée à son apparition.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum CometKind {
+    #[default]
+    Normal,
+    /// Rare : capturée, production ×77 pendant 7 s.
+    Golden,
+    /// Rare : capturée, +1 fragment ; ratée, elle vole 10 % de la poussière.
+    Black,
+}
+
+impl CometKind {
+    /// Tirage dans [0, 1) : les valeurs hautes donnent les comètes rares.
+    pub fn from_roll(roll: f64) -> Self {
+        if roll >= 1.0 - BLACK_CHANCE {
+            CometKind::Black
+        } else if roll >= 1.0 - BLACK_CHANCE - GOLDEN_CHANCE {
+            CometKind::Golden
+        } else {
+            CometKind::Normal
+        }
+    }
+}
 
 /// Récompense d'une comète capturée.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -20,6 +52,10 @@ pub enum CometReward {
     SolarStorm { multiplier: f64, duration: f64 },
     /// Gain immédiat.
     StarShower { amount: f64 },
+    /// Comète dorée : production ×77 pendant 7 s.
+    GoldenFrenzy { multiplier: f64, duration: f64 },
+    /// Comète noire : fragments permanents.
+    DarkShard { fragments: f64 },
 }
 
 impl CometReward {
@@ -68,6 +104,8 @@ pub struct CometState {
     pub interval_factor: f64,
     /// Multiplicateur de la tempête en cours (×7, plus avec « La Comète »).
     pub storm_multiplier: f64,
+    /// Sorte de la comète active (ou de la dernière).
+    pub kind: CometKind,
 }
 
 impl Default for CometState {
@@ -78,6 +116,7 @@ impl Default for CometState {
             storm_remaining: 0.0,
             interval_factor: 1.0,
             storm_multiplier: STORM_MULTIPLIER,
+            kind: CometKind::Normal,
         }
     }
 }
@@ -122,6 +161,7 @@ impl CometState {
                 self.next_in -= dt;
                 if self.next_in <= 0.0 {
                     self.active = Some(0.0);
+                    self.kind = CometKind::from_roll(roll);
                     tick.spawned = true;
                 }
             }

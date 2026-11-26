@@ -23,7 +23,7 @@ struct InMemoryRepository(Rc<RefCell<Option<SaveData>>>);
 impl SaveRepository for InMemoryRepository {
     fn load(&self) -> Result<LoadOutcome, RepositoryError> {
         Ok(match self.0.borrow().clone() {
-            Some(d) => LoadOutcome::Loaded(d),
+            Some(d) => LoadOutcome::Loaded(Box::new(d)),
             None => LoadOutcome::NotFound,
         })
     }
@@ -403,7 +403,7 @@ fn descriptions_and_info_screen() {
     app.set_time(101.0);
     let text = render(&mut app, 100, 30);
     println!("{text}");
-    assert!(text.contains("SUCCÈS  2/28"));
+    assert!(text.contains("SUCCÈS  2/32"));
     assert!(text.contains("★ Premier pas"));
     assert!(text.contains("○ Centurion"));
     app.on_intent(Intent::Down);
@@ -595,4 +595,53 @@ fn locked_generator_teaser_mentions_supernovas() {
         text = render(&mut app, 100, 30);
     }
     assert!(text.contains("??? ─ apparaît après 1 Supernova"), "{text}");
+}
+
+#[test]
+fn v0_5_challenges_and_rare_comets() {
+    // 5 Supernovas faites : tous les Défis sont débloqués.
+    let mut save = advanced_save();
+    save.supernovas = 5;
+    save.total_run = 5000.0; // pas de fragment à encaisser au lancement
+    let mut app = app_with(Some(save));
+    app.set_time(100.0);
+    app.enter_game_now();
+    app.update(0.033);
+    let _ = render(&mut app, 100, 30);
+
+    app.on_intent(Intent::Challenges);
+    app.set_time(101.0);
+    let text = render(&mut app, 100, 30);
+    println!("{text}");
+    assert!(text.contains("DÉFIS"));
+    assert!(text.contains("Doigts liés"));
+    assert!(text.contains("Course contre la montre"));
+    assert!(text.contains("Récompense : Production ×1,25 pour toujours"));
+
+    // Entrée une fois : armé (rien ne se passe), deux fois : lancé.
+    app.on_intent(Intent::Buy);
+    let text = render(&mut app, 100, 30);
+    assert!(text.contains("Entrée de nouveau pour LANCER"), "{text}");
+    assert!(app.snapshot().active_challenge.is_none());
+    app.on_intent(Intent::Buy);
+    app.set_time(103.0);
+    app.update(0.033);
+    let snap = app.snapshot();
+    assert!(snap.active_challenge.is_some(), "Défi lancé");
+    assert_eq!(snap.stardust, 0.0, "le cycle est relancé");
+
+    // L'en-tête affiche le Défi en cours, les clics sont refusés.
+    let text = render(&mut app, 100, 30);
+    assert!(text.contains("◆ DÉFI Doigts liés"), "{text}");
+    app.on_intent(Intent::Harvest);
+    app.update(0.033);
+    assert_eq!(
+        app.snapshot().clicks,
+        321,
+        "aucun clic compté pendant « Doigts liés »"
+    );
+
+    // Comète dorée : bannière dorée (le tirage 0.1 de FakeRng ne la donne pas,
+    // on vérifie donc le texte du widget directement).
+    assert!(presentation::widgets::sky::GOLDEN_BANNER.contains("DORÉE"));
 }

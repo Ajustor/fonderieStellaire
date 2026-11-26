@@ -1,6 +1,7 @@
 //! Données du jeu : générateurs, améliorations, succès et constantes d'équilibrage.
 
 use crate::achievement::{AchievementCondition, AchievementDef, AchievementId};
+use crate::challenge::{ChallengeDef, ChallengeId, ChallengeReward, Restriction};
 use crate::constellation::{ConstellationDef, ConstellationEffect, ConstellationId};
 use crate::generator::{GeneratorDef, GeneratorId};
 use crate::perk::{PerkDef, PerkEffect, PerkId};
@@ -147,7 +148,7 @@ const CLICK_UPGRADES: [(&str, f64, f64, f64); 3] = [
 /// Amélioration « maintenir Espace pour récolter » : (nom, total_run requis, coût).
 const HOLD_UPGRADE: (&str, f64, f64) = ("Récolte continue", 150.0, 300.0);
 
-const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 28] = [
+const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 32] = [
     (
         "first",
         "Premier pas",
@@ -319,6 +320,104 @@ const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 28] = [
         "Atteindre 50 niveaux de Constellations au total",
         AchievementCondition::ConstellationLevels(50),
     ),
+    (
+        "golden1",
+        "Ruée vers l'or",
+        "Capturer une comète dorée",
+        AchievementCondition::GoldenComets(1),
+    ),
+    (
+        "black1",
+        "Chasseur d'ombres",
+        "Capturer une comète noire",
+        AchievementCondition::BlackComets(1),
+    ),
+    (
+        "challenge1",
+        "Défi relevé",
+        "Réussir un Défi",
+        AchievementCondition::ChallengesDone(1),
+    ),
+    (
+        "challenge_all",
+        "Maître des Défis",
+        "Réussir tous les Défis",
+        AchievementCondition::ChallengesDone(5),
+    ),
+];
+
+/// Défis : (clé, nom, règle, récompense en clair, symbole, objectif,
+/// Supernovas nécessaires, contrainte, récompense).
+#[allow(clippy::type_complexity)]
+const CHALLENGES: [(
+    &str,
+    &str,
+    &str,
+    &str,
+    char,
+    f64,
+    u32,
+    Restriction,
+    ChallengeReward,
+); 5] = [
+    (
+        "ch_noclick",
+        "Doigts liés",
+        "Aucune récolte manuelle",
+        "Production ×1,25 pour toujours",
+        '•',
+        1e8,
+        1,
+        Restriction::NoClick,
+        ChallengeReward::Production(1.25),
+    ),
+    (
+        "ch_noupgrade",
+        "Ascèse",
+        "Aucune amélioration",
+        "Améliorations 25 % moins chères",
+        '▲',
+        1e7,
+        1,
+        Restriction::NoUpgrades,
+        ChallengeReward::UpgradeDiscount(0.75),
+    ),
+    (
+        "ch_minimal",
+        "Minimaliste",
+        "Seulement les Sondes, Drones et Moissonneurs",
+        "Sondes, Drones et Moissonneurs ×3",
+        '◇',
+        1e8,
+        1,
+        Restriction::OnlyFirstGenerators(3),
+        ChallengeReward::EarlyGenerators {
+            count: 3,
+            factor: 3.0,
+        },
+    ),
+    (
+        "ch_nocomet",
+        "Nuit noire",
+        "Aucune comète",
+        "Comètes 25 % plus fréquentes",
+        '●',
+        1e9,
+        3,
+        Restriction::NoComets,
+        ChallengeReward::CometFrequency(0.75),
+    ),
+    (
+        "ch_speed",
+        "Course contre la montre",
+        "Objectif en moins de 15 minutes",
+        "+1 fragment à chaque Supernova",
+        '★',
+        1e8,
+        5,
+        Restriction::TimeLimit(15.0 * 60.0),
+        ChallengeReward::BonusFragments(1.0),
+    ),
 ];
 
 /// Constellations : (clé, nom, description d'un niveau, symbole, coût de base,
@@ -478,6 +577,7 @@ pub struct Catalog {
     pub achievements: Vec<AchievementDef>,
     pub perks: Vec<PerkDef>,
     pub constellations: Vec<ConstellationDef>,
+    pub challenges: Vec<ChallengeDef>,
 }
 
 impl Catalog {
@@ -624,12 +724,45 @@ impl Catalog {
             )
             .collect();
 
+        let challenges = CHALLENGES
+            .iter()
+            .enumerate()
+            .map(
+                |(
+                    i,
+                    &(
+                        key,
+                        name,
+                        rule,
+                        reward_text,
+                        symbol,
+                        goal,
+                        unlock_supernovas,
+                        restriction,
+                        reward,
+                    ),
+                )| ChallengeDef {
+                    id: ChallengeId(i),
+                    key,
+                    name,
+                    rule,
+                    reward_text,
+                    symbol,
+                    goal,
+                    unlock_supernovas,
+                    restriction,
+                    reward,
+                },
+            )
+            .collect();
+
         Catalog {
             generators,
             upgrades,
             achievements,
             perks,
             constellations,
+            challenges,
         }
     }
 
@@ -651,6 +784,14 @@ impl Catalog {
 
     pub fn perk(&self, id: PerkId) -> Option<&PerkDef> {
         self.perks.get(id.index())
+    }
+
+    pub fn challenge(&self, id: ChallengeId) -> Option<&ChallengeDef> {
+        self.challenges.get(id.index())
+    }
+
+    pub fn challenge_by_key(&self, key: &str) -> Option<ChallengeId> {
+        self.challenges.iter().find(|c| c.key == key).map(|c| c.id)
     }
 
     pub fn constellation(&self, id: ConstellationId) -> Option<&ConstellationDef> {
@@ -694,7 +835,8 @@ mod tests {
         assert_eq!(c.generators.len(), 12);
         assert_eq!(c.upgrades.len(), 12 * 4 + 4 + 3 + 1);
         assert!(c.upgrade_by_key("hold_0").is_some());
-        assert_eq!(c.achievements.len(), 28);
+        assert_eq!(c.achievements.len(), 32);
+        assert_eq!(c.challenges.len(), 5);
         assert_eq!(c.constellations.len(), 6);
         assert_eq!(c.generators[11].unlock_supernovas, 15);
         assert_eq!(c.perks.len(), 8);

@@ -13,7 +13,10 @@ use application::updates::display_version;
 use application::{Command, GameEvent, GameService, GameSnapshot, UpdateEvent, UpdateService};
 use domain::catalog::balance::ACHIEVEMENT_BONUS;
 use domain::prestige::fragment_multiplier;
-use domain::{CometReward, DomainEvent, Effect, GeneratorId, PurchaseTarget, Requirement};
+use domain::{
+    CometKind, CometReward, DomainEvent, Effect, GeneratorId, PurchaseTarget, Requirement,
+    Restriction,
+};
 
 use crate::draw;
 use crate::fmt;
@@ -88,6 +91,8 @@ pub struct App {
     hold: HoldDetector,
     /// Dernière fois qu'on a expliqué comment débloquer la récolte continue.
     hold_hint_at: f64,
+    /// Dernier message « interdit pendant le Défi » (évite d'en inonder l'écran).
+    blocked_hint_at: f64,
     updates: UpdateService,
     /// Dernier état connu de la mise à jour automatique.
     update_status: Option<UpdateEvent>,
@@ -122,6 +127,7 @@ impl App {
             stats: FrameStats::default(),
             hold: HoldDetector::default(),
             hold_hint_at: NEVER,
+            blocked_hint_at: NEVER,
             updates: UpdateService::disabled(env!("CARGO_PKG_VERSION")),
             update_status: None,
         };
@@ -255,6 +261,11 @@ impl App {
                 if let Some(s) = self.ui.shop {
                     if s.is_closed(now) {
                         self.ui.shop = None;
+                    }
+                }
+                if let Some(c) = self.ui.challenges {
+                    if c.is_closed(now) {
+                        self.ui.challenges = None;
                     }
                 }
                 self.update_nova(now);
@@ -391,6 +402,31 @@ impl App {
             }
             return;
         }
+        if let Some(popup) = self.ui.challenges {
+            if popup.closing_at.is_none() {
+                let count = self.snap.challenges.len();
+                match intent {
+                    Intent::Up => {
+                        self.ui.challenges_sel = self.ui.challenges_sel.saturating_sub(1);
+                        self.ui.challenge_armed = false;
+                    }
+                    Intent::Down => {
+                        self.ui.challenges_sel =
+                            (self.ui.challenges_sel + 1).min(count.saturating_sub(1));
+                        self.ui.challenge_armed = false;
+                    }
+                    Intent::Buy | Intent::Yes => self.challenge_action(),
+                    Intent::Challenges | Intent::Escape | Intent::No | Intent::Quit => {
+                        self.ui.challenge_armed = false;
+                        if let Some(c) = self.ui.challenges.as_mut() {
+                            c.closing_at = Some(now);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            return;
+        }
         if let Some(codex) = self.ui.codex {
             if codex.closing_at.is_none() {
                 match intent {
@@ -476,6 +512,19 @@ impl App {
                 }
             }
             Intent::Save => self.command(Command::Save),
+            Intent::Challenges => {
+                self.ui.challenges = Some(Popup {
+                    opened_at: now,
+                    closing_at: None,
+                });
+                self.ui.challenge_armed = false;
+                self.ui.challenges_sel = self
+                    .snap
+                    .challenges
+                    .iter()
+                    .position(|c| c.active || (c.unlocked && !c.done))
+                    .unwrap_or(0);
+            }
             Intent::Info => {
                 self.ui.codex = Some(Popup {
                     opened_at: now,
@@ -509,6 +558,40 @@ impl App {
         if let Some(p) = self.ui.popup.as_mut() {
             p.closing_at = Some(self.now);
         }
+    }
+
+    /// Entrée dans la fenêtre des Défis : 1er appui = arme, 2e = lance ou abandonne.
+    fn challenge_action(&mut self) {
+        let Some(v) = self.snap.challenges.get(self.ui.challenges_sel).copied() else {
+            return;
+        };
+        let possible = v.active || (v.unlocked && !v.done && self.snap.active_challenge.is_none());
+        if !possible {
+            self.ui.challenge_armed = false;
+            return;
+        }
+        if !self.ui.challenge_armed {
+            self.ui.challenge_armed = true;
+            return;
+        }
+        self.ui.challenge_armed = false;
+        if v.active {
+            self.command(Command::AbandonChallenge);
+        } else {
+            self.command(Command::StartChallenge(v.id));
+            if let Some(c) = self.ui.challenges.as_mut() {
+                c.closing_at = Some(self.now);
+            }
+            self.vis.cascade_start = self.now;
+        }
+    }
+
+    fn challenge_name(&self, id: domain::ChallengeId) -> &'static str {
+        self.service
+            .catalog()
+            .challenge(id)
+            .map(|c| c.name)
+            .unwrap_or("?")
     }
 
     fn start_supernova(&mut self) {
@@ -715,12 +798,50 @@ impl App {
                         .explode(x, y, 18, 14.0, &[theme::GOLD, theme::WHITE]);
                 }
             }
-            DomainEvent::CometSpawned => {
+            DomainEvent::CometSpawned { kind } => {
                 let h = sky.height.max(4) as f64;
                 self.vis.comet.y0 = self.vis.rng.range(0.45, 0.8) * h;
                 self.vis.comet.amp = -self.vis.rng.range(0.15, 0.35) * h;
                 self.vis.comet.trail_acc = 0.0;
-                self.log(Kind::Comet, "● Une comète approche ! [C] pour la capturer");
+                match kind {
+                    CometKind::Golden => {
+                        self.log(Kind::Achievement, "● Une COMÈTE DORÉE passe ! [C] vite !");
+                        self.toasts.push(
+                            now,
+                            theme::GOLD,
+                            "● Comète dorée !",
+                            "Capture-la [C] : production ×77",
+                        );
+                    }
+                    CometKind::Black => {
+                        self.log(
+                            Kind::Error,
+                            "● Une COMÈTE NOIRE approche… [C] ou elle te vole !",
+                        );
+                        self.toasts.push(
+                            now,
+                            theme::RED,
+                            "● Comète noire !",
+                            "Capture-la [C], sinon elle vole 10 % de ta poussière",
+                        );
+                    }
+                    CometKind::Normal => {
+                        self.log(Kind::Comet, "● Une comète approche ! [C] pour la capturer");
+                    }
+                }
+            }
+            DomainEvent::CometStole { amount } => {
+                let a = fmt::short(amount);
+                self.log(Kind::Error, format!("● La comète noire a volé {a} ✦"));
+                self.toasts.push(
+                    now,
+                    theme::RED,
+                    "● Volé !",
+                    format!("La comète noire emporte {a} ✦"),
+                );
+                self.vis.roll_counter(now);
+                self.vis.sky_flash = now;
+                self.vis.sky_flash_color = theme::RED.dim(0.3);
             }
             DomainEvent::CometMissed => {
                 self.log(Kind::Save, "La comète s'éloigne dans le vide…");
@@ -758,6 +879,33 @@ impl App {
                             format!("Production ×{multiplier} pendant {duration} s"),
                         );
                         self.log(Kind::Comet, "● Comète capturée : Tempête solaire !");
+                    }
+                    CometReward::GoldenFrenzy {
+                        multiplier,
+                        duration,
+                    } => {
+                        self.toasts.push(
+                            now,
+                            theme::GOLD,
+                            "● Frénésie dorée !",
+                            format!("Production ×{multiplier} pendant {duration} s"),
+                        );
+                        self.log(Kind::Achievement, "● Comète dorée capturée : frénésie !");
+                        self.vis.fireworks(now);
+                        self.vis.bump_counter(now);
+                    }
+                    CometReward::DarkShard { fragments } => {
+                        let f = fmt::short(fragments);
+                        self.toasts.push(
+                            now,
+                            theme::PINK,
+                            "● Éclat d'ombre",
+                            format!("+{f} fragment permanent"),
+                        );
+                        self.log(
+                            Kind::Achievement,
+                            format!("● Comète noire capturée : +{f} fragment"),
+                        );
                     }
                     CometReward::StarShower { amount } => {
                         let a = fmt::short(amount);
@@ -854,6 +1002,72 @@ impl App {
                     format!("★ Constellation {name} niveau {level} : {total}"),
                 );
                 self.vis.constellation_pop = now;
+            }
+            DomainEvent::ChallengeStarted { challenge } => {
+                let name = self.challenge_name(challenge);
+                let rule = self
+                    .service
+                    .catalog()
+                    .challenge(challenge)
+                    .map(|c| c.rule)
+                    .unwrap_or("");
+                self.toasts
+                    .push(now, theme::PINK, format!("◆ Défi : {name}"), rule);
+                self.log(Kind::Supernova, format!("◆ Défi lancé : {name} ({rule})"));
+                self.ui.gen_sel = 0;
+                self.ui.upg_sel = 0;
+                self.vis.bar_fill = [0.0; GEN_SLOTS];
+            }
+            DomainEvent::ChallengeCompleted { challenge } => {
+                let name = self.challenge_name(challenge);
+                let reward = self
+                    .service
+                    .catalog()
+                    .challenge(challenge)
+                    .map(|c| c.reward_text)
+                    .unwrap_or("");
+                self.toasts
+                    .push(now, theme::GOLD, format!("★ Défi réussi : {name}"), reward);
+                self.log(
+                    Kind::Achievement,
+                    format!("★ Défi réussi : {name} · {reward}"),
+                );
+                self.vis.fireworks(now);
+                self.vis.fireworks(now + 0.6);
+            }
+            DomainEvent::ChallengeFailed { challenge } => {
+                let name = self.challenge_name(challenge);
+                self.toasts.push(
+                    now,
+                    theme::RED,
+                    "Défi échoué",
+                    format!("{name} : temps écoulé"),
+                );
+                self.log(Kind::Error, format!("Défi échoué : {name} (temps écoulé)"));
+            }
+            DomainEvent::ChallengeAbandoned { challenge } => {
+                let name = self.challenge_name(challenge);
+                self.log(Kind::Info, format!("Défi abandonné : {name}"));
+            }
+            DomainEvent::ChallengeBlocked { restriction } => {
+                if now - self.blocked_hint_at > 3.0 {
+                    self.blocked_hint_at = now;
+                    let why = match restriction {
+                        Restriction::NoClick => "Pas de récolte manuelle pendant ce Défi",
+                        Restriction::NoUpgrades => "Pas d'amélioration pendant ce Défi",
+                        _ => "Interdit pendant ce Défi",
+                    };
+                    self.toasts.push(now, theme::GREY, "◆ Défi en cours", why);
+                }
+            }
+            DomainEvent::ChallengeUnavailable { challenge } => {
+                let name = self.challenge_name(challenge);
+                self.toasts.push(
+                    now,
+                    theme::GREY,
+                    "Défis",
+                    format!("« {name} » n'est pas disponible"),
+                );
             }
             DomainEvent::AutoBuyLocked => {
                 self.toasts.push(
