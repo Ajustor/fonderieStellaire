@@ -22,7 +22,7 @@ class GlyphCoverageTest {
         "JetBrainsMono-Bold.ttf",
         "NotoSansSymbols2-Regular.ttf",
         "NotoSansSymbols-Regular.ttf",
-    ).map { createFont.invoke(null, trueType, File("src/main/assets/fonts/$it")) }
+    ).map { createFont.invoke(null, trueType, File("src/main/assets/fonts/$it"))!! }
 
     private fun covers(font: Any, cp: Int) = canDisplay.invoke(font, cp) as Boolean
 
