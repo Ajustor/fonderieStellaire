@@ -11,6 +11,13 @@ val rustJniLibs = layout.buildDirectory.dir("rustJniLibs")
 val uniffiOut = layout.buildDirectory.dir("generated/uniffi")
 val rustProfile = providers.gradleProperty("rustProfile").getOrElse("release")
 
+/** Signature de publication : fournie par la CI (secrets du dépôt) ou par l'environnement. */
+val keystorePath: String? = System.getenv("ANDROID_KEYSTORE_PATH")
+/** Numéro de build Play Store (croissant) et version affichée, injectés par la CI. */
+val ciVersionCode = System.getenv("ANDROID_VERSION_CODE")?.toIntOrNull() ?: 1
+val ciVersionName = System.getenv("FONDERIE_VERSION")?.trim()?.removePrefix("v")
+    ?.takeIf { it.isNotEmpty() } ?: "0.16.0"
+
 android {
     namespace = "io.github.ajustor.fonderie"
     compileSdk = 34
@@ -20,17 +27,29 @@ android {
         applicationId = "io.github.ajustor.fonderie"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.16.0"
+        versionCode = ciVersionCode
+        versionName = ciVersionName
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
+        }
+    }
+
+    signingConfigs {
+        if (keystorePath != null) {
+            create("upload") {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
         }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            // Sans clé (compilation locale), la release est signée avec la clé de debug.
+            signingConfig = signingConfigs.findByName("upload") ?: signingConfigs.getByName("debug")
         }
     }
 
