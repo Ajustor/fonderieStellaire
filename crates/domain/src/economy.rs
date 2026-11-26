@@ -77,6 +77,11 @@ pub fn permanent_multiplier(catalog: &Catalog, state: &GameState) -> f64 {
         * state.relic_production(catalog)
         * state.boost_factor(crate::cosmic::BoostKind::Production)
         * state.grid_effects().production
+        * if state.awakened {
+            crate::megastructure::AWAKENED_PRODUCTION
+        } else {
+            1.0
+        }
         * if state.converged {
             crate::cosmic::CONVERGENCE_PRODUCTION
         } else {

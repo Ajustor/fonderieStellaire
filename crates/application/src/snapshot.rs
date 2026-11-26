@@ -329,7 +329,7 @@ pub struct GameSnapshot {
     pub history_long: Vec<(f64, f32)>,
     pub best_production: f64,
     /// Temps de jeu des grandes étapes (0 : pas encore).
-    pub milestones: [f64; 5],
+    pub milestones: [f64; 6],
     /// Couleurs : 0 normales, 1 daltonien, 2 contraste élevé.
     pub color_mode: u8,
     /// Acte IV : Mégastructures.
@@ -345,4 +345,8 @@ pub struct GameSnapshot {
     pub daily: Option<DailyView>,
     pub daily_best: f64,
     pub daily_rewarded: bool,
+    /// Éveil du Cosmos : prêt, en cours (restant, total), achevé.
+    pub awakening_ready: bool,
+    pub awakening: Option<(f64, f64)>,
+    pub awakened: bool,
 }

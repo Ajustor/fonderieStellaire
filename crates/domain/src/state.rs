@@ -144,6 +144,9 @@ pub struct GameState {
     pub exotic: f64,
     pub exotic_total: f64,
     pub grid: Vec<Option<StructureKind>>,
+    /// Éveil du Cosmos : secondes restantes s'il est en cours, et achevé.
+    pub awakening: Option<f64>,
+    pub awakened: bool,
     /// Pilote automatique des flottes (après 10 systèmes explorés).
     pub auto_fleets: bool,
     /// Règles imposées (univers de poche du Défi du jour), à la place de
@@ -159,8 +162,8 @@ pub struct GameState {
     pub history: Vec<(f64, f32)>,
     pub best_production: f64,
     /// Temps de jeu des grandes étapes (0 : pas encore) : 1re Supernova,
-    /// 1er Big Crunch, 1er Big Bang, fin de l'Acte II, fin de l'Acte III.
-    pub milestones: [f64; 5],
+    /// 1er Big Crunch, 1er Big Bang, fins des Actes II, III et IV.
+    pub milestones: [f64; 6],
     /// Niveau de chaque Constellation.
     pub constellations: Vec<u32>,
     revealed: Vec<bool>,
@@ -228,6 +231,8 @@ impl GameState {
             exotic: 0.0,
             exotic_total: 0.0,
             grid: Vec::new(),
+            awakening: None,
+            awakened: false,
             auto_fleets: false,
             rules_override: None,
             daily_day: 0,
@@ -235,7 +240,7 @@ impl GameState {
             daily_rewarded: false,
             history: Vec::new(),
             best_production: 0.0,
-            milestones: [0.0; 5],
+            milestones: [0.0; 6],
             constellations: Vec::new(),
             revealed: Vec::new(),
             autobuy_timer: 0.0,
@@ -999,6 +1004,7 @@ impl GameState {
         self.advance_boosts(dt);
         self.advance_cosmic_events(catalog, dt, roll, events);
         self.accrue_exotic(dt);
+        self.advance_awakening(catalog, dt, events);
 
         // Filet à comètes : capture les comètes normales après 2 s de passage.
         if self.lab_active(catalog, LabEffect::CometNet)
@@ -1170,6 +1176,7 @@ impl GameState {
         self.advance_attractor(catalog, elapsed_secs, events);
         self.advance_fleets_offline(catalog, elapsed_secs, events);
         self.accrue_exotic(elapsed_secs);
+        self.advance_awakening(catalog, elapsed_secs, events);
         self.advance_convergence(catalog, elapsed_secs, events);
         self.advance_boosts(elapsed_secs);
         if let Some((event, left)) = self.pending_event {
@@ -1848,8 +1855,52 @@ impl GameState {
         self.check_achievements(catalog, events);
     }
 
+    /// L'Éveil du Cosmos est prêt : Cœur bâti, les six types présents, et au
+    /// moins 30 structures.
+    pub fn awakening_ready(&self) -> bool {
+        !self.awakened
+            && self.awakening.is_none()
+            && self.structures_built() >= megastructure::AWAKENING_STRUCTURES
+            && StructureKind::ALL
+                .iter()
+                .all(|&k| self.structure_count(k) > 0)
+    }
+
+    pub fn start_awakening(&mut self, events: &mut Vec<DomainEvent>) {
+        if !self.awakening_ready() {
+            events.push(DomainEvent::PurchaseFailed {
+                target: PurchaseTarget::Awakening,
+            });
+            return;
+        }
+        self.awakening = Some(megastructure::AWAKENING_SECS);
+        events.push(DomainEvent::AwakeningStarted);
+    }
+
+    fn advance_awakening(&mut self, catalog: &Catalog, secs: f64, events: &mut Vec<DomainEvent>) {
+        let Some(left) = self.awakening else {
+            return;
+        };
+        let left = left - secs;
+        if left > 0.0 {
+            self.awakening = Some(left);
+            return;
+        }
+        self.awakening = None;
+        self.awakened = true;
+        self.mark_milestone(5);
+        self.check_achievements(catalog, events);
+        events.push(DomainEvent::CosmosAwakened);
+    }
+
     /// Démolit une structure (sans remboursement) pour réorganiser la grille.
     pub fn demolish(&mut self, cell: usize, events: &mut Vec<DomainEvent>) {
+        if self.awakening.is_some() {
+            events.push(DomainEvent::PurchaseFailed {
+                target: PurchaseTarget::Structure(cell),
+            });
+            return;
+        }
         if self.grid.get(cell).is_some_and(|c| c.is_some()) {
             self.grid[cell] = None;
             events.push(DomainEvent::StructureRemoved { cell });
@@ -2630,6 +2681,7 @@ impl GameState {
                 converged: self.converged,
                 structures: self.structures_built(),
                 core_built: self.structure_count(StructureKind::Core) > 0,
+                awakened: self.awakened,
             };
             for a in &catalog.achievements {
                 if !self.has_achievement(a.id) && a.condition.is_met(&ctx) {
@@ -3980,5 +4032,30 @@ mod tests {
         assert_eq!(main.record_daily(20_000, 1e12), 0.0, "une fois par jour");
         assert_eq!(main.daily_best, 1e12);
         assert_eq!(main.record_daily(20_001, 1e10), 6.0, "le lendemain, oui");
+    }
+
+    #[test]
+    fn cosmos_awakening_ends_act_four() {
+        let (c, mut s, mut ev) = setup();
+        s.normalize(&c);
+        s.converged = true;
+        assert!(!s.awakening_ready());
+        for (i, cell) in s.grid.iter_mut().enumerate().take(30) {
+            *cell = StructureKind::from_index(i % 5);
+        }
+        assert!(!s.awakening_ready(), "il manque le Cœur");
+        s.grid[40] = Some(StructureKind::Core);
+        assert!(s.awakening_ready());
+        let before = economy::permanent_multiplier(&c, &s);
+        s.start_awakening(&mut ev);
+        s.demolish(0, &mut ev);
+        assert!(s.grid[0].is_some(), "on ne démolit pas pendant l'Éveil");
+        ev.clear();
+        s.apply_offline(&c, 72.0 * 3600.0 + 1.0, &mut ev);
+        assert!(ev.contains(&DomainEvent::CosmosAwakened));
+        assert!(s.awakened && s.milestones[5] > 0.0);
+        let ratio = economy::permanent_multiplier(&c, &s) / before;
+        assert!((100.0..110.0).contains(&ratio), "{ratio}");
+        assert!(s.has_achievement(c.achievement_by_key("awaken").unwrap()));
     }
 }

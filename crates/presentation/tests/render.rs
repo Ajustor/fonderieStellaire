@@ -1402,3 +1402,59 @@ fn v0_15_daily_challenge() {
     }
     assert!(seen, "la carte du résultat s'affiche");
 }
+
+#[test]
+fn v0_16_cosmos_awakening_finale() {
+    let mut save = advanced_save();
+    save.big_bangs = 1;
+    save.attractor = 7;
+    save.map_seed = 42;
+    save.converged = true;
+    // 30 structures des six types, le Cœur en case 22 (centre de la grille).
+    save.grid = (0..45)
+        .map(|i| match i {
+            22 => 5,
+            i if i < 31 => (i % 5) as i8,
+            _ => -1,
+        })
+        .collect();
+    let mut app = app_with(Some(save));
+    let mut t = 100.0;
+    app.set_time(t);
+    app.enter_game_now();
+    app.update(0.033);
+    assert!(app.snapshot().awakening_ready);
+    let text = render(&mut app, 120, 36);
+    assert!(
+        text.contains('✶'),
+        "la constellation des structures est dans le ciel"
+    );
+    app.on_intent(Intent::Megastructures);
+    // Le Cœur : case 22 = ligne 2, colonne 4.
+    for _ in 0..2 {
+        app.on_intent(Intent::Down);
+    }
+    for _ in 0..4 {
+        app.on_intent(Intent::NextPanel);
+    }
+    t += 1.0;
+    app.set_time(t);
+    let text = render(&mut app, 120, 40);
+    assert!(text.contains("lancer l'Éveil du Cosmos"), "{text}");
+    app.on_intent(Intent::Buy);
+    app.update(0.033);
+    assert!(app.snapshot().awakening.is_some());
+    app.on_intent(Intent::Escape);
+    app.update(72.0 * 3600.0 + 1.0);
+    assert!(app.snapshot().awakened);
+    let mut text = String::new();
+    for _ in 0..(30 * 30) {
+        t += 1.0 / 30.0;
+        app.set_time(t);
+        app.update(1.0 / 30.0);
+        text = render(&mut app, 100, 30);
+    }
+    println!("{text}");
+    assert!(text.contains("FIN DE L'ACTE IV"), "{text}");
+    assert!(text.contains("Conçu et forgé par Ajustor"));
+}

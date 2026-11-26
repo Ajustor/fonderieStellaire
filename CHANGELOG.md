@@ -1,5 +1,28 @@
 # Journal des versions
 
+## v0.16.0 — Acte IV, fin : le Cosmos vivant
+
+### Nouveautés
+- **Tes mégastructures dans le ciel** : chacune devient une étoile de sa
+  couleur, reliée à ses voisines, en constellation au-dessus de la fonderie.
+- **Éveil du Cosmos** : Cœur stellaire bâti, les six types présents et au
+  moins 30 structures, lance-le avec `Entrée` sur le Cœur (écran `W`).
+  **72 h en temps réel**, même jeu fermé ; pendant l'Éveil, on ne démolit
+  plus. Ensuite : **fin de l'Acte IV**, production ×100, et le jeu continue.
+- **Grand final** : un générique qui retrace toute ta partie, acte par acte,
+  avec le temps de jeu de chaque grande étape.
+- Statistiques : la fin de l'Acte IV rejoint les grandes étapes.
+- **1 nouveau succès** (55 au total).
+
+### Animations
+- Pendant l'Éveil, une **vague de lumière** balaie la grille et la
+  constellation du ciel ; une fois le Cosmos éveillé, elles scintillent aux
+  **couleurs du spectre**.
+- Le générique final s'ouvre sur une galaxie aux couleurs de l'Acte IV.
+
+### Rythme (simulateur, 3 h de jeu par jour)
+- Fin de l'Acte IV vers le **49e jour** (environ 7 semaines).
+
 ## v0.15.0 — Acte IV, partie 2 : le Défi du jour
 
 ### Nouveautés

@@ -103,6 +103,9 @@ pub struct SaveData {
     pub daily_day: u64,
     pub daily_best: f64,
     pub daily_rewarded: bool,
+    /// Éveil du Cosmos : secondes restantes (0 : aucun), achevé.
+    pub awakening_left: f64,
+    pub awakened: bool,
 }
 
 impl SaveData {
@@ -272,6 +275,8 @@ impl SaveData {
             daily_day: state.daily_day,
             daily_best: state.daily_best,
             daily_rewarded: state.daily_rewarded,
+            awakening_left: state.awakening.unwrap_or(0.0),
+            awakened: state.awakened,
         }
     }
 
@@ -415,6 +420,8 @@ impl SaveData {
         s.daily_day = self.daily_day;
         s.daily_best = self.daily_best;
         s.daily_rewarded = self.daily_rewarded;
+        s.awakening = (self.awakening_left > 0.0).then_some(self.awakening_left);
+        s.awakened = self.awakened;
         s.exotic_total = self.exotic_total;
         s.grid = self
             .grid

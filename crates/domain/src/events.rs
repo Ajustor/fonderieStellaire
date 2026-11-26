@@ -33,6 +33,8 @@ pub enum PurchaseTarget {
     Convergence,
     /// Bâtir sur une case de la grille des Mégastructures.
     Structure(usize),
+    /// Lancer l'Éveil du Cosmos.
+    Awakening,
 }
 
 /// Ce que devient une relique trouvée.
@@ -219,6 +221,10 @@ pub enum DomainEvent {
         cell: usize,
         kind: crate::megastructure::StructureKind,
     },
+    /// L'Éveil du Cosmos commence (72 h).
+    AwakeningStarted,
+    /// Fin de l'Acte IV : le Cosmos est vivant.
+    CosmosAwakened,
     /// Une structure est démolie.
     StructureRemoved {
         cell: usize,

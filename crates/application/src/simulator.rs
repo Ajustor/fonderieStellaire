@@ -226,6 +226,9 @@ pub fn simulate(catalog: &Catalog, cfg: &SimConfig, mut progress: impl FnMut(f64
         if s.megastructures_unlocked() && (t / 3600.0).fract() < dt / 3600.0 + 1e-9 {
             build_megastructures(catalog, &mut s, &mut ev);
         }
+        if s.awakening_ready() {
+            s.start_awakening(&mut ev);
+        }
 
         // Reliques : on équipe les plus rares, en privilégiant la production.
         if ev
@@ -361,8 +364,18 @@ pub fn simulate(catalog: &Catalog, cfg: &SimConfig, mut progress: impl FnMut(f64
                     }
                     if n >= domain::megastructure::CELLS {
                         mark(&mut report, "Grille complète".into(), t);
-                        report.finished = true;
                     }
+                }
+                DomainEvent::AwakeningStarted => {
+                    mark(&mut report, "Éveil du Cosmos lancé".into(), t);
+                }
+                DomainEvent::CosmosAwakened => {
+                    mark(
+                        &mut report,
+                        "Fin de l'Acte IV (le Cosmos s'éveille)".into(),
+                        t,
+                    );
+                    report.finished = true;
                 }
                 _ => {}
             }

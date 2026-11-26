@@ -126,6 +126,10 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
             } else {
                 String::new()
             };
+            let awaken = snap
+                .awakening
+                .map(|(l, _)| format!(" ✶ Éveil {} ·", fmt::duration(l)))
+                .unwrap_or_default();
             let converge = snap
                 .convergence
                 .map(|(l, _)| format!(" ✶ Convergence {} ·", fmt::duration(l)))
@@ -162,7 +166,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
                 s
             };
             variants.push(format!(
-                "{daily}{event}{converge}{boost}{exotic}{} progression {pct} [I] ",
+                "{daily}{event}{awaken}{converge}{boost}{exotic}{} progression {pct} [I] ",
                 full(true)
             ));
             variants.push(format!("{daily} {pct} "));

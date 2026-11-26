@@ -61,4 +61,6 @@ pub enum Command {
     StartDaily,
     /// Termine le Défi du jour maintenant (le score compte).
     EndDaily,
+    /// Lance l'Éveil du Cosmos.
+    StartAwakening,
 }

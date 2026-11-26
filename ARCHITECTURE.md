@@ -55,8 +55,11 @@ grep -rlE "serde|std::fs"     crates | grep -v crates/infrastructure # → rien
   générée depuis une graine sauvegardée, expéditions dont l'issue est tirée au
   départ), Reliques (`relic.rs` : collection, rareté tirée au retour, effets
   des reliques équipées et bonus d'ensemble), Événements cosmiques et
-  Convergence (`cosmic.rs` : dilemmes, bonus temporaires, finale de l'Acte III)
-  et l'agrégat `GameState`
+  Convergence (`cosmic.rs` : dilemmes, bonus temporaires, finale de l'Acte III),
+  Mégastructures (`megastructure.rs` : grille, effets de voisinage, Éveil du
+  Cosmos), Défi du jour (`daily.rs` : règles tirées de la date ; l'échange
+  avec la partie principale est fait par `GameService`) et l'agrégat
+  `GameState`
   (dont l'automate d'achat et « tout acheter »). Le temps (`dt`) et les tirages
   aléatoires (`roll: f64`) arrivent **en paramètre**. Chaque opération pousse des
   `DomainEvent` dans un `Vec`.

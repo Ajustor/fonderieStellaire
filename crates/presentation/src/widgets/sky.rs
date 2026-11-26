@@ -319,6 +319,11 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
         );
     }
 
+    // 4 quater. Les mégastructures, en constellation au-dessus de la fonderie.
+    if snap.grid.iter().any(|c| c.is_some()) {
+        draw_megastructures(buf, inner, now, snap);
+    }
+
     // 5. Soleil (en bas à droite, partiellement hors cadre).
     let cx = w - 2.0;
     let cy = h - 0.5;
@@ -689,5 +694,64 @@ fn draw_attractor(
                 draw::put(buf, inner, x as i32, y as i32, '✦', gold.dim(t));
             }
         }
+    }
+}
+
+/// La grille des Mégastructures, en petit, dans le ciel : chaque structure est
+/// une étoile de sa couleur, reliée à ses voisines. Pendant l'Éveil, une vague
+/// de lumière la parcourt ; éveillée, elle scintille aux couleurs du spectre.
+fn draw_megastructures(buf: &mut Buffer, inner: Rect, now: f64, snap: &application::GameSnapshot) {
+    use domain::megastructure::{neighbors, GRID_H, GRID_W};
+    let w = inner.width as f64;
+    let h = inner.height as f64;
+    let sx = (w * 0.30 / GRID_W as f64).clamp(1.0, 3.0);
+    let sy = (h * 0.45 / GRID_H as f64).clamp(0.5, 1.5);
+    let ox = inner.x as f64 + w * 0.46;
+    let oy = inner.y as f64 + h * 0.08;
+    let pos = |i: usize| {
+        (
+            (ox + (i % GRID_W) as f64 * sx).round() as i32,
+            (oy + (i / GRID_W) as f64 * sy).round() as i32,
+        )
+    };
+    for (i, c) in snap.grid.iter().enumerate() {
+        if c.is_none() {
+            continue;
+        }
+        for n in neighbors(i).filter(|&n| n > i) {
+            if snap.grid.get(n).copied().flatten().is_none() {
+                continue;
+            }
+            let (a, b) = (pos(i), pos(n));
+            let (mx, my) = ((a.0 + b.0) / 2, (a.1 + b.1) / 2);
+            if (mx, my) != a && (mx, my) != b {
+                draw::put(buf, inner, mx, my, '·', Rgb(120, 110, 170));
+            }
+        }
+    }
+    for (i, c) in snap.grid.iter().enumerate() {
+        let Some(k) = c else { continue };
+        let (x, y) = pos(i);
+        let col = (i % GRID_W) as f64 + (i / GRID_W) as f64;
+        let base = crate::widgets::mega::kind_color(*k);
+        let color = if snap.awakened {
+            crate::fx::color::gradient_cyclic(
+                &crate::screens::bigbang::SPECTRUM,
+                col / 12.0 - now * 0.3,
+            )
+        } else if snap.awakening.is_some() {
+            base.lerp(
+                Rgb(255, 255, 255),
+                ((now * 2.0 - col * 0.5).sin() * 0.5 + 0.5).powi(4),
+            )
+        } else {
+            base.dim(0.25 - 0.2 * (now * 1.5 + i as f64).sin())
+        };
+        let ch = if *k == domain::StructureKind::Core {
+            '✶'
+        } else {
+            '✦'
+        };
+        draw::put(buf, inner, x, y, ch, color);
     }
 }

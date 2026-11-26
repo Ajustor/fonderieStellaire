@@ -642,6 +642,12 @@ impl App {
                         }
                     }
                     Intent::Challenges => self.command(Command::Demolish(sel)),
+                    Intent::Buy | Intent::Yes
+                        if self.snap.grid.get(sel).copied().flatten()
+                            == Some(domain::StructureKind::Core) =>
+                    {
+                        self.command(Command::StartAwakening);
+                    }
                     Intent::Megastructures | Intent::Escape | Intent::No | Intent::Quit => {
                         if let Some(p) = self.ui.mega.as_mut() {
                             p.closing_at = Some(now);
@@ -1438,6 +1444,95 @@ impl App {
         out
     }
 
+    /// Générique du grand final (fin de l'Acte IV) : toute la partie, acte par acte.
+    fn credits_finale(&self) -> Vec<CreditLine> {
+        let s = &self.snap;
+        let gold = theme::GOLD;
+        let text = theme::TEXT;
+        let muted = theme::MUTED;
+        let line = |t: &str, c, b| (t.to_string(), c, b);
+        let at = |i: usize| {
+            let t = s.milestones.get(i).copied().unwrap_or(0.0);
+            if t > 0.0 {
+                fmt::duration(t)
+            } else {
+                "—".to_string()
+            }
+        };
+        vec![
+            line("✶  LE COSMOS S'ÉVEILLE  ✶", gold, true),
+            line("", text, false),
+            line(
+                "Les mondes que tu as bâtis se mettent à respirer.",
+                text,
+                false,
+            ),
+            line(
+                "Ta fonderie n'est plus dans l'univers : elle est l'univers.",
+                text,
+                false,
+            ),
+            line("", text, false),
+            line("FIN DE L'ACTE IV", theme::PINK, true),
+            line("", text, false),
+            line("Acte I · la poussière et les Supernovas", theme::CYAN, true),
+            (format!("1re Supernova : {}", at(0)), muted, false),
+            line(
+                "Acte II · Big Crunch, Big Bang et Grand Attracteur",
+                theme::CYAN,
+                true,
+            ),
+            (
+                format!(
+                    "1er Big Crunch : {} · 1er Big Bang : {} · éveil de l'Attracteur : {}",
+                    at(1),
+                    at(2),
+                    at(3)
+                ),
+                muted,
+                false,
+            ),
+            line("Acte III · les Routes stellaires", theme::CYAN, true),
+            (
+                format!("{} systèmes explorés · Convergence : {}", s.explored, at(4)),
+                muted,
+                false,
+            ),
+            line("Acte IV · les Architectes", theme::CYAN, true),
+            (
+                format!(
+                    "{} mégastructures · Éveil du Cosmos : {}",
+                    s.grid.iter().filter(|c| c.is_some()).count(),
+                    at(5)
+                ),
+                muted,
+                false,
+            ),
+            line("", text, false),
+            (
+                format!(
+                    "Succès : {}/{} · temps de jeu : {}",
+                    s.achievements_unlocked,
+                    s.achievements_total,
+                    fmt::duration(s.play_time)
+                ),
+                muted,
+                false,
+            ),
+            line("", text, false),
+            line("FONDERIE STELLAIRE", theme::CYAN, true),
+            line("Conçu et forgé par Ajustor", text, false),
+            line("", text, false),
+            line("Merci d'avoir forgé un cosmos entier !", gold, true),
+            line("", text, false),
+            line(
+                "La fonderie continue : production ×100. Les records t'attendent.",
+                muted,
+                false,
+            ),
+        ]
+    }
+
     /// Générique de la fin de l'Acte III.
     fn credits_act_three(&self) -> Vec<CreditLine> {
         let s = &self.snap;
@@ -1765,6 +1860,17 @@ impl App {
                         format!("Pas assez de particules {PARTICLE}")
                     };
                     self.toasts.push(now, theme::GREY, "Grand Attracteur", body);
+                }
+                PurchaseTarget::Awakening => {
+                    self.toasts.push(
+                        now,
+                        theme::GREY,
+                        "Éveil du Cosmos",
+                        format!(
+                            "Il faut les six types bâtis et {} structures",
+                            domain::megastructure::AWAKENING_STRUCTURES
+                        ),
+                    );
                 }
                 PurchaseTarget::Structure(cell) => {
                     let body = if self.snap.grid.get(cell).is_some_and(|c| c.is_some()) {
@@ -2551,6 +2657,36 @@ impl App {
                     self.vis.fireworks(now);
                     self.vis.fireworks(now + 0.6);
                 }
+            }
+            DomainEvent::AwakeningStarted => {
+                self.log(
+                    Kind::Achievement,
+                    "✶ L'Éveil du Cosmos commence : la grille s'illumine (72 h)",
+                );
+                self.toasts.push(
+                    now,
+                    theme::GOLD,
+                    "✶ Éveil du Cosmos",
+                    "La grille s'illumine (72 h, même jeu fermé)",
+                );
+                self.vis.fireworks(now);
+                self.vis.fireworks(now + 0.5);
+                self.vis.fireworks(now + 1.0);
+            }
+            DomainEvent::CosmosAwakened => {
+                self.log(
+                    Kind::Achievement,
+                    "✶ Le Cosmos est vivant : fin de l'Acte IV !",
+                );
+                self.ui.mega = None;
+                self.ui.starmap = None;
+                self.service.fill_snapshot(&mut self.snap);
+                let credits = self.credits_finale();
+                self.vis.ending = Some(EndingSequence::new(now + 1.0, credits).with_palette([
+                    crate::fx::Rgb(255, 120, 200),
+                    crate::fx::Rgb(110, 230, 255),
+                    crate::fx::Rgb(255, 205, 90),
+                ]));
             }
             DomainEvent::StructureRemoved { .. } => {
                 self.log(Kind::Info, "◈ Structure démolie".to_string());

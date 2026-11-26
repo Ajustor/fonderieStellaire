@@ -87,6 +87,8 @@ struct SaveFile {
     daily_day: u64,
     daily_best: f64,
     daily_rewarded: bool,
+    awakening_left: f64,
+    awakened: bool,
 }
 
 impl From<&SaveData> for SaveFile {
@@ -158,6 +160,8 @@ impl From<&SaveData> for SaveFile {
             daily_day: d.daily_day,
             daily_best: d.daily_best,
             daily_rewarded: d.daily_rewarded,
+            awakening_left: d.awakening_left,
+            awakened: d.awakened,
         }
     }
 }
@@ -231,6 +235,8 @@ impl From<SaveFile> for SaveData {
             daily_day: f.daily_day,
             daily_best: f.daily_best,
             daily_rewarded: f.daily_rewarded,
+            awakening_left: f.awakening_left,
+            awakened: f.awakened,
         }
     }
 }

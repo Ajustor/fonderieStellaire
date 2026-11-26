@@ -15,10 +15,12 @@ use domain::StructureKind;
 use super::Ctx;
 use crate::draw;
 use crate::fmt;
+use crate::fx::color::gradient_cyclic;
 use crate::fx::easing::ease_out_cubic;
 use crate::fx::effects;
 use crate::fx::Rgb;
 use crate::layout::centered;
+use crate::screens::bigbang::SPECTRUM;
 use crate::theme;
 use crate::ui::Popup;
 
@@ -72,6 +74,43 @@ fn detail_lines(ctx: &Ctx, sel: usize, width: usize) -> Vec<(String, Style)> {
             out.push((l, s));
         }
     };
+    // L'Éveil du Cosmos, depuis le Cœur.
+    if snap.grid.get(sel).copied().flatten() == Some(StructureKind::Core) {
+        if snap.awakened {
+            push(
+                "Le Cosmos est éveillé : production ×100, pour toujours.".into(),
+                theme::bold(theme::GOLD),
+            );
+        } else if let Some((left, total)) = snap.awakening {
+            let p = (1.0 - left / total.max(1.0)).clamp(0.0, 1.0);
+            let filled = (p * 20.0).round() as usize;
+            push(
+                format!(
+                    "Éveil du Cosmos {}{} encore {} (même jeu fermé)",
+                    "█".repeat(filled),
+                    "░".repeat(20 - filled),
+                    fmt::duration(left)
+                ),
+                theme::bold(theme::GOLD),
+            );
+        } else if snap.awakening_ready {
+            push(
+                "[Entrée] lancer l'Éveil du Cosmos (72 h, même jeu fermé) : la fin de l'Acte IV."
+                    .into(),
+                theme::bold(theme::GOLD),
+            );
+        } else {
+            let built = snap.grid.iter().filter(|c| c.is_some()).count();
+            push(
+                format!(
+                    "Éveil du Cosmos : les six types bâtis et au moins {} structures ({built}/{}).",
+                    domain::megastructure::AWAKENING_STRUCTURES,
+                    domain::megastructure::AWAKENING_STRUCTURES
+                ),
+                theme::fg(theme::MUTED),
+            );
+        }
+    }
     match snap.grid.get(sel).copied().flatten() {
         Some(k) => {
             push(
@@ -227,13 +266,24 @@ pub fn render(
         match kind {
             Some(k) => {
                 let glow = 0.15 * (0.5 + 0.5 * (now * 2.0 + i as f64).sin());
+                // Éveil : une vague de lumière balaie la grille ; éveillé, elle
+                // scintille aux couleurs du spectre.
+                let col = (i % GRID_W) as f64 + (i / GRID_W) as f64;
+                let color = if snap.awakened {
+                    gradient_cyclic(&SPECTRUM, col / 12.0 - now * 0.3)
+                } else if snap.awakening.is_some() {
+                    let wave = ((now * 2.0 - col * 0.5).sin() * 0.5 + 0.5).powi(4);
+                    kind_color(k).lerp(theme::WHITE, wave)
+                } else {
+                    kind_color(k).glow(glow)
+                };
                 draw::put_styled(
                     buf,
                     inner,
                     cx as i32,
                     cy as i32,
                     k.symbol(),
-                    theme::bold(kind_color(k).glow(glow)),
+                    theme::bold(color),
                 );
             }
             None => draw::put(buf, inner, cx as i32, cy as i32, '·', theme::GREY.dim(0.3)),
@@ -319,7 +369,11 @@ pub fn render(
         draw::text(buf, inner.x + 1, y, &l, st, right);
         y += 1;
     }
-    let long = "[←→↑↓] case   [1-6] bâtir   [D] démolir   [W] / [Échap] fermer";
+    let long = if snap.awakening_ready {
+        "[←→↑↓] case   [1-6] bâtir   [D] démolir   [Entrée sur le Cœur] Éveil   [Échap] fermer"
+    } else {
+        "[←→↑↓] case   [1-6] bâtir   [D] démolir   [W] / [Échap] fermer"
+    };
     let footer = if long.chars().count() <= inner.width as usize {
         long
     } else {

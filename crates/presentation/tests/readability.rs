@@ -237,7 +237,13 @@ fn no_text_is_cut_anywhere() {
         &[Intent::Megastructures],
         10,
     ));
-    report.extend(audit("défi du jour", mega, &[Intent::Daily], 1));
+    report.extend(audit("défi du jour", mega.clone(), &[Intent::Daily], 1));
+    let mut awake = mega;
+    awake.grid = (0..45)
+        .map(|i| if i == 22 { 5 } else { (i % 5) as i8 })
+        .collect();
+    awake.awakening_left = 50_000.0;
+    report.extend(audit("éveil", awake, &[Intent::Megastructures], 25));
     for key in ["civ_signal", "plasma_storm", "merchant", "nearby_nova"] {
         let mut ev = act3.clone();
         ev.map_seed = 42;

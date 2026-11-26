@@ -213,6 +213,7 @@ fn stats_lines(ctx: &Ctx) -> Vec<(String, Style)> {
         "1er Big Bang",
         "Fin de l'Acte II",
         "Fin de l'Acte III",
+        "Fin de l'Acte IV",
     ];
     let reached: Vec<String> = names
         .iter()

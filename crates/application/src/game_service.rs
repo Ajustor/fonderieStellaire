@@ -298,6 +298,7 @@ impl GameService {
             }
             Command::Demolish(cell) => self.state.demolish(cell, &mut ev),
             Command::StartDaily => out.push(self.start_daily()),
+            Command::StartAwakening => self.state.start_awakening(&mut ev),
             Command::EndDaily => {
                 if self.daily.is_some() {
                     out.push(self.end_daily());
@@ -609,6 +610,11 @@ impl GameService {
         snap.grid.extend(st.grid.iter().copied());
         snap.grid_effects = st.grid_effects();
         snap.structure_costs = domain::StructureKind::ALL.map(|k| st.structure_cost(k));
+        snap.awakening_ready = st.awakening_ready();
+        snap.awakening = st
+            .awakening
+            .map(|l| (l, domain::megastructure::AWAKENING_SECS));
+        snap.awakened = st.awakened;
         snap.relic_sets = domain::RelicSet::ALL
             .iter()
             .map(|&s| {

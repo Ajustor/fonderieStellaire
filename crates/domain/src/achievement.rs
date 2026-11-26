@@ -67,6 +67,8 @@ pub enum AchievementCondition {
     Structures(usize),
     /// Cœur stellaire bâti.
     CoreBuilt,
+    /// Éveil du Cosmos achevé (fin de l'Acte IV).
+    Awakened,
 }
 
 /// Données nécessaires pour évaluer une condition de succès.
@@ -99,6 +101,7 @@ pub struct AchievementContext<'a> {
     pub converged: bool,
     pub structures: usize,
     pub core_built: bool,
+    pub awakened: bool,
 }
 
 impl AchievementCondition {
@@ -140,6 +143,7 @@ impl AchievementCondition {
             AchievementCondition::Converged => ctx.converged,
             AchievementCondition::Structures(n) => ctx.structures >= n,
             AchievementCondition::CoreBuilt => ctx.core_built,
+            AchievementCondition::Awakened => ctx.awakened,
         }
     }
 }
@@ -187,6 +191,7 @@ mod tests {
             converged: false,
             structures: 0,
             core_built: false,
+            awakened: false,
         }
     }
 
