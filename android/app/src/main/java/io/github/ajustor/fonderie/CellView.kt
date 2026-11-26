@@ -30,7 +30,7 @@ class CellView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private var originX = 0f
     private var originY = 0f
 
-    private val regular: Typeface
+    val regular: Typeface
     private val bold: Typeface
     private val text = Paint(Paint.ANTI_ALIAS_FLAG)
     private val fill = Paint()
@@ -70,11 +70,12 @@ class CellView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         val rows = maxOf(1, (height / cellH).toInt())
         originX = (width - cols * cellW) / 2f
         originY = (height - rows * cellH) / 2f
-        text.textSize = 1f
+        // Taille de police telle qu'un glyphe occupe la largeur d'une cellule
+        // (mesurée à grande taille : à 1 px, l'arrondi fausse la mesure).
         text.typeface = regular
-        // Taille de police telle qu'un glyphe occupe la largeur d'une cellule.
+        text.textSize = MEASURE_SIZE
         val advance = text.measureText("M")
-        text.textSize = cellW / advance
+        text.textSize = MEASURE_SIZE * cellW / advance
         val fm = text.fontMetrics
         baseline = (cellH - (fm.descent + fm.ascent)) / 2f
         return cols to rows
@@ -171,6 +172,7 @@ class CellView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     companion object {
+        private const val MEASURE_SIZE = 100f
         /** Couleur de texte par défaut (`theme::TEXT`). */
         val DEFAULT_FG: Int = Color.rgb(215, 215, 230)
     }
