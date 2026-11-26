@@ -1,5 +1,14 @@
 # Journal des versions
 
+## v0.17.1 — Android : pages mémoire de 16 Ko
+
+### Corrections
+- **Android** : l'application est compatible avec les appareils à pages
+  mémoire de 16 Ko (exigence du Play Store). La bibliothèque JNA passe de la
+  5.14.0 à la 5.17.0, dont la version x86_64 était la seule encore alignée
+  sur 4 Ko.
+- La CI vérifie désormais l'alignement de chaque bibliothèque native de l'APK.
+
 ## v0.17.0 — Synchronisation entre appareils
 
 ### Nouveautés
