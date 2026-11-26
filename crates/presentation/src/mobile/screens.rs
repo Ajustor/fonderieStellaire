@@ -1378,12 +1378,7 @@ fn cosmos_entries(ctx: &Ctx) -> Vec<CosmosEntry> {
         add(
             '◈',
             "Carte stellaire",
-            format!(
-                "explorés {} · flottes {}/{}",
-                s.explored,
-                s.fleets.len(),
-                s.fleets_max
-            ),
+            format!("{} ▸ {}/{}", s.explored, s.fleets.len(), s.fleets_max),
             theme::CYAN,
             Hit::OpenPage(Page::StarMap),
         );

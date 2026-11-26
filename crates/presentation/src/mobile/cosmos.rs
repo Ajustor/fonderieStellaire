@@ -63,8 +63,9 @@ pub fn page_screen(p: Page) -> usize {
 /// Retire les touches du clavier d'un texte du terminal (« [Entrée] lancer »
 /// devient « lancer ») ; renvoie `None` si la ligne n'était qu'une aide clavier.
 pub fn strip_keys(s: &str) -> Option<String> {
+    let s = touchify(s);
     let mut out = String::with_capacity(s.len());
-    let mut rest = s;
+    let mut rest = s.as_str();
     let mut removed = false;
     while let Some(start) = rest.find('[') {
         let Some(len) = rest[start..].find(']') else {
@@ -82,7 +83,9 @@ pub fn strip_keys(s: &str) -> Option<String> {
     }
     out.push_str(rest);
     let out = touchify(out.trim());
-    if removed && out.chars().count() < 14 {
+    // Une ligne qui n'était qu'une aide clavier (« [Entrée] envoyer une
+    // flotte ») disparaît : le bouton est juste à côté.
+    if removed && out.chars().count() < 25 {
         return None;
     }
     Some(out)

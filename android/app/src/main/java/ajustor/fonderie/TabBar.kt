@@ -52,7 +52,15 @@ fun TabBar(tabs: List<TabInfo>, font: FontFamily, onSelect: (Tab) -> Unit) {
                         Text(icon(info.tab), fontFamily = font, fontSize = 22.sp)
                     }
                 },
-                label = { Text(label(info.tab), fontFamily = font, fontSize = 12.sp) },
+                label = {
+                    Text(
+                        label(info.tab),
+                        fontFamily = font,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                },
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor = Gold,
                     selectedTextColor = Gold,
