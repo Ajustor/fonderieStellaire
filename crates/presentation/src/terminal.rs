@@ -6,10 +6,11 @@ use std::sync::Once;
 use crossterm::cursor::{Hide, Show};
 use crossterm::execute;
 use crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+    disable_raw_mode, enable_raw_mode, BeginSynchronizedUpdate, EndSynchronizedUpdate,
+    EnterAlternateScreen, LeaveAlternateScreen,
 };
 use ratatui::backend::CrosstermBackend;
-use ratatui::Terminal;
+use ratatui::{Frame, Terminal};
 
 /// La sortie passe par un tampon : chaque image part en une seule écriture
 /// (au lieu d'une écriture par ligne), ce qui évite les images à moitié
@@ -75,4 +76,13 @@ impl Drop for TerminalGuard {
     fn drop(&mut self) {
         let _ = restore();
     }
+}
+
+/// Dessine une image en mise à jour synchronisée : le terminal l'affiche d'un
+/// bloc (ignoré par les terminaux qui ne la gèrent pas).
+pub fn draw_synchronized(terminal: &mut Term, render: impl FnOnce(&mut Frame)) -> io::Result<()> {
+    crossterm::queue!(terminal.backend_mut(), BeginSynchronizedUpdate)?;
+    terminal.draw(render)?;
+    crossterm::execute!(terminal.backend_mut(), EndSynchronizedUpdate)?;
+    Ok(())
 }

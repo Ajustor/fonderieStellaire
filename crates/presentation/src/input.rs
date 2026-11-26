@@ -3,6 +3,7 @@
 //! Sous Windows, crossterm émet `Press` **et** `Release` : on ne garde que `Press`,
 //! sinon chaque touche agirait deux fois.
 
+#[cfg(feature = "terminal")]
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -75,6 +76,25 @@ pub const AUTO_REPEAT_GAP: f64 = 0.075;
 /// répétition est un nouvel appui, même si un `Release` s'est perdu en route.
 pub const HOLD_TIMEOUT: f64 = 0.6;
 
+/// Phase d'un appui, indépendante de la source (clavier ou écran tactile).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Phase {
+    Press,
+    Repeat,
+    Release,
+}
+
+#[cfg(feature = "terminal")]
+impl From<KeyEventKind> for Phase {
+    fn from(kind: KeyEventKind) -> Self {
+        match kind {
+            KeyEventKind::Press => Phase::Press,
+            KeyEventKind::Repeat => Phase::Repeat,
+            KeyEventKind::Release => Phase::Release,
+        }
+    }
+}
+
 /// Distingue un appui sur Espace d'une touche maintenue.
 ///
 /// - Si le terminal envoie des `Release` (Windows) : exact, la touche est
@@ -95,20 +115,20 @@ impl HoldDetector {
     }
 
     /// Classe un événement de la touche Espace ; `t` en secondes (horloge monotone).
-    pub fn on_space(&mut self, kind: KeyEventKind, t: f64) -> Option<Intent> {
+    pub fn on_space(&mut self, kind: Phase, t: f64) -> Option<Intent> {
         let since = self.last_press.map(|p| t - p);
         match kind {
-            KeyEventKind::Release => {
+            Phase::Release => {
                 self.releases_seen = true;
                 self.down = false;
                 None
             }
-            KeyEventKind::Repeat => {
+            Phase::Repeat => {
                 self.down = true;
                 self.last_press = Some(t);
                 Some(Intent::HarvestHeld)
             }
-            KeyEventKind::Press => {
+            Phase::Press => {
                 let held = if self.releases_seen {
                     self.down && since.is_some_and(|s| s < HOLD_TIMEOUT)
                 } else {
@@ -126,6 +146,7 @@ impl HoldDetector {
     }
 }
 
+#[cfg(feature = "terminal")]
 pub fn map_event(event: &Event) -> Option<Intent> {
     match event {
         Event::Key(key) => map_key(key),
@@ -133,6 +154,7 @@ pub fn map_event(event: &Event) -> Option<Intent> {
     }
 }
 
+#[cfg(feature = "terminal")]
 pub fn map_key(key: &KeyEvent) -> Option<Intent> {
     if key.kind != KeyEventKind::Press {
         return None;
@@ -189,7 +211,7 @@ pub fn map_key(key: &KeyEvent) -> Option<Intent> {
     Some(intent)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "terminal"))]
 mod tests {
     use super::*;
     use crossterm::event::KeyEventState;
@@ -227,7 +249,7 @@ mod tests {
 
     #[test]
     fn hold_detection_with_release_events() {
-        use KeyEventKind::*;
+        use Phase::*;
         let mut d = HoldDetector::default();
         d.saw_release();
         assert_eq!(d.on_space(Press, 0.0), Some(Intent::Harvest));
@@ -249,7 +271,7 @@ mod tests {
 
     #[test]
     fn hold_detection_by_timing_without_release_events() {
-        use KeyEventKind::*;
+        use Phase::*;
         let mut d = HoldDetector::default();
         assert_eq!(d.on_space(Press, 0.0), Some(Intent::Harvest));
         assert_eq!(

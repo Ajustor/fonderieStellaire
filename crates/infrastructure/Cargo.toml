@@ -4,11 +4,16 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+default = ["updater"]
+# Mise à jour automatique depuis GitHub (désactivée sur Android : le Play Store s'en charge).
+updater = ["dep:ureq"]
+
 [dependencies]
 domain = { path = "../domain" }
 application = { path = "../application" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dirs = "5"
-ureq = "2"
+ureq = { version = "2", optional = true }
 sha2 = "0.10"

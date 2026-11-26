@@ -1,12 +1,15 @@
 //! Boucle principale : entrée → `Command` → événements → effets/journal → rendu.
 
+#[cfg(feature = "terminal")]
 use std::io;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+#[cfg(feature = "terminal")]
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::widgets::{Block, BorderType, Borders, Widget};
+#[cfg(feature = "terminal")]
 use ratatui::Frame;
 
 use application::updates::display_version;
@@ -22,7 +25,9 @@ use crate::draw;
 use crate::fmt;
 use crate::fx::effects;
 use crate::fx::Rgb;
-use crate::input::{map_event, HoldDetector, Intent};
+#[cfg(feature = "terminal")]
+use crate::input::map_event;
+use crate::input::{HoldDetector, Intent, Phase};
 use crate::layout::is_too_small;
 use crate::screens::bigbang::BangSequence;
 use crate::screens::ending::{CreditLine, EndingSequence};
@@ -30,6 +35,7 @@ use crate::screens::game::{self, GameView};
 use crate::screens::supernova::{NovaSequence, WAVE_AT};
 use crate::screens::title::TitleScreen;
 use crate::screens::too_small;
+#[cfg(feature = "terminal")]
 use crate::terminal::{Term, TerminalGuard};
 use crate::theme;
 use crate::theme::GEN_SLOTS;
@@ -43,10 +49,10 @@ use crate::widgets::shop::{self, ShopItem};
 use crate::widgets::starmap::{self as starmap_widget, StarMapState};
 use crate::widgets::toast::Toasts;
 use crate::widgets::{inner, Ctx};
-use crossterm::terminal::{BeginSynchronizedUpdate, EndSynchronizedUpdate};
 
 /// ≈ 30 images par seconde.
 /// Durée d'une image selon le réglage (30 images/s par défaut).
+#[cfg(feature = "terminal")]
 fn frame_duration(fps: u32) -> Duration {
     Duration::from_millis(1000 / u64::from(fps.clamp(10, 60)))
 }
@@ -119,6 +125,8 @@ pub struct App {
     restart_at: Option<(f64, String)>,
     /// Le jeu se ferme pour redémarrer sur la nouvelle version.
     restart: bool,
+    /// Mode mobile : pas d'écran « terminal trop petit ».
+    mobile: bool,
 }
 
 fn seed() -> u64 {
@@ -155,6 +163,7 @@ impl App {
             update_status: None,
             restart_at: None,
             restart: false,
+            mobile: false,
         };
         app.vis.set_reduced(app.snap.reduced_effects);
         app.journal.push(
@@ -267,6 +276,41 @@ impl App {
     // Boucle
     // ------------------------------------------------------------------
 
+    /// Avance d'une image hors terminal (Android) : horloge interne puis logique.
+    pub fn step(&mut self, real_dt: f64) {
+        self.now = self.start.elapsed().as_secs_f64();
+        self.update(real_dt);
+    }
+
+    /// Rendu hors terminal avec mesure du temps (overlay de debug).
+    pub fn render_timed(&mut self, buf: &mut Buffer, area: Rect, dt: f64, frame_start: Instant) {
+        let t0 = Instant::now();
+        self.render_buffer(buf, area);
+        self.stats.record(dt, t0.elapsed(), frame_start.elapsed());
+    }
+
+    /// Appui sur la zone de récolte (Espace ou doigt) : récolte simple ou continue.
+    pub fn on_harvest_input(&mut self, phase: Phase) {
+        let t = self.start.elapsed().as_secs_f64();
+        if phase == Phase::Release {
+            self.hold.saw_release();
+        }
+        if let Some(intent) = self.hold.on_space(phase, t) {
+            self.on_intent(intent);
+        }
+    }
+
+    /// Sauvegarde immédiate (mise en arrière-plan sur Android, sortie du terminal).
+    pub fn save_now(&mut self) -> Result<(), String> {
+        self.service.save().map_err(|e| e.to_string())
+    }
+
+    /// Désactive l'écran « terminal trop petit » (mode mobile : la taille est connue).
+    pub fn set_mobile(&mut self, mobile: bool) {
+        self.mobile = mobile;
+    }
+
+    #[cfg(feature = "terminal")]
     pub fn run_loop(&mut self, terminal: &mut Term) -> io::Result<()> {
         let mut last = Instant::now();
         while !self.quit {
@@ -277,15 +321,11 @@ impl App {
             self.update(dt);
 
             let mut render_time = Duration::ZERO;
-            // Mise à jour synchronisée : le terminal affiche l'image d'un bloc
-            // (ignoré par les terminaux qui ne la gèrent pas).
-            crossterm::queue!(terminal.backend_mut(), BeginSynchronizedUpdate)?;
-            terminal.draw(|f| {
+            crate::terminal::draw_synchronized(terminal, |f| {
                 let t0 = Instant::now();
                 self.render(f);
                 render_time = t0.elapsed();
             })?;
-            crossterm::execute!(terminal.backend_mut(), EndSynchronizedUpdate)?;
             self.stats.record(dt, render_time, frame_start.elapsed());
 
             let timeout =
@@ -303,6 +343,7 @@ impl App {
         Ok(())
     }
 
+    #[cfg(feature = "terminal")]
     pub fn on_terminal_event(&mut self, ev: &Event) {
         if let Event::Resize(_, _) = ev {
             // Les particules sont en coordonnées écran : on repart proprement.
@@ -316,7 +357,7 @@ impl App {
             }
             if k.code == KeyCode::Char(' ') && !k.modifiers.contains(KeyModifiers::CONTROL) {
                 let t = self.start.elapsed().as_secs_f64();
-                if let Some(intent) = self.hold.on_space(k.kind, t) {
+                if let Some(intent) = self.hold.on_space(k.kind.into(), t) {
                     self.on_intent(intent);
                 }
                 return;
@@ -2873,6 +2914,7 @@ impl App {
     // Rendu
     // ------------------------------------------------------------------
 
+    #[cfg(feature = "terminal")]
     pub fn render(&mut self, frame: &mut Frame) {
         let area = frame.area();
         self.render_buffer(frame.buffer_mut(), area);
@@ -2880,7 +2922,7 @@ impl App {
 
     pub fn render_buffer(&mut self, buf: &mut Buffer, area: Rect) {
         let now = self.now;
-        if is_too_small(area) {
+        if !self.mobile && is_too_small(area) {
             too_small::render(buf, area, now);
             return;
         }
@@ -3091,6 +3133,7 @@ impl App {
 }
 
 /// Lance le jeu dans le terminal. Sauvegarde à la sortie.
+#[cfg(feature = "terminal")]
 pub fn run(
     service: GameService,
     startup: Vec<GameEvent>,
