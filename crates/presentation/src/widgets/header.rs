@@ -133,13 +133,22 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
     );
     row_limit[1] = x;
     let auto = if snap.autobuy { "▲ auto   " } else { "" };
+    let dark = if snap.crunches > 0 {
+        format!(
+            "✶ {} (×{})   ",
+            snap.crunches,
+            fmt::short(snap.crunch_production)
+        )
+    } else {
+        String::new()
+    };
     let free = if snap.fragments_spendable >= 1.0 {
         format!(" · {} libres [E]", fmt::short(snap.fragments_spendable))
     } else {
         String::new()
     };
     let frag = format!(
-        "{auto}◆ {} (+{}){free}   ★ {}/{}",
+        "{dark}{auto}◆ {} (+{}){free}   ★ {}/{}",
         fmt::short(snap.fragments),
         fmt::percent(snap.fragment_bonus),
         snap.achievements_unlocked,

@@ -69,7 +69,11 @@ pub fn render(
     view.toasts.render(buf, area, layout.sky.y, ctx.now);
 
     if let Some(popup) = ui.popup {
-        modal::render(buf, area, ctx, &popup);
+        if ui.popup_crunch {
+            modal::render_crunch(buf, area, ctx, &popup);
+        } else {
+            modal::render(buf, area, ctx, &popup);
+        }
     }
     if let Some(popup) = ui.challenges {
         challenges::render(

@@ -45,8 +45,8 @@ grep -rlE "serde|std::fs"     crates | grep -v crates/infrastructure # → rien
 - **domain** — règles pures et déterministes : catalogue (`catalog.rs`), coûts et
   paliers (`generator.rs`), production (`economy.rs`), améliorations, succès,
   comètes (dont les comètes rares), prestige, Atelier stellaire (`perk.rs`),
-  Constellations (`constellation.rs`), Défis (`challenge.rs`) et l'agrégat
-  `GameState`
+  Constellations (`constellation.rs`), Défis (`challenge.rs`), Big Crunch
+  (matière noire, dans `GameState`) et l'agrégat `GameState`
   (dont l'automate d'achat et « tout acheter »). Le temps (`dt`) et les tirages
   aléatoires (`roll: f64`) arrivent **en paramètre**. Chaque opération pousse des
   `DomainEvent` dans un `Vec`.

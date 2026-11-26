@@ -39,6 +39,8 @@ pub enum AchievementCondition {
     GoldenComets(u32),
     BlackComets(u32),
     ChallengesDone(usize),
+    /// Big Crunch déclenchés.
+    Crunches(u32),
 }
 
 /// Données nécessaires pour évaluer une condition de succès.
@@ -57,6 +59,7 @@ pub struct AchievementContext<'a> {
     pub golden_comets: u32,
     pub black_comets: u32,
     pub challenges_done: usize,
+    pub crunches: u32,
 }
 
 impl AchievementCondition {
@@ -84,6 +87,7 @@ impl AchievementCondition {
             AchievementCondition::GoldenComets(n) => ctx.golden_comets >= n,
             AchievementCondition::BlackComets(n) => ctx.black_comets >= n,
             AchievementCondition::ChallengesDone(n) => ctx.challenges_done >= n,
+            AchievementCondition::Crunches(n) => ctx.crunches >= n,
         }
     }
 }
@@ -117,6 +121,7 @@ mod tests {
             golden_comets: 0,
             black_comets: 0,
             challenges_done: 0,
+            crunches: 0,
         }
     }
 

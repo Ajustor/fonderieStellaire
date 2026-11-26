@@ -325,7 +325,12 @@ impl App {
             if let Some(n) = self.vis.nova.as_mut() {
                 n.committed = true;
             }
-            self.command(Command::Supernova);
+            let crunch = self.vis.nova.as_ref().is_some_and(|n| n.crunch);
+            self.command(if crunch {
+                Command::BigCrunch
+            } else {
+                Command::Supernova
+            });
         }
         if done {
             self.vis.nova = None;
@@ -447,7 +452,11 @@ impl App {
                 match intent {
                     Intent::Yes => {
                         self.close_popup();
-                        self.start_supernova();
+                        if self.ui.popup_crunch {
+                            self.start_crunch();
+                        } else {
+                            self.start_supernova();
+                        }
                     }
                     Intent::No | Intent::Escape | Intent::Quit => self.close_popup(),
                     _ => {}
@@ -503,6 +512,7 @@ impl App {
             }
             Intent::Supernova => {
                 if self.snap.fragments_available >= 1.0 {
+                    self.ui.popup_crunch = false;
                     self.ui.popup = Some(Popup {
                         opened_at: now,
                         closing_at: None,
@@ -512,6 +522,17 @@ impl App {
                 }
             }
             Intent::Save => self.command(Command::Save),
+            Intent::BigCrunch => {
+                if self.snap.crunch_available {
+                    self.ui.popup_crunch = true;
+                    self.ui.popup = Some(Popup {
+                        opened_at: now,
+                        closing_at: None,
+                    });
+                } else {
+                    self.command(Command::BigCrunch);
+                }
+            }
             Intent::Challenges => {
                 self.ui.challenges = Some(Popup {
                     opened_at: now,
@@ -592,6 +613,13 @@ impl App {
             .challenge(id)
             .map(|c| c.name)
             .unwrap_or("?")
+    }
+
+    fn start_crunch(&mut self) {
+        let crunches = self.snap.crunches + 1;
+        let before = self.snap.crunch_production;
+        let after = 1.0 + domain::catalog::balance::CRUNCH_PRODUCTION * crunches as f64;
+        self.vis.nova = Some(NovaSequence::crunch(self.now, crunches, before, after));
     }
 
     fn start_supernova(&mut self) {
@@ -1002,6 +1030,36 @@ impl App {
                     format!("★ Constellation {name} niveau {level} : {total}"),
                 );
                 self.vis.constellation_pop = now;
+            }
+            DomainEvent::BigCrunch { crunches } => {
+                let prod =
+                    fmt::short(1.0 + domain::catalog::balance::CRUNCH_PRODUCTION * crunches as f64);
+                self.log(
+                    Kind::Supernova,
+                    format!("✶ BIG CRUNCH n°{crunches} : production ×{prod} pour toujours"),
+                );
+                self.toasts.push(
+                    now,
+                    theme::PINK,
+                    format!("✶ Big Crunch n°{crunches}"),
+                    format!("Matière noire : production ×{prod}"),
+                );
+                self.ui.gen_sel = 0;
+                self.ui.upg_sel = 0;
+                self.ui.gen_scroll = 0;
+                self.ui.upg_scroll = 0;
+                self.vis.bar_fill = [0.0; GEN_SLOTS];
+                self.vis.roll_counter(now);
+            }
+            DomainEvent::BigCrunchUnavailable { supernovas, needed } => {
+                self.toasts.push(
+                    now,
+                    theme::GREY,
+                    "Big Crunch",
+                    format!(
+                        "Il faut {needed} Supernovas ({supernovas}/{needed}), sans Défi en cours"
+                    ),
+                );
             }
             DomainEvent::ChallengeStarted { challenge } => {
                 let name = self.challenge_name(challenge);

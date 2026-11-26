@@ -29,6 +29,8 @@ pub enum Intent {
     Shop,
     /// `D` : Défis.
     Challenges,
+    /// `U` : Big Crunch (confirmation).
+    BigCrunch,
     /// `T` : activer / arrêter l'automate.
     ToggleAuto,
     /// `PgUp` / `PgDn` : remonter / redescendre dans le journal.
@@ -148,6 +150,7 @@ pub fn map_key(key: &KeyEvent) -> Option<Intent> {
             'a' => Intent::BuyAll,
             'e' => Intent::Shop,
             'd' => Intent::Challenges,
+            'u' => Intent::BigCrunch,
             't' => Intent::ToggleAuto,
             'o' | 'y' => Intent::Yes,
             'n' => Intent::No,

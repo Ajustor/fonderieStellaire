@@ -308,7 +308,8 @@ impl TitleScreen {
             "Nouvelle partie · la poussière d'étoile t'attend".to_string()
         } else {
             format!(
-                "Supernovas : {}  ·  Fragments : {}  ·  Temps de jeu : {}",
+                "Big Crunch : {}  ·  Supernovas : {}  ·  Fragments : {}  ·  Temps de jeu : {}",
+                snap.crunches,
                 snap.supernovas,
                 fmt::short(snap.fragments),
                 fmt::duration(snap.play_time)

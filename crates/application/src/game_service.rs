@@ -171,6 +171,7 @@ impl GameService {
             Command::ToggleAutoBuy => self.state.toggle_autobuy(&self.catalog, &mut ev),
             Command::StartChallenge(id) => self.state.start_challenge(&self.catalog, id, &mut ev),
             Command::AbandonChallenge => self.state.abandon_challenge(&self.catalog, &mut ev),
+            Command::BigCrunch => self.state.big_crunch(&self.catalog, &mut ev),
             Command::BuyConstellation(id) => {
                 self.state.buy_constellation(&self.catalog, id, &mut ev)
             }
@@ -307,6 +308,11 @@ impl GameService {
         });
         snap.comet_kind = st.comet.kind;
         snap.storm_multiplier = st.comet.boost();
+        snap.crunches = st.crunches;
+        snap.crunch_available = st.can_big_crunch();
+        snap.crunch_needed = domain::catalog::balance::CRUNCH_SUPERNOVAS;
+        snap.crunch_production = st.crunch_production();
+        snap.crunch_fragments = st.crunch_fragments();
         snap.next_upgrade = st.next_locked_upgrade(c).and_then(|id| {
             let def = c.upgrade(id)?;
             let (current, needed) = match def.requirement {

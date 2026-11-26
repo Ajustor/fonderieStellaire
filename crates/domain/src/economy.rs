@@ -70,6 +70,7 @@ pub fn permanent_multiplier(catalog: &Catalog, state: &GameState) -> f64 {
         .product();
     upgrades
         * fragment_multiplier(state.fragments)
+        * state.crunch_production()
         * state.constellation_production(catalog)
         * state
             .challenge_rewards(catalog)

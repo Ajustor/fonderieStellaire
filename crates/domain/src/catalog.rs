@@ -19,6 +19,12 @@ pub mod balance {
     pub const FRAGMENT_SCALING: f64 = 0.25;
     /// Au-delà de ce nombre de fragments, leur bonus croît en racine carrée.
     pub const FRAGMENT_KNEE: f64 = 5.0;
+    /// Supernovas nécessaires pour un Big Crunch.
+    pub const CRUNCH_SUPERNOVAS: u32 = 15;
+    /// Chaque Big Crunch ajoute +100 % de production (×2, ×3, ×4…).
+    pub const CRUNCH_PRODUCTION: f64 = 1.0;
+    /// Chaque Big Crunch ajoute +25 % de fragments par Supernova.
+    pub const CRUNCH_FRAGMENTS: f64 = 0.25;
     /// Plafond du temps hors-ligne pris en compte (12 h).
     pub const OFFLINE_CAP_SECS: f64 = 12.0 * 3600.0;
     /// Rendement de la production hors-ligne.
@@ -148,7 +154,7 @@ const CLICK_UPGRADES: [(&str, f64, f64, f64); 3] = [
 /// Amélioration « maintenir Espace pour récolter » : (nom, total_run requis, coût).
 const HOLD_UPGRADE: (&str, f64, f64) = ("Récolte continue", 150.0, 300.0);
 
-const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 32] = [
+const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 35] = [
     (
         "first",
         "Premier pas",
@@ -343,6 +349,24 @@ const ACHIEVEMENTS: [(&str, &str, &str, AchievementCondition); 32] = [
         "Maître des Défis",
         "Réussir tous les Défis",
         AchievementCondition::ChallengesDone(5),
+    ),
+    (
+        "crunch1",
+        "Effondrement",
+        "Déclencher un Big Crunch",
+        AchievementCondition::Crunches(1),
+    ),
+    (
+        "crunch5",
+        "Ressac cosmique",
+        "Déclencher 5 Big Crunch",
+        AchievementCondition::Crunches(5),
+    ),
+    (
+        "crunch10",
+        "Cycle éternel",
+        "Déclencher 10 Big Crunch",
+        AchievementCondition::Crunches(10),
     ),
 ];
 
@@ -835,7 +859,7 @@ mod tests {
         assert_eq!(c.generators.len(), 12);
         assert_eq!(c.upgrades.len(), 12 * 4 + 4 + 3 + 1);
         assert!(c.upgrade_by_key("hold_0").is_some());
-        assert_eq!(c.achievements.len(), 32);
+        assert_eq!(c.achievements.len(), 35);
         assert_eq!(c.challenges.len(), 5);
         assert_eq!(c.constellations.len(), 6);
         assert_eq!(c.generators[11].unlock_supernovas, 15);

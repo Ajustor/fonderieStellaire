@@ -1,5 +1,26 @@
 # Journal des versions
 
+## v0.6.0
+
+### Nouveautés
+- **Big Crunch** (`U`) : le second niveau de prestige. Une fois 15 Supernovas
+  atteintes (Multivers débloqué), on peut replier l'univers sur lui-même :
+  - **remis à zéro** : Supernovas, fragments, Atelier, Constellations, Défis ;
+  - **conservé** : succès, statistiques, comètes capturées, Récolte continue ;
+  - **gagné** : 1 *matière noire* par Big Crunch, qui donne **production
+    ×(1 + matière noire)** (×2, ×3, ×4…) et **+25 % de fragments** par
+    matière noire.
+- Confirmation détaillée (ce qui est perdu, gardé, gagné) et séquence plein
+  écran en **implosion** : le soleil s'effondre, l'onde converge vers le centre,
+  puis « BIG CRUNCH ».
+- La matière noire s'affiche dans l'en-tête (`✶ 3 (×4)`) et sur l'écran titre.
+- **3 nouveaux succès** (35 au total) : 1, 5 et 10 Big Crunch.
+
+### Équilibrage
+- Réglé par simulation pour atteindre **10 Big Crunch en environ 22 h de jeu
+  actif** (quelques jours en comptant le hors-ligne) : le 1er arrive vers
+  8 h 30, puis environ 4 h, 2 h 30, 1 h 45… jusqu'à environ 35 min.
+
 ## v0.5.0
 
 ### Nouveautés

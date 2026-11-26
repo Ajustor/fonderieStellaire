@@ -40,6 +40,8 @@ pub struct SaveData {
     pub challenges_done: Vec<String>,
     pub golden_caught: u32,
     pub black_caught: u32,
+    /// Big Crunch déclenchés (matière noire).
+    pub crunches: u32,
 }
 
 impl SaveData {
@@ -103,6 +105,7 @@ impl SaveData {
                 .collect(),
             golden_caught: state.golden_caught,
             black_caught: state.black_caught,
+            crunches: state.crunches,
         }
     }
 
@@ -152,6 +155,7 @@ impl SaveData {
         }
         s.golden_caught = self.golden_caught;
         s.black_caught = self.black_caught;
+        s.crunches = self.crunches;
         s.normalize(catalog);
         s
     }

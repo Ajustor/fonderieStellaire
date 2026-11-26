@@ -2,7 +2,8 @@
 
 use crate::achievement::{AchievementContext, AchievementId};
 use crate::catalog::balance::{
-    HOLD_HARVEST_INTERVAL, OFFLINE_CAP_SECS, OFFLINE_RATE, REVEAL_RATIO,
+    CRUNCH_FRAGMENTS, CRUNCH_PRODUCTION, CRUNCH_SUPERNOVAS, HOLD_HARVEST_INTERVAL,
+    OFFLINE_CAP_SECS, OFFLINE_RATE, REVEAL_RATIO,
 };
 use crate::catalog::Catalog;
 use crate::challenge::{ChallengeId, ChallengeReward, Restriction};
@@ -59,6 +60,8 @@ pub struct GameState {
     pub challenges_done: Vec<bool>,
     pub golden_caught: u32,
     pub black_caught: u32,
+    /// Big Crunch déclenchés (matière noire).
+    pub crunches: u32,
     /// Niveau de chaque Constellation.
     pub constellations: Vec<u32>,
     revealed: Vec<bool>,
@@ -92,6 +95,7 @@ impl GameState {
             challenges_done: Vec::new(),
             golden_caught: 0,
             black_caught: 0,
+            crunches: 0,
             constellations: Vec::new(),
             revealed: Vec::new(),
             autobuy_timer: 0.0,
@@ -248,6 +252,7 @@ impl GameState {
             })
             .product();
         perks
+            * self.crunch_fragments()
             * (1.0
                 + self.constellation_sum(catalog, |e| match e {
                     ConstellationEffect::Fragments(x) => Some(x),
@@ -791,6 +796,49 @@ impl GameState {
         events.push(DomainEvent::BulkUpgrades { count });
     }
 
+    /// Multiplicateur de production de la matière noire : ×(1 + crunches).
+    pub fn crunch_production(&self) -> f64 {
+        1.0 + CRUNCH_PRODUCTION * self.crunches as f64
+    }
+
+    /// Multiplicateur de fragments de la matière noire.
+    pub fn crunch_fragments(&self) -> f64 {
+        1.0 + CRUNCH_FRAGMENTS * self.crunches as f64
+    }
+
+    /// Le Big Crunch est-il possible ? (15 Supernovas, aucun Défi en cours)
+    pub fn can_big_crunch(&self) -> bool {
+        self.supernovas >= CRUNCH_SUPERNOVAS && self.challenge.is_none()
+    }
+
+    /// Big Crunch : remet à zéro tout le niveau Supernova (fragments, Atelier,
+    /// Constellations, Supernovas, Défis) contre un bonus permanent.
+    /// Les succès, les statistiques et les comètes capturées sont conservés.
+    pub fn big_crunch(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
+        if !self.can_big_crunch() {
+            events.push(DomainEvent::BigCrunchUnavailable {
+                supernovas: self.supernovas,
+                needed: CRUNCH_SUPERNOVAS,
+            });
+            return;
+        }
+        self.crunches += 1;
+        self.supernovas = 0;
+        self.fragments = 0.0;
+        self.fragments_spent = 0.0;
+        self.fragments_this_run = 0.0;
+        self.perks.iter_mut().for_each(|p| *p = false);
+        self.constellations.iter_mut().for_each(|l| *l = 0);
+        self.challenges_done.iter_mut().for_each(|d| *d = false);
+        self.challenge = None;
+        self.autobuy = false;
+        self.reset_run(catalog);
+        events.push(DomainEvent::BigCrunch {
+            crunches: self.crunches,
+        });
+        self.check_achievements(catalog, events);
+    }
+
     /// Contrainte du Défi en cours.
     pub fn active_restriction(&self, catalog: &Catalog) -> Option<Restriction> {
         self.challenge
@@ -978,6 +1026,7 @@ impl GameState {
                 golden_comets: self.golden_caught,
                 black_comets: self.black_caught,
                 challenges_done: self.challenges_done.iter().filter(|&&d| d).count(),
+                crunches: self.crunches,
             };
             for a in &catalog.achievements {
                 if !self.has_achievement(a.id) && a.condition.is_met(&ctx) {
@@ -1455,6 +1504,80 @@ mod tests {
         s.tick(&c, 16.0, 0.5, &mut ev);
         assert!(ev.contains(&DomainEvent::CometStole { amount: 100.0 }));
         assert!((s.stardust.value() - 900.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn big_crunch_resets_the_supernova_layer() {
+        let (c, mut s, mut ev) = setup();
+        s.supernovas = 14;
+        s.big_crunch(&c, &mut ev);
+        assert_eq!(
+            ev,
+            [DomainEvent::BigCrunchUnavailable {
+                supernovas: 14,
+                needed: 15
+            }]
+        );
+        ev.clear();
+
+        // Un joueur au bout du contenu : 15 Supernovas, Atelier, Constellations, Défis.
+        s.supernovas = 15;
+        s.fragments = 500.0;
+        s.fragments_spent = 100.0;
+        s.perks[0] = true;
+        s.constellations[0] = 7;
+        s.challenges_done[0] = true;
+        s.owned[5] = 40;
+        s.total_all = 1e20;
+        s.clicks = 999;
+        s.achievements[0] = true;
+        s.golden_caught = 3;
+        let hold = c.upgrade_by_key("hold_0").unwrap();
+        s.upgrades[hold.index()] = true;
+
+        s.big_crunch(&c, &mut ev);
+        assert!(ev.contains(&DomainEvent::BigCrunch { crunches: 1 }));
+        assert_eq!(s.crunches, 1);
+        // Remis à zéro.
+        assert_eq!(s.supernovas, 0);
+        assert_eq!(s.fragments, 0.0);
+        assert_eq!(s.fragments_spendable(), 0.0);
+        assert!(s.perks.iter().all(|&p| !p));
+        assert!(s.constellations.iter().all(|&l| l == 0));
+        assert!(s.challenges_done.iter().all(|&d| !d));
+        assert!(s.owned.iter().all(|&o| o == 0));
+        assert_eq!(s.stardust.value(), 0.0);
+        // Conservé.
+        assert_eq!(s.total_all, 1e20);
+        assert_eq!(s.clicks, 999);
+        assert!(s.achievements[0]);
+        assert_eq!(s.golden_caught, 3);
+        assert!(s.has_upgrade(hold), "Récolte continue reste un confort");
+        assert!(s.has_achievement(c.achievement_by_key("crunch1").unwrap()));
+        // Les générateurs de prestige redeviennent verrouillés.
+        s.total_run = 1e15;
+        s.owned[8] = 1;
+        assert!(!s.is_visible(&c, GeneratorId(9)));
+    }
+
+    #[test]
+    fn dark_matter_bonuses() {
+        let (c, mut s, mut ev) = setup();
+        s.owned[1] = 10;
+        let base = economy::total_production(&c, &s);
+        s.total_run = 1e9;
+        let frags = s.fragments_available_with(&c);
+        s.crunches = 3;
+        let ratio = economy::total_production(&c, &s) / base;
+        assert!((ratio - 4.0).abs() < 1e-9, "×(1 + 3) : {ratio}");
+        // floor(√100 × 1.75) = 17 au lieu de 10.
+        assert_eq!(frags, 10.0);
+        assert_eq!(s.fragments_available_with(&c), 17.0);
+        // Pas de Big Crunch pendant un Défi.
+        s.supernovas = 20;
+        s.challenge = Some(c.challenge_by_key("ch_noclick").unwrap());
+        s.big_crunch(&c, &mut ev);
+        assert!(matches!(ev[0], DomainEvent::BigCrunchUnavailable { .. }));
     }
 
     #[test]

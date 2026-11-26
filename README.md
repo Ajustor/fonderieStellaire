@@ -164,6 +164,7 @@ cargo run --release -- --reset
 | `A` | Acheter toutes les améliorations abordables |
 | `E` | Atelier stellaire : bonus permanents payés en fragments |
 | `D` | Défis : un cycle avec contrainte, contre une récompense permanente |
+| `U` | Big Crunch (après 15 Supernovas) |
 | `T` | Activer / arrêter l'automate (une fois acheté à l'Atelier) |
 | `I` | Infos : progression, succès et fonctionnement de chaque mécanique |
 | `PgUp` / `PgDn` | Remonter / redescendre dans le journal |
@@ -200,7 +201,10 @@ Majuscules et minuscules sont acceptées.
 - **Défis** (`D`, dès la 1re Supernova) : rejoue un cycle avec une contrainte
   (sans clic, sans amélioration, 3 générateurs, sans comète, ou contre la
   montre) pour gagner une récompense permanente.
-- **Succès** : 32 succès, **+1 %** de production chacun.
+- **Big Crunch** (`U`, après 15 Supernovas) : tout le niveau Supernova
+  (fragments, Atelier, Constellations, Défis) repart de zéro contre de la
+  *matière noire* : production ×2, ×3, ×4… et +25 % de fragments par Crunch.
+- **Succès** : 35 succès, **+1 %** de production chacun.
 - **Progression** : le pourcentage dans l'en-tête et l'écran `I` indiquent où tu
   en es (générateurs, succès, Atelier, poussière avant le prochain fragment).
 - **Hors-ligne** : ta fonderie produit à 50 % pendant ton absence (12 h max).

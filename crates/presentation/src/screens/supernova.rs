@@ -1,7 +1,11 @@
-//! Séquence plein écran de la Supernova (≈ 5 s), pilotée par une timeline.
+//! Séquences plein écran de la Supernova et du Big Crunch (≈ 5 s), pilotées par
+//! une timeline.
 //!
-//! 0,0 s soleil qui grossit + shake · 1,2 s flash blanc · 1,4 s onde de choc ·
-//! 2,5 s fondu au noir / dissolution · 3,2 s étoiles + « +N FRAGMENTS » · 5,0 s retour.
+//! Supernova : 0,0 s soleil qui grossit + shake · 1,2 s flash blanc · 1,4 s onde
+//! de choc · 2,5 s fondu au noir · 3,2 s étoiles + « +N FRAGMENTS » · 5,0 s retour.
+//!
+//! Big Crunch : le soleil s'effondre, flash violet, l'onde **converge** vers le
+//! centre (implosion), puis « BIG CRUNCH » et le nouveau multiplicateur.
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -22,6 +26,7 @@ pub const WAVE_AT: f64 = 1.4;
 pub const REVEAL_AT: f64 = 3.2;
 pub const DURATION: f64 = 5.0;
 const GLITCH: [char; 6] = ['▓', '▒', '░', '█', '╳', '◆'];
+const CRUNCH_VIOLET: crate::fx::Rgb = crate::fx::Rgb(170, 90, 255);
 
 pub struct NovaSequence {
     pub start: f64,
@@ -31,6 +36,9 @@ pub struct NovaSequence {
     pub new_bonus: f64,
     pub committed: bool,
     pub wave_fired: bool,
+    /// Big Crunch (implosion) plutôt que Supernova. Les bonus sont alors des
+    /// multiplicateurs de production (×2 → ×3…).
+    pub crunch: bool,
 }
 
 impl NovaSequence {
@@ -52,7 +60,16 @@ impl NovaSequence {
             new_bonus,
             committed: false,
             wave_fired: false,
+            crunch: false,
         }
+    }
+
+    /// Séquence du Big Crunch : `crunches` après l'effondrement, production
+    /// `prod_before` → `prod_after`.
+    pub fn crunch(now: f64, crunches: u32, prod_before: f64, prod_after: f64) -> Self {
+        let mut s = Self::new(now, crunches as f64, prod_before, prod_after);
+        s.crunch = true;
+        s
     }
 
     pub fn t(&self, now: f64) -> f64 {
@@ -72,6 +89,9 @@ impl NovaSequence {
         let t = self.t(now);
         if t >= REVEAL_AT {
             1.0
+        } else if self.crunch {
+            // Le soleil s'effondre sur lui-même.
+            (1.0 - 0.95 * self.timeline.progress("grow", t)).max(0.05)
         } else {
             1.0 + 4.0 * self.timeline.progress("grow", t)
         }
@@ -106,7 +126,12 @@ impl NovaSequence {
             let cy = area.y as f64 + area.height as f64 / 2.0;
             let max_r =
                 ((area.width as f64 / 2.0).powi(2) + (area.height as f64).powi(2)).sqrt() + 4.0;
-            let r = p * max_r;
+            // Supernova : l'onde s'étend ; Big Crunch : elle converge vers le centre.
+            let r = if self.crunch {
+                (1.0 - p) * max_r
+            } else {
+                p * max_r
+            };
             for y in area.top()..area.bottom() {
                 for x in area.left()..area.right() {
                     let dx = x as f64 + 0.5 - cx;
@@ -114,9 +139,13 @@ impl NovaSequence {
                     let band = r - (dx * dx + dy * dy).sqrt();
                     if (0.0..4.0).contains(&band) {
                         let ch = ['█', '▓', '▒', '░'][band as usize];
-                        let c = theme::WHITE
-                            .lerp(theme::ORANGE, band / 4.0 + p * 0.3)
-                            .dim(p * 0.5);
+                        let c = if self.crunch {
+                            CRUNCH_VIOLET.lerp(theme::PINK, band / 4.0).dim(p * 0.4)
+                        } else {
+                            theme::WHITE
+                                .lerp(theme::ORANGE, band / 4.0 + p * 0.3)
+                                .dim(p * 0.5)
+                        };
                         draw::put(buf, area, x as i32, y as i32, ch, c);
                     }
                 }
@@ -126,7 +155,11 @@ impl NovaSequence {
         // 2. Flash blanc → orange.
         if (1.2..1.9).contains(&t) {
             let amount = if t < 1.4 { 1.0 } else { 1.0 - (t - 1.4) / 0.5 };
-            let color = theme::WHITE.lerp(theme::ORANGE, (t - 1.2) / 0.7);
+            let color = if self.crunch {
+                CRUNCH_VIOLET.lerp(theme::BLACK, (t - 1.2) / 0.7)
+            } else {
+                theme::WHITE.lerp(theme::ORANGE, (t - 1.2) / 0.7)
+            };
             effects::flash(buf, area, color, amount.clamp(0.0, 1.0));
         }
 
@@ -145,7 +178,11 @@ impl NovaSequence {
         draw::clear(buf, area);
         draw_stars(buf, area, stars, now, 12.0, tl.progress("stars", t));
 
-        let text = format!("+{} FRAGMENTS", fmt::short(self.gained));
+        let text = if self.crunch {
+            "BIG CRUNCH".to_string()
+        } else {
+            format!("+{} FRAGMENTS", fmt::short(self.gained))
+        };
         let text_p = tl.progress("text", t);
         let tw = bigfont::text_width(&text);
         let cy = area.y + area.height / 2;
@@ -192,7 +229,15 @@ impl NovaSequence {
         let count_p = tl.progress("count", t);
         if count_p > 0.0 {
             let bonus = self.old_bonus + (self.new_bonus - self.old_bonus) * count_p;
-            let line = format!("Bonus de production : +{}", fmt::percent(bonus));
+            let line = if self.crunch {
+                format!(
+                    "Matière noire : {} · production ×{}",
+                    self.gained,
+                    fmt::short(bonus)
+                )
+            } else {
+                format!("Bonus de production : +{}", fmt::percent(bonus))
+            };
             let w = line.chars().count() as u16;
             let x = area.x + area.width.saturating_sub(w) / 2;
             draw::text(
@@ -203,7 +248,11 @@ impl NovaSequence {
                 theme::bold(theme::CYAN),
                 area.right(),
             );
-            let sub = "La fonderie renaît de la poussière…";
+            let sub = if self.crunch {
+                "L'univers se replie sur lui-même… puis tout recommence."
+            } else {
+                "La fonderie renaît de la poussière…"
+            };
             let w = sub.chars().count() as u16;
             let x = area.x + area.width.saturating_sub(w) / 2;
             draw::text(
@@ -231,6 +280,25 @@ mod tests {
         assert!(n.in_reveal(13.3));
         assert!(!n.is_done(14.9));
         assert!(n.is_done(15.0));
+    }
+
+    #[test]
+    fn crunch_implodes_and_announces() {
+        let n = NovaSequence::crunch(0.0, 3, 3.0, 4.0);
+        assert!(n.sun_scale(1.1) < 0.3, "le soleil s'effondre");
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buf = Buffer::empty(area);
+        let stars = StarField::new(50, 1);
+        n.render_reveal(&mut buf, area, 4.95, &stars);
+        let text: String = (0..30)
+            .map(|y| {
+                (0..100)
+                    .map(|x| buf[(x, y)].symbol().to_string())
+                    .collect::<String>()
+                    + "\n"
+            })
+            .collect();
+        assert!(text.contains("Matière noire : 3 · production ×4"), "{text}");
     }
 
     #[test]

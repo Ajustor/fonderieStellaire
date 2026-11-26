@@ -110,6 +110,15 @@ pub enum DomainEvent {
     ChallengeUnavailable {
         challenge: ChallengeId,
     },
+    /// Big Crunch : tout le niveau Supernova repart de zéro contre de la matière noire.
+    BigCrunch {
+        crunches: u32,
+    },
+    /// Big Crunch demandé trop tôt.
+    BigCrunchUnavailable {
+        supernovas: u32,
+        needed: u32,
+    },
     /// Une Constellation gagne un niveau.
     ConstellationUpgraded {
         constellation: ConstellationId,

@@ -153,6 +153,15 @@ pub struct GameSnapshot {
     pub comet_kind: CometKind,
     /// Multiplicateur de la tempête (ou frénésie dorée) en cours.
     pub storm_multiplier: f64,
+    /// Big Crunch déclenchés (matière noire).
+    pub crunches: u32,
+    /// Big Crunch possible maintenant.
+    pub crunch_available: bool,
+    /// Supernovas nécessaires au Big Crunch.
+    pub crunch_needed: u32,
+    /// Multiplicateurs actuels de la matière noire (production, fragments).
+    pub crunch_production: f64,
+    pub crunch_fragments: f64,
     pub constellation_levels: u32,
     pub autobuy_unlocked: bool,
     pub autobuy: bool,

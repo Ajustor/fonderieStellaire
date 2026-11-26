@@ -403,7 +403,7 @@ fn descriptions_and_info_screen() {
     app.set_time(101.0);
     let text = render(&mut app, 100, 30);
     println!("{text}");
-    assert!(text.contains("SUCCÈS  2/32"));
+    assert!(text.contains("SUCCÈS  2/35"));
     assert!(text.contains("★ Premier pas"));
     assert!(text.contains("○ Centurion"));
     app.on_intent(Intent::Down);
@@ -644,4 +644,58 @@ fn v0_5_challenges_and_rare_comets() {
     // Comète dorée : bannière dorée (le tirage 0.1 de FakeRng ne la donne pas,
     // on vérifie donc le texte du widget directement).
     assert!(presentation::widgets::sky::GOLDEN_BANNER.contains("DORÉE"));
+}
+
+#[test]
+fn v0_6_big_crunch_end_to_end() {
+    // Trop tôt : un simple message.
+    let mut app = game_app();
+    app.on_intent(Intent::BigCrunch);
+    app.set_time(103.0); // le message a fini de glisser et de s'écrire
+    let text = render(&mut app, 100, 30);
+    assert!(text.contains("Il faut 15 Supernovas"), "{text}");
+    assert_eq!(app.snapshot().crunches, 0);
+
+    // Au bout du contenu : 15 Supernovas.
+    let mut save = advanced_save();
+    save.supernovas = 15;
+    save.perks = vec!["perk_start".into()];
+    save.constellations = vec![("const_forge".into(), 4)];
+    let mut app = app_with(Some(save));
+    let mut t = 100.0;
+    app.set_time(t);
+    app.enter_game_now();
+    app.update(0.033);
+    let _ = render(&mut app, 100, 30);
+
+    app.on_intent(Intent::BigCrunch);
+    t += 1.0;
+    app.set_time(t);
+    let text = render(&mut app, 100, 30);
+    println!("{text}");
+    assert!(text.contains("BIG CRUNCH"));
+    assert!(text.contains("Matière noire : 0 → 1"));
+    assert!(text.contains("Production ×1 → ×2"));
+
+    // Confirmation, puis toute la séquence (≈ 5 s) en rendant chaque image.
+    app.on_intent(Intent::Yes);
+    for i in 0..(6 * 30) {
+        t += 1.0 / 30.0;
+        app.set_time(t);
+        app.update(1.0 / 30.0);
+        let (w, h) = if i % 2 == 0 { (100, 30) } else { (80, 24) };
+        let _ = render(&mut app, w, h);
+    }
+    let snap = app.snapshot();
+    assert_eq!(snap.crunches, 1);
+    assert_eq!(snap.supernovas, 0);
+    assert_eq!(snap.fragments, 0.0);
+    assert!(snap.perks.iter().all(|p| !p.owned));
+    assert!(snap.constellations.iter().all(|c| c.level == 0));
+    assert_eq!(snap.crunch_production, 2.0);
+    let text = render(&mut app, 100, 30);
+    assert!(
+        text.contains("✶ 1 (×2)"),
+        "matière noire dans l'en-tête :\n{text}"
+    );
 }

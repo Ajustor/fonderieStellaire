@@ -25,4 +25,6 @@ pub enum Command {
     StartChallenge(ChallengeId),
     /// Abandonne le Défi en cours.
     AbandonChallenge,
+    /// Big Crunch : remise à zéro du niveau Supernova contre de la matière noire.
+    BigCrunch,
 }

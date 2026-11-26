@@ -41,6 +41,7 @@ struct SaveFile {
     challenges_done: Vec<String>,
     golden_caught: u32,
     black_caught: u32,
+    crunches: u32,
 }
 
 impl From<&SaveData> for SaveFile {
@@ -70,6 +71,7 @@ impl From<&SaveData> for SaveFile {
             challenges_done: d.challenges_done.clone(),
             golden_caught: d.golden_caught,
             black_caught: d.black_caught,
+            crunches: d.crunches,
         }
     }
 }
@@ -101,6 +103,7 @@ impl From<SaveFile> for SaveData {
             challenges_done: f.challenges_done,
             golden_caught: f.golden_caught,
             black_caught: f.black_caught,
+            crunches: f.crunches,
         }
     }
 }

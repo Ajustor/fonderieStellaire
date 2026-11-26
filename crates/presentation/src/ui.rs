@@ -54,6 +54,8 @@ pub struct Ui {
     pub upg_sel: usize,
     pub upg_scroll: usize,
     pub popup: Option<Popup>,
+    /// La popup de confirmation concerne le Big Crunch (et non une Supernova).
+    pub popup_crunch: bool,
     /// Écran « Infos » (touche I) et son défilement.
     pub codex: Option<Popup>,
     pub codex_scroll: usize,

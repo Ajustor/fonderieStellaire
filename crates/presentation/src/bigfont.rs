@@ -20,6 +20,11 @@ pub fn glyph(c: char) -> Option<Glyph> {
         '+' => ["   ", "▄█▄", " ▀ "],
         '-' => ["   ", "▀▀▀", "   "],
         'A' => ["█▀█", "█▀█", "▀ ▀"],
+        'B' => ["█▀▄", "█▀▄", "▀▀ "],
+        'C' => ["█▀▀", "█  ", "▀▀▀"],
+        'H' => ["█ █", "█▀█", "▀ ▀"],
+        'I' => ["▀█▀", " █ ", "▀▀▀"],
+        'U' => ["█ █", "█ █", "▀▀▀"],
         'E' => ["█▀▀", "█▀▀", "▀▀▀"],
         'F' => ["█▀▀", "█▀ ", "▀  "],
         'G' => ["█▀▀", "█ █", "▀▀▀"],
@@ -89,7 +94,7 @@ mod tests {
 
     #[test]
     fn all_glyph_rows_have_same_width() {
-        for c in "0123456789. +-AEFGMNRST".chars() {
+        for c in "0123456789. +-ABCEFGHIMNRSTU".chars() {
             let g = glyph(c).unwrap();
             let w = g[0].chars().count();
             assert!(g.iter().all(|r| r.chars().count() == w), "{c}");
