@@ -92,6 +92,9 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose:1.9.2")
+    // Synchronisation : scan du QR code (sans autorisation caméra) et QR code affiché.
+    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
+    implementation("com.google.zxing:core:3.5.3")
     testImplementation("junit:junit:4.13.2")
 }
 

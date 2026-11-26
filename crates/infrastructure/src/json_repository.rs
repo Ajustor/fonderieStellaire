@@ -357,25 +357,15 @@ impl SaveRepository for JsonSaveRepository {
             Err(e) if e.kind() == io::ErrorKind::InvalidData => String::new(),
             Err(e) => return Err(io_err("lecture", &e)),
         };
-        // Sauvegarde chiffrée (depuis la v0.12) ou ancienne sauvegarde en clair.
-        let json = match save_crypto::decode(&text) {
-            Ok(json) => json,
-            Err(CryptoError::NotEncrypted) => text,
-            Err(CryptoError::Tampered) => {
+        match decode_save(&text) {
+            Ok(data) => Ok(LoadOutcome::Loaded(Box::new(data))),
+            Err(e) => {
                 let backup = self.backup_path();
                 fs::rename(&self.path, &backup).map_err(|e| io_err("mise de côté", &e))?;
-                return Ok(LoadOutcome::Tampered {
-                    backup: backup.display().to_string(),
-                });
-            }
-        };
-        match serde_json::from_str::<SaveFile>(&json) {
-            Ok(file) => Ok(LoadOutcome::Loaded(Box::new(file.into()))),
-            Err(_) => {
-                let backup = self.backup_path();
-                fs::rename(&self.path, &backup).map_err(|e| io_err("mise de côté", &e))?;
-                Ok(LoadOutcome::Corrupted {
-                    backup: backup.display().to_string(),
+                let backup = backup.display().to_string();
+                Ok(match e {
+                    DecodeError::Tampered => LoadOutcome::Tampered { backup },
+                    DecodeError::Unreadable => LoadOutcome::Corrupted { backup },
                 })
             }
         }
@@ -385,15 +375,7 @@ impl SaveRepository for JsonSaveRepository {
         if let Some(dir) = self.path.parent() {
             fs::create_dir_all(dir).map_err(|e| io_err("création du dossier", &e))?;
         }
-        let json = serde_json::to_string(&SaveFile::from(data))
-            .map_err(|e| RepositoryError(format!("sérialisation impossible : {e}")))?;
-        // Chiffrée et signée : une retouche à la main est détectée au chargement.
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos() as u64)
-            .unwrap_or(0)
-            ^ data.last_saved.rotate_left(17);
-        let json = save_crypto::encode(&json, nonce);
+        let json = encode_save(data)?;
         let tmp = self.sibling(".tmp");
         {
             let mut f = fs::File::create(&tmp).map_err(|e| io_err("écriture", &e))?;
@@ -408,6 +390,46 @@ impl SaveRepository for JsonSaveRepository {
     fn location(&self) -> String {
         self.path.display().to_string()
     }
+
+    fn keep_backup(&self) -> Result<(), RepositoryError> {
+        match fs::copy(&self.path, self.backup_path()) {
+            Ok(_) => Ok(()),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(io_err("copie de sauvegarde", &e)),
+        }
+    }
+}
+
+/// Sauvegarde illisible : modifiée à la main, ou pas une sauvegarde.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DecodeError {
+    Tampered,
+    Unreadable,
+}
+
+/// Texte d'une sauvegarde : JSON chiffré et signé (une retouche à la main est
+/// détectée au chargement).
+pub fn encode_save(data: &SaveData) -> Result<String, RepositoryError> {
+    let json = serde_json::to_string(&SaveFile::from(data))
+        .map_err(|e| RepositoryError(format!("sérialisation impossible : {e}")))?;
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0)
+        ^ data.last_saved.rotate_left(17);
+    Ok(save_crypto::encode(&json, nonce))
+}
+
+/// Relit une sauvegarde chiffrée (depuis la v0.12) ou une ancienne en clair.
+pub fn decode_save(text: &str) -> Result<SaveData, DecodeError> {
+    let json = match save_crypto::decode(text) {
+        Ok(json) => json,
+        Err(CryptoError::NotEncrypted) => text.to_string(),
+        Err(CryptoError::Tampered) => return Err(DecodeError::Tampered),
+    };
+    serde_json::from_str::<SaveFile>(&json)
+        .map(Into::into)
+        .map_err(|_| DecodeError::Unreadable)
 }
 
 #[cfg(test)]

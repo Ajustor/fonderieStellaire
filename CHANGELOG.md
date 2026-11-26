@@ -1,5 +1,21 @@
 # Journal des versions
 
+## v0.17.0 — Synchronisation entre appareils
+
+### Nouveautés
+- **Synchronisation entre appareils**, sans compte : un **code de lien**
+  (affiché en QR code) relie ton ordinateur et ton téléphone. Chaque appareil
+  envoie sa partie au lancement, toutes les 2 minutes et à la fermeture, et
+  reprend celle de l'autre si elle a été plus jouée (l'ancienne est gardée en
+  `.bak`).
+  - Ordinateur : Options (`R`) → **Synchronisation** ; ou
+    `fonderie-stellaire --link CODE` / `--unlink`.
+  - Android : *Sauver* → **Synchroniser entre appareils** (scan du QR code,
+    sans autorisation caméra, ou code à taper).
+- Les parties passent par un **relais** chiffré de bout en bout (`crates/relay`,
+  relais officiel `fonderie-stellaire-sync.darthoit.eu`, ou le tien) : il ne
+  voit jamais le code ni la partie.
+
 ## v0.16.0 — Acte IV, fin : le Cosmos vivant
 
 ### Nouveautés

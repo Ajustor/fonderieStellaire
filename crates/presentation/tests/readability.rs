@@ -534,3 +534,76 @@ fn dump_bang() {
         }
     }
 }
+
+/// Relais factice : l'appareil est lié, chaque envoi réussit.
+struct LinkedRelay;
+
+impl application::SyncBackend for LinkedRelay {
+    fn link_code(&self) -> Option<String> {
+        Some("ABCDE-FGHJK-MNPQR-STVWX-YZ012".into())
+    }
+    fn create_link(&mut self) -> Result<String, application::SyncError> {
+        Ok("ABCDE-FGHJK-MNPQR-STVWX-YZ012".into())
+    }
+    fn join_link(&mut self, code: &str) -> Result<String, application::SyncError> {
+        Ok(code.into())
+    }
+    fn unlink(&mut self) -> Result<(), application::SyncError> {
+        Ok(())
+    }
+    fn synced_rev(&self) -> u64 {
+        0
+    }
+    fn set_synced_rev(&mut self, _: u64) -> Result<(), application::SyncError> {
+        Ok(())
+    }
+    fn pull(&self) -> Result<Option<application::RemoteSave>, application::SyncError> {
+        Ok(None)
+    }
+    fn push(
+        &self,
+        _: &SaveData,
+        _: u64,
+    ) -> Result<application::PushOutcome, application::SyncError> {
+        Ok(application::PushOutcome::Stored { rev: 1 })
+    }
+}
+
+#[test]
+fn sync_screen_shows_the_qr_code_without_cutting_text() {
+    for (w, h) in SIZES {
+        let mut app = app_with(Some(late_save()));
+        app.set_sync(application::SyncService::spawn(Box::new(LinkedRelay)));
+        let mut t = 100.0;
+        app.set_time(t);
+        app.enter_game_now();
+        settle(&mut app, &mut t, w, h);
+        app.on_intent(Intent::Options);
+        for _ in 0..3 {
+            app.on_intent(Intent::Down);
+        }
+        app.on_intent(Intent::Buy);
+        settle(&mut app, &mut t, w, h);
+        presentation::draw::audit::start();
+        let text = render(&mut app, w, h);
+        let clips = presentation::draw::audit::take();
+        assert!(clips.is_empty(), "{w}×{h} : texte coupé {clips:?}\n{text}");
+        assert!(text.contains("SYNCHRONISATION"), "{w}×{h}\n{text}");
+        assert!(
+            text.contains("ABCDE-FGHJK-MNPQR-STVWX-YZ012"),
+            "{w}×{h}\n{text}"
+        );
+        assert!(
+            text.matches('▀').count() > 300,
+            "QR code absent à {w}×{h}\n{text}"
+        );
+        // Délier demande une confirmation.
+        app.on_intent(Intent::Buy);
+        settle(&mut app, &mut t, w, h);
+        assert!(render(&mut app, w, h).contains("confirmer"));
+        app.on_intent(Intent::Escape);
+        app.on_intent(Intent::Escape);
+        settle(&mut app, &mut t, w, h);
+        assert!(render(&mut app, w, h).contains("Synchronisation"));
+    }
+}

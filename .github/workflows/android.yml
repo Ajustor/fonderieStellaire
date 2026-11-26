@@ -59,6 +59,8 @@ jobs:
         working-directory: android
         env:
           FONDERIE_SAVE_KEY: ${{ secrets.FONDERIE_SAVE_KEY }}
+          # Autre relais de synchronisation (variable du dépôt, facultative).
+          FONDERIE_SYNC_URL: ${{ vars.FONDERIE_SYNC_URL }}
           FONDERIE_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
           # Numéro de build Play Store : augmente tout seul à chaque run.
           ANDROID_VERSION_CODE: ${{ github.run_number }}

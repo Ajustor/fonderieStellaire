@@ -41,6 +41,7 @@ import kotlin.math.exp
 class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
     private lateinit var game: Game
     private lateinit var view: CellView
+    private lateinit var syncDialogs: SyncDialogs
 
     private var running = false
     private var lastFrameNanos = 0L
@@ -106,6 +107,7 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         game = Game(filesDir.absolutePath)
+        syncDialogs = SyncDialogs(this, game)
         prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         savedVibrations = prefs.getBoolean(PREF_VIBRATIONS, true)
         savedTips = prefs.getInt(PREF_TIPS, 0).toUInt()
@@ -247,6 +249,7 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
         when (game.takeRequest()) {
             Request.EXPORT_SAVE -> exportLauncher.launch("fonderie-stellaire-save.json")
             Request.IMPORT_SAVE -> importLauncher.launch(arrayOf("*/*"))
+            Request.SYNC -> syncDialogs.show()
             null -> {}
         }
     }

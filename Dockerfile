@@ -18,9 +18,11 @@ RUN for c in domain application infrastructure presentation; do \
     && cargo build --release --locked \
     && rm -rf crates/*/src
 COPY crates crates
+# Autre relais de synchronisation (vide : relais officiel).
+ARG FONDERIE_SYNC_URL=""
 # Force la recompilation de nos crates (les mtimes des sources factices sont plus récents).
 # La clé de chiffrement des sauvegardes arrive en secret BuildKit (vide en local).
-RUN --mount=type=secret,id=save_key touch crates/*/src/*.rs     && FONDERIE_SAVE_KEY="$(cat /run/secrets/save_key 2>/dev/null || true)"        cargo build --release --locked
+RUN --mount=type=secret,id=save_key touch crates/*/src/*.rs     && FONDERIE_SAVE_KEY="$(cat /run/secrets/save_key 2>/dev/null || true)" FONDERIE_SYNC_URL="$FONDERIE_SYNC_URL" cargo build --release --locked -p fonderie-stellaire
 
 FROM debian:bookworm-slim
 LABEL org.opencontainers.image.title="Fonderie Stellaire" \

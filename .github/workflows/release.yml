@@ -63,6 +63,8 @@ jobs:
           FONDERIE_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
           # Clé de chiffrement des sauvegardes (secret du dépôt, jamais dans le code).
           FONDERIE_SAVE_KEY: ${{ secrets.FONDERIE_SAVE_KEY }}
+          # Autre relais de synchronisation (variable du dépôt, facultative).
+          FONDERIE_SYNC_URL: ${{ vars.FONDERIE_SYNC_URL }}
 
       - name: Archive (Windows)
         if: runner.os == 'Windows'
@@ -159,5 +161,7 @@ jobs:
           # Clé des sauvegardes : secret BuildKit, absent de l'historique de l'image.
           secrets: |
             save_key=${{ secrets.FONDERIE_SAVE_KEY }}
+          build-args: |
+            FONDERIE_SYNC_URL=${{ vars.FONDERIE_SYNC_URL }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

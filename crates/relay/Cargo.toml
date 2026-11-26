@@ -1,0 +1,16 @@
+[package]
+name = "fonderie-relay"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+# Relais de synchronisation des parties entre appareils (déployé à part, en
+# conteneur). Ne connaît rien du jeu : il garde des octets chiffrés.
+[[bin]]
+name = "fonderie-relay"
+path = "src/main.rs"
+
+[dependencies]
+tiny_http = "0.12"
+sha2 = "0.10"

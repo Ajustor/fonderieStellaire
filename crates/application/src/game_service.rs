@@ -180,6 +180,14 @@ impl GameService {
 
     /// Sauvegarde immédiate.
     pub fn save(&mut self) -> Result<(), AppError> {
+        let data = self.save_data();
+        self.repo.save(&data)?;
+        self.autosave_timer = 0.0;
+        Ok(())
+    }
+
+    /// Contenu de la sauvegarde à cet instant (envoyé aux autres appareils).
+    pub fn save_data(&self) -> SaveData {
         // Pendant un Défi du jour, c'est la partie principale qu'on sauvegarde.
         let state = match &self.daily {
             Some(d) => &*d.main,
@@ -193,9 +201,20 @@ impl GameService {
         );
         data.frame_rate = self.frame_rate;
         data.color_mode = self.color_mode;
-        self.repo.save(&data)?;
-        self.autosave_timer = 0.0;
+        data
+    }
+
+    /// Remplace la sauvegarde par celle d'un autre appareil (l'actuelle est
+    /// gardée en copie). Appeler [`GameService::load`] ensuite pour la reprendre.
+    pub fn replace_save(&mut self, data: &SaveData) -> Result<(), AppError> {
+        self.repo.keep_backup()?;
+        self.repo.save(data)?;
         Ok(())
+    }
+
+    /// Un Défi du jour est en cours (la partie principale est mise de côté).
+    pub fn in_daily(&self) -> bool {
+        self.daily.is_some()
     }
 
     /// Jour (depuis 1970) selon l'horloge.

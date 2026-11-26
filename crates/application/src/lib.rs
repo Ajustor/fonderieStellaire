@@ -10,6 +10,7 @@ pub mod ports;
 pub mod save_dto;
 pub mod simulator;
 pub mod snapshot;
+pub mod sync;
 pub mod updates;
 
 pub use commands::Command;
@@ -21,5 +22,8 @@ pub use snapshot::{
     ActiveChallengeView, ChallengeView, ConstellationView, DailyView, FleetView, ForgeView,
     GameSnapshot, GeneratorView, LabView, NextUpgradeView, PerkView, ProgressView,
     ResearchBuildView, ResearchView, SystemView, TeaserView, UniverseView, UpgradeView,
+};
+pub use sync::{
+    PushOutcome, RemoteSave, SyncBackend, SyncError, SyncEvent, SyncService, SyncState,
 };
 pub use updates::{ReleaseInfo, UpdateError, UpdateEvent, UpdateProvider, UpdateService};

@@ -5,9 +5,11 @@ edition.workspace = true
 license.workspace = true
 
 [features]
-default = ["updater"]
+default = ["updater", "sync"]
 # Mise à jour automatique depuis GitHub (désactivée sur Android : le Play Store s'en charge).
 updater = ["dep:ureq"]
+# Synchronisation entre appareils par le relais en ligne (`crates/relay`).
+sync = ["dep:ureq", "dep:getrandom"]
 
 [dependencies]
 domain = { path = "../domain" }
@@ -17,3 +19,4 @@ serde_json = "1"
 dirs = "5"
 ureq = { version = "2", optional = true }
 sha2 = "0.10"
+getrandom = { version = "0.2", optional = true }

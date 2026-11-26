@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use application::simulator::{self, fmt_play_time, SimConfig};
-use application::{GameService, UpdateService};
-use infrastructure::{GitHubUpdater, JsonSaveRepository, SystemClock, XorShift64};
+use application::{GameService, SyncBackend, SyncService, UpdateService};
+use infrastructure::{GitHubUpdater, JsonSaveRepository, RelaySync, SystemClock, XorShift64};
 
 /// Dépôt GitHub où sont publiées les versions (mise à jour automatique).
 const REPO: &str = "Ajustor/fonderieStellaire";
@@ -21,6 +21,10 @@ Usage : fonderie-stellaire [option]
   --export <fichier>   copier ta sauvegarde dans un fichier (pour la garder ou
                        la transférer sur un autre ordinateur)
   --import <fichier>   reprendre une sauvegarde exportée (l'actuelle passe en .bak)
+  --link <code>        lier cet ordinateur à un autre appareil (code affiché dans
+                       Options › Synchronisation) : la même partie partout,
+                       la plus jouée est gardée
+  --unlink             ne plus synchroniser cet ordinateur
   --simulate [h/jour]  simuler une partie complète et afficher le rythme :
                        en jeu continu, ou avec N heures de jeu par jour
                        (le reste du temps, le jeu est fermé)
@@ -66,6 +70,33 @@ fn import(repo: &JsonSaveRepository, src: &Path) -> Result<(), Box<dyn Error>> {
         );
     }
     println!("✦ Sauvegarde importée : lance le jeu pour la reprendre.");
+    Ok(())
+}
+
+/// Synchronisation : le lien est gardé à côté de la sauvegarde.
+fn relay(repo: &JsonSaveRepository) -> Option<RelaySync> {
+    let dir = repo.path().parent()?;
+    RelaySync::from_env(dir)
+}
+
+/// `--link` / `--unlink` : enregistre ou oublie le lien ; la synchronisation
+/// a lieu au prochain lancement.
+fn link(repo: &JsonSaveRepository, code: Option<&str>) -> Result<(), Box<dyn Error>> {
+    let mut sync = relay(repo)
+        .ok_or("synchronisation indisponible dans cette version (relais non configuré)")?;
+    match code {
+        Some(code) => {
+            let code = sync.join_link(code)?;
+            println!("✦ Ordinateur lié ({code}).");
+            println!(
+                "  Lance le jeu : la partie la plus jouée sera gardée sur tous les appareils."
+            );
+        }
+        None => {
+            sync.unlink()?;
+            println!("✦ Cet ordinateur n'est plus synchronisé. Ta partie reste ici.");
+        }
+    }
     Ok(())
 }
 
@@ -133,6 +164,13 @@ fn run() -> Result<(), Box<dyn Error>> {
                     import(&repo, &file)
                 };
             }
+            "--link" => {
+                let code = it
+                    .next()
+                    .ok_or_else(|| format!("--link attend le code de lien\n\n{USAGE}"))?;
+                return link(&JsonSaveRepository::default_location()?, Some(code));
+            }
+            "--unlink" => return link(&JsonSaveRepository::default_location()?, None),
             "--simulate" => {
                 let hours = it.next().and_then(|d| d.parse::<f64>().ok());
                 simulate(hours.map(|h| h.clamp(0.5, 24.0)));
@@ -162,13 +200,17 @@ fn run() -> Result<(), Box<dyn Error>> {
     updater.cleanup_previous();
     let updates = UpdateService::spawn(Box::new(updater), version());
 
+    let sync = relay(&repo)
+        .map(|r| SyncService::spawn(Box::new(r)))
+        .unwrap_or_else(SyncService::disabled);
+
     let mut service = GameService::new(
         Box::new(repo),
         Box::new(SystemClock),
         Box::new(XorShift64::from_time()),
     );
     let startup = service.load()?;
-    let outcome = presentation::run(service, startup, updates)?;
+    let outcome = presentation::run(service, startup, updates, sync)?;
     if let Some(e) = outcome.save_error {
         return Err(format!("la sauvegarde finale a échoué : {e}").into());
     }

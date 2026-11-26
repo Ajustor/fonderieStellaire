@@ -13,6 +13,6 @@ crate-type = ["cdylib", "lib"]
 [dependencies]
 domain = { path = "../domain" }
 application = { path = "../application" }
-infrastructure = { path = "../infrastructure", default-features = false }
+infrastructure = { path = "../infrastructure", default-features = false, features = ["sync"] }
 presentation = { path = "../presentation", default-features = false }
 uniffi = "0.29"

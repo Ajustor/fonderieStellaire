@@ -1727,8 +1727,9 @@ fn render_options(buf: &mut Buffer, area: Rect, ctx: &Ctx, m: &mut MobileUi) {
 }
 
 fn render_save(buf: &mut Buffer, area: Rect, m: &mut MobileUi, version: &str) {
-    let text = "Ta sauvegarde est sur ce téléphone. Exporte-la pour la garder, \
-                ou pour la reprendre sur ordinateur (fonderie-stellaire --import).";
+    let text = "Ta sauvegarde est sur ce téléphone. Synchronise-la avec ton \
+                ordinateur ou un autre téléphone grâce à un code de lien (sans \
+                compte), ou exporte-la dans un fichier.";
     let mut y = area.y + 1;
     for l in draw::wrap(text, area.width as usize - 4) {
         draw::text(
@@ -1744,6 +1745,7 @@ fn render_save(buf: &mut Buffer, area: Rect, m: &mut MobileUi, version: &str) {
     y += 1;
     let w = area.width.saturating_sub(2);
     for (label, req, color) in [
+        ("Synchroniser entre appareils", Request::Sync, theme::CYAN),
         ("Exporter la sauvegarde", Request::ExportSave, theme::GOLD),
         ("Importer une sauvegarde", Request::ImportSave, theme::FOCUS),
     ] {

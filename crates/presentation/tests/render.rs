@@ -1015,8 +1015,13 @@ fn options_and_new_game_with_double_confirmation() {
     app.on_intent(Intent::Buy);
     app.update(0.033);
     assert_eq!(app.snapshot().frame_rate, 20);
-    // Recommencer : une première Entrée arme, changer de ligne désarme.
+    // Synchronisation : indisponible sans relais, rien ne s'ouvre.
+    assert!(text.contains("Synchronisation"));
     app.on_intent(Intent::Down);
+    app.on_intent(Intent::Down);
+    app.on_intent(Intent::Buy);
+    assert!(!render(&mut app, 100, 30).contains("SYNCHRONISATION"));
+    // Recommencer : une première Entrée arme, changer de ligne désarme.
     app.on_intent(Intent::Down);
     app.on_intent(Intent::Buy);
     let text = render(&mut app, 100, 30);

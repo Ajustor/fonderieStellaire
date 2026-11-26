@@ -18,7 +18,11 @@ use crate::theme;
 use crate::ui::Popup;
 
 /// Nombre de lignes réglables.
-pub const ITEMS: usize = 4;
+pub const ITEMS: usize = 5;
+/// Ligne « Recommencer une nouvelle partie ».
+pub const RESET_ITEM: usize = 4;
+/// Ligne « Synchronisation ».
+pub const SYNC_ITEM: usize = 3;
 /// Durée de l'effacement ; la nouvelle partie commence à la fin.
 pub const WIPE_DURATION: f64 = 2.6;
 const EMBER: Rgb = Rgb(255, 110, 60);
@@ -27,6 +31,8 @@ const EMBER: Rgb = Rgb(255, 110, 60);
 pub struct OptionsInfo<'a> {
     pub save_path: &'a str,
     pub version: &'a str,
+    /// État court de la synchronisation entre appareils.
+    pub sync: &'a str,
 }
 
 pub fn render(
@@ -64,6 +70,7 @@ pub fn render(
             if snap.reduced_effects { "oui" } else { "non" }.to_string(),
             theme::CYAN,
         ),
+        ("Synchronisation", info.sync.to_string(), theme::CYAN),
         (
             "Recommencer une nouvelle partie",
             "tout effacer".to_string(),
@@ -74,6 +81,7 @@ pub fn render(
         0 => "Normales, daltonien (les verts deviennent bleus et les rouges orangés : plus de rouge et de vert à distinguer) ou contraste élevé (texte plus clair, fonds plus sombres).".to_string(),
         1 => "60, 30, 20 ou 15 images par seconde. 60 rend les animations très fluides si ton terminal suit ; baisse-les s'il saccade : le jeu tourne pareil, seules les animations changent.".to_string(),
         2 => "Moins de secousses, de flashs et de nébuleuses animées. Raccourci : [F].".to_string(),
+        SYNC_ITEM => "La même partie sur ton ordinateur et ton téléphone, sans compte : un code de lien (QR code) les relie. Entrée pour l'afficher.".to_string(),
         _ if armed => "ATTENTION : Entrée de nouveau pour TOUT effacer (fragments, Big Crunch, Laboratoire, Clés, particules, succès). C'est définitif. [Échap] pour annuler.".to_string(),
         _ => "Efface ta sauvegarde et repart de zéro. Pour en garder une copie avant : fonderie-stellaire --export fichier".to_string(),
     };
@@ -82,7 +90,7 @@ pub fn render(
         .map(|l| {
             (
                 l,
-                if selected == 3 && armed {
+                if selected == RESET_ITEM && armed {
                     theme::ORANGE
                 } else {
                     theme::MUTED
@@ -113,7 +121,7 @@ pub fn render(
     let h = ((height as f64 * s).round() as u16).max(2);
     let rect = centered(area, w, h);
     Clear.render(rect, buf);
-    let border = if selected == 3 && armed {
+    let border = if selected == RESET_ITEM && armed {
         theme::RED.lerp(EMBER, 0.5 + 0.5 * (ctx.now * 6.0).sin())
     } else {
         theme::CYAN
@@ -143,7 +151,11 @@ pub fn render(
             theme::bold(theme::FOCUS),
             right,
         );
-        let name_color = if i == 3 { theme::RED } else { theme::TEXT };
+        let name_color = if i == RESET_ITEM {
+            theme::RED
+        } else {
+            theme::TEXT
+        };
         let vx = right.saturating_sub(1 + value.chars().count() as u16);
         draw::text(
             buf,

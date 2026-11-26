@@ -34,6 +34,11 @@ pub trait SaveRepository {
     fn save(&self, data: &SaveData) -> Result<(), RepositoryError>;
     /// Emplacement lisible par un humain (affiché dans l'aide).
     fn location(&self) -> String;
+    /// Garde une copie de la sauvegarde actuelle avant qu'elle soit remplacée
+    /// par celle d'un autre appareil.
+    fn keep_backup(&self) -> Result<(), RepositoryError> {
+        Ok(())
+    }
 }
 
 pub trait Clock {
