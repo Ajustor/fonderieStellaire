@@ -6,6 +6,7 @@
 
 pub mod app;
 pub mod bigfont;
+pub mod cells;
 pub mod draw;
 pub mod fmt;
 pub mod fx;

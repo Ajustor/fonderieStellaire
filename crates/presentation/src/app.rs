@@ -305,6 +305,17 @@ impl App {
         self.service.save().map_err(|e| e.to_string())
     }
 
+    /// Relit la sauvegarde (retour d'arrière-plan, import) : gains hors-ligne
+    /// appliqués et annoncés comme au lancement.
+    pub fn reload_save(&mut self) -> Result<(), String> {
+        let events = self.service.load().map_err(|e| e.to_string())?;
+        self.service.fill_snapshot(&mut self.snap);
+        for ev in events {
+            self.react(ev);
+        }
+        Ok(())
+    }
+
     /// Désactive l'écran « terminal trop petit » (mode mobile : la taille est connue).
     pub fn set_mobile(&mut self, mobile: bool) {
         self.mobile = mobile;

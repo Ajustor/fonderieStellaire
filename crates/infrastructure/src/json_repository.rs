@@ -316,6 +316,24 @@ impl JsonSaveRepository {
         Ok(backed_up)
     }
 
+    /// Contenu de la sauvegarde (vérifiée lisible), pour la partager (Android).
+    pub fn export_bytes(&self) -> Result<Vec<u8>, RepositoryError> {
+        let tmp = self.sibling(".export");
+        self.export_to(&tmp)?;
+        let bytes = fs::read(&tmp).map_err(|e| io_err("lecture de l'export", &e));
+        let _ = fs::remove_file(&tmp);
+        bytes
+    }
+
+    /// Comme `import_from`, à partir du contenu d'un fichier exporté.
+    pub fn import_bytes(&self, bytes: &[u8]) -> Result<bool, RepositoryError> {
+        let tmp = self.sibling(".import");
+        fs::write(&tmp, bytes).map_err(|e| io_err("écriture de l'import", &e))?;
+        let result = self.import_from(&tmp);
+        let _ = fs::remove_file(&tmp);
+        result
+    }
+
     /// Met la sauvegarde existante de côté (`.bak`) pour repartir de zéro.
     /// Renvoie `true` si un fichier a été déplacé.
     pub fn reset(&self) -> Result<bool, RepositoryError> {
@@ -518,6 +536,27 @@ mod tests {
             other => panic!("{other:?}"),
         }
         assert!(repo.import_from(&dir.join("absent.json")).is_err());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn export_then_import_bytes_round_trip() {
+        let (dir, repo) = temp_repo("export-bytes");
+        assert!(repo.export_bytes().is_err(), "rien à exporter");
+        let data = SaveData {
+            version: application::SAVE_VERSION,
+            clicks: 42,
+            ..SaveData::default()
+        };
+        repo.save(&data).unwrap();
+        let bytes = repo.export_bytes().unwrap();
+        repo.save(&SaveData::default()).unwrap();
+        assert!(repo.import_bytes(&bytes).unwrap());
+        match repo.load().unwrap() {
+            LoadOutcome::Loaded(d) => assert_eq!(d.clicks, 42),
+            other => panic!("{other:?}"),
+        }
+        assert!(repo.import_bytes(b"pas une sauvegarde").is_err());
         let _ = fs::remove_dir_all(dir);
     }
 
