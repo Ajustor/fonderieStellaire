@@ -220,12 +220,12 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
         } else {
             VibrationEffect.createOneShot(20, VibrationEffect.DEFAULT_AMPLITUDE)
         }
-        // Vibration de jeu : suit le réglage « vibrations multimédia ».
+        // Retour tactile : suit le réglage « retour tactile » du téléphone.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            v.vibrate(effect, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_MEDIA))
+            v.vibrate(effect, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_TOUCH))
         } else {
             @Suppress("DEPRECATION")
-            v.vibrate(effect, GAME_AUDIO)
+            v.vibrate(effect, TOUCH_AUDIO)
         }
     }
 
@@ -378,8 +378,9 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
     companion object {
         private const val TAG = "Fonderie"
         private const val PREFS = "fonderie"
-        private val GAME_AUDIO: AudioAttributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_GAME)
+        /** Avant Android 13 : l'usage « sonification » correspond au retour tactile. */
+        private val TOUCH_AUDIO: AudioAttributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
             .build()
         private const val PREF_VIBRATIONS = "vibrations"
         private const val PREF_TIPS = "tips_seen"
