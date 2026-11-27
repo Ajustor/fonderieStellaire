@@ -929,16 +929,14 @@ impl App {
             if let Some(n) = self.vis.nova.as_mut() {
                 n.committed = true;
             }
-            let target = self
-                .vis
-                .nova
-                .as_ref()
-                .filter(|n| n.crunch)
-                .map(|n| n.universe);
-            self.command(match target {
-                Some(universe) => Command::BigCrunch(universe),
+            let cmd = match self.vis.nova.as_ref() {
+                Some(n) if n.crunch => Command::BigCrunch(n.universe),
+                Some(n) => n
+                    .challenge
+                    .map_or(Command::Supernova, Command::StartChallenge),
                 None => Command::Supernova,
-            });
+            };
+            self.command(cmd);
         }
         if done {
             self.vis.nova = None;
@@ -1638,11 +1636,20 @@ impl App {
         if v.active {
             self.command(Command::AbandonChallenge);
         } else {
-            self.command(Command::StartChallenge(v.id));
             if let Some(c) = self.ui.challenges.as_mut() {
                 c.closing_at = Some(self.now);
             }
-            self.vis.cascade_start = self.now;
+            if self.snap.fragments_available >= 1.0 {
+                // Le Défi commence par une Supernova : on la montre, et le Défi
+                // est lancé au moment où elle se produirait.
+                self.start_supernova();
+                if let Some(n) = self.vis.nova.as_mut() {
+                    n.challenge = Some(v.id);
+                }
+            } else {
+                self.command(Command::StartChallenge(v.id));
+                self.vis.cascade_start = self.now;
+            }
         }
     }
 

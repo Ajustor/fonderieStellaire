@@ -43,6 +43,9 @@ pub struct NovaSequence {
     pub universe: domain::UniverseId,
     pub universe_name: String,
     pub palette: [crate::fx::Rgb; 3],
+    /// Supernova qui ouvre un Défi : c'est le lancement du Défi (qui fait la
+    /// Supernova) qui est validé au milieu de l'animation.
+    pub challenge: Option<domain::ChallengeId>,
 }
 
 impl NovaSequence {
@@ -68,6 +71,7 @@ impl NovaSequence {
             universe: domain::UniverseId::ORIGIN,
             universe_name: String::new(),
             palette: theme::universe_palette(0),
+            challenge: None,
         }
     }
 

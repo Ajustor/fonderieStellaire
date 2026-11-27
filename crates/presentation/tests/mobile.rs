@@ -319,7 +319,16 @@ fn challenges_launch_after_confirmation() {
     app.touch_move(slider.right() - 1, y);
     app.touch_up(slider.right() - 1, y);
     app.update(0.033);
+    // Le Défi commence par une Supernova (des fragments sont à prendre) :
+    // l'animation se joue, et le Défi est lancé en son milieu.
+    assert!(app.in_sequence(), "animation de la Supernova");
+    assert!(app.snapshot().active_challenge.is_none(), "pas encore");
+    let supernovas = app.snapshot().supernovas;
+    for _ in 0..12 {
+        settle(&mut app, 44, 43);
+    }
     assert!(app.snapshot().active_challenge.is_some(), "Défi lancé");
+    assert_eq!(app.snapshot().supernovas, supernovas + 1, "Supernova faite");
 }
 
 #[test]
