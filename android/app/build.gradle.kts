@@ -11,6 +11,8 @@ val cargoRoot: File = rootDir.parentFile
 val rustJniLibs = layout.buildDirectory.dir("rustJniLibs")
 val uniffiOut = layout.buildDirectory.dir("generated/uniffi")
 val rustProfile = providers.gradleProperty("rustProfile").getOrElse("release")
+val abis = providers.gradleProperty("abis").getOrElse("arm64-v8a,x86_64")
+    .split(",").map { it.trim() }.filter { it.isNotEmpty() }
 
 /** Signature de publication : fournie par la CI (secrets du dépôt) ou par l'environnement. */
 val keystorePath: String? = System.getenv("ANDROID_KEYSTORE_PATH")
@@ -42,8 +44,11 @@ android {
         targetSdk = 36
         versionCode = ciVersionCode
         versionName = ciVersionName
+        // ABI embarquées : les deux pour l'AAB (le Play Store ne livre que la
+        // bonne), arm64 seul pour l'APK de GitHub (-Pabis=arm64-v8a), les
+        // téléphones ; x86_64 sert aux émulateurs et Chromebooks.
         ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
+            abiFilters += abis
         }
         // Avis de nouvelle version pour l'APK de GitHub (ApkUpdates.kt). À
         // passer à false (gradle.properties) une fois l'app sur le Play Store.
@@ -67,7 +72,13 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 : code et ressources inutilisés retirés (APK bien plus léger).
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             // Sans clé (compilation locale), la release est signée avec la clé de debug.
             signingConfig = signingConfigs.findByName("upload") ?: signingConfigs.getByName("debug")
         }
@@ -115,16 +126,19 @@ val cargoNdk by tasks.registering(Exec::class) {
     workingDir = cargoRoot
     val args = mutableListOf(
         "cargo", "ndk",
-        "-t", "arm64-v8a", "-t", "x86_64",
+        *abis.flatMap { listOf("-t", it) }.toTypedArray(),
         "-P", "26",
         "-o", rustJniLibs.get().asFile.absolutePath,
         "build", "-p", "fonderie-android",
     )
-    if (rustProfile == "release") args += "--release"
+    if (rustProfile == "release") args += listOf("--profile", "android")
     commandLine(args)
     environment("ANDROID_NDK_HOME", android.ndkDirectory.absolutePath)
     inputs.dir(File(cargoRoot, "crates"))
     inputs.file(File(cargoRoot, "Cargo.lock"))
+    inputs.file(File(cargoRoot, "Cargo.toml"))
+    inputs.property("abis", abis)
+    inputs.property("rustProfile", rustProfile)
     outputs.dir(rustJniLibs)
 }
 
