@@ -1,5 +1,14 @@
 # Journal des versions
 
+## v0.19.2 — Récolte continue équitable
+
+### Corrections
+- **Récolte continue** (Espace ou doigt maintenu) : exactement **10 récoltes
+  par seconde**, quels que soient les images par seconde ou la vitesse de
+  répétition du clavier. Avant, une récolte qui tombait entre deux images était
+  perdue : environ 9 par seconde à 60 images/s, 8,5 à 30 et 7,5 à 15. Une
+  touche relâchée ne se rattrape pas.
+
 ## v0.19.1 — Mise à jour Android en un geste
 
 ### Nouveautés

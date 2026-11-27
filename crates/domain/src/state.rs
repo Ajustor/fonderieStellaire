@@ -35,6 +35,10 @@ use crate::upgrade::{Effect, UpgradeId};
 const ACHIEVEMENT_CHECK_INTERVAL: f64 = 1.0;
 /// Intervalle entre deux passages de l'automate d'achat.
 const AUTOBUY_INTERVAL: f64 = 1.0;
+/// Récolte maintenue : au-delà de cet écart entre deux répétitions, la touche
+/// a été relâchée et la cadence repart (pas de rattrapage). La répétition du
+/// clavier, elle, arrive au moins 20 fois par seconde.
+const HOLD_HARVEST_RESTART: f64 = 0.3;
 /// Historique de production : un point par quart d'heure de jeu, au plus 2000.
 const HISTORY_STEP: f64 = 15.0 * 60.0;
 const HISTORY_MAX: usize = 2000;
@@ -854,8 +858,10 @@ impl GameState {
 
     /// Récolte déclenchée en maintenant la touche : nécessite l'amélioration
     /// « Récolte continue », et la cadence est plafonnée à une récolte tous les
-    /// `HOLD_HARVEST_INTERVAL` secondes de jeu (indépendamment de la vitesse de
-    /// répétition du clavier). Les répétitions trop rapprochées sont ignorées.
+    /// `HOLD_HARVEST_INTERVAL` secondes de jeu. Les répétitions trop rapprochées
+    /// sont ignorées ; quand elles arrivent en retard (images/s basses, clavier
+    /// lent), les récoltes dues sont rattrapées : exactement 10 par seconde
+    /// quelle que soit la machine.
     pub fn harvest_held(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
         if self.active_restriction(catalog) == Some(Restriction::NoClick) {
             return;
@@ -864,11 +870,22 @@ impl GameState {
             events.push(DomainEvent::HoldHarvestLocked);
             return;
         }
-        if self.play_time - self.last_hold_harvest < HOLD_HARVEST_INTERVAL - 1e-9 {
+        let since = self.play_time - self.last_hold_harvest;
+        if since < HOLD_HARVEST_INTERVAL - 1e-9 {
             return;
         }
-        self.last_hold_harvest = self.play_time;
-        self.harvest(catalog, events);
+        let due = if since > HOLD_HARVEST_RESTART {
+            // Nouvelle prise (touche relâchée entre-temps) : la cadence repart.
+            self.last_hold_harvest = self.play_time;
+            1
+        } else {
+            let due = ((since + 1e-9) / HOLD_HARVEST_INTERVAL).floor() as u32;
+            self.last_hold_harvest += due as f64 * HOLD_HARVEST_INTERVAL;
+            due
+        };
+        for _ in 0..due {
+            self.harvest(catalog, events);
+        }
     }
 
     /// Achat de générateurs selon le mode d'achat.
@@ -2771,6 +2788,24 @@ mod tests {
             s.harvest_held(&c, &mut ev);
         }
         assert!((51..=52).contains(&s.clicks), "{}", s.clicks);
+        // Images/s basses ou clavier lent : les récoltes dues sont
+        // rattrapées, 10 par seconde exactement.
+        for (dt, per_frame) in [(1.0 / 15.0, 1), (1.0 / 25.0, 1), (1.0 / 60.0, 1), (0.04, 2)] {
+            let start = s.clicks;
+            for _ in 0..(2.0 / dt) as usize {
+                s.tick(&c, dt, 0.5, &mut ev);
+                for _ in 0..per_frame {
+                    s.harvest_held(&c, &mut ev);
+                }
+            }
+            let got = s.clicks - start;
+            assert!((19..=21).contains(&got), "dt {dt} : {got} en 2 s");
+        }
+        // Touche relâchée une seconde : pas de rattrapage à la reprise.
+        s.tick(&c, 1.0, 0.5, &mut ev);
+        let before = s.clicks;
+        s.harvest_held(&c, &mut ev);
+        assert_eq!(s.clicks, before + 1);
         // Un clic normal n'est jamais limité.
         let before = s.clicks;
         s.harvest(&c, &mut ev);
