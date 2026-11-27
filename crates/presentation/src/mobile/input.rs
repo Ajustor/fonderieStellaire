@@ -505,6 +505,8 @@ impl App {
             }
             Hit::CycleColors => self.command(Command::CycleColorMode),
             Hit::CycleFrameRate => self.command(Command::CycleFrameRate),
+            Hit::ToggleSound => self.command(Command::ToggleSound),
+            Hit::CycleVolume => self.command(Command::CycleVolume),
             Hit::ToggleReducedEffects => self.command(Command::ToggleReducedEffects),
             Hit::Request(r) => {
                 if let Some(m) = self.mobile_mut() {

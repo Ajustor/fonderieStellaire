@@ -482,6 +482,61 @@ fn harvest_and_purchase_ask_for_a_vibration() {
     assert_eq!(app.take_haptic(), 0, "désactivées dans les options");
 }
 
+#[test]
+fn game_events_play_sounds_within_the_options() {
+    use presentation::sound::Mixer;
+    let mut app = mobile_app(Some(advanced_save()));
+    let mixer = Mixer::shared(8000);
+    app.set_sound(mixer.clone());
+    settle(&mut app, 44, 43);
+    let active = || mixer.lock().unwrap().active();
+    let sky = find(&app, |h| *h == Hit::Harvest).expect("ciel");
+    tap(&mut app, sky);
+    assert_eq!(active(), 1, "récolte : un tic");
+    tap(&mut app, sky);
+    assert_eq!(active(), 1, "limite de fréquence");
+    // Supernova : son grand son part avec l'animation.
+    app.mobile_select_tab(Tab::Foundry);
+    settle(&mut app, 44, 43);
+    let ask = find(&app, |h| *h == Hit::Ask(Confirm::Supernova)).expect("Supernova");
+    tap(&mut app, ask);
+    settle(&mut app, 44, 43);
+    let slider = find(&app, |h| *h == Hit::Slider).expect("curseur");
+    let y = slider.y + 1;
+    let before = active();
+    app.touch_down(slider.x + 2, y);
+    app.touch_move(slider.right() - 1, y);
+    app.touch_up(slider.right() - 1, y);
+    assert_eq!(active(), before + 1, "Supernova");
+    // Sons coupés dans les options : plus rien.
+    app.mobile_select_tab(Tab::More);
+    for _ in 0..12 {
+        settle(&mut app, 44, 43);
+    }
+    let options = find(&app, |h| *h == Hit::SubTab(3)).expect("Options");
+    tap(&mut app, options);
+    settle(&mut app, 44, 43);
+    let mut toggle = None;
+    for _ in 0..10 {
+        toggle = find(&app, |h| *h == Hit::ToggleSound);
+        if toggle.is_some() {
+            break;
+        }
+        app.scroll_by(4);
+        settle(&mut app, 44, 43);
+    }
+    tap(&mut app, toggle.expect("option Sons"));
+    app.update(0.033);
+    assert!(!app.snapshot().sound_on);
+    mixer.lock().unwrap().set_muted(true);
+    mixer.lock().unwrap().set_muted(false);
+    app.mobile_select_tab(Tab::Foundry);
+    settle(&mut app, 44, 43);
+    let sky = find(&app, |h| *h == Hit::Harvest).expect("ciel");
+    tap(&mut app, sky);
+    assert_eq!(active(), 0, "sons coupés");
+}
+
 /// Relais factice : appareil lié, classement de 3 joueurs (le joueur 2e).
 struct Linked;
 

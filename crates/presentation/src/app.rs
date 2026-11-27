@@ -138,6 +138,12 @@ pub struct App {
     /// Mode mobile (Android) : onglets, mises en page portrait, hit-test.
     /// Absent en mode terminal, qui garde ses écrans tels quels.
     pub(crate) mobile: Option<crate::mobile::MobileUi>,
+    /// Mixeur audio, partagé avec le fil de sortie (absent : jeu muet).
+    sound: Option<crate::sound::SharedMixer>,
+    /// Dernier déclenchement de chaque son (limite de fréquence).
+    sound_last: [f64; crate::sound::Sfx::ALL.len()],
+    /// Récolte continue en cours jusqu'à cet instant (son plus aigu).
+    harvest_held_until: f64,
     /// Synchronisation entre appareils.
     pub(crate) sync: SyncService,
     /// Temps écoulé depuis le dernier envoi au relais.
@@ -193,6 +199,9 @@ impl App {
             restart_at: None,
             restart: false,
             mobile: None,
+            sound: None,
+            sound_last: [f64::NEG_INFINITY; crate::sound::Sfx::ALL.len()],
+            harvest_held_until: f64::NEG_INFINITY,
             sync: SyncService::disabled(),
             sync_timer: 0.0,
             sync_pending: None,
@@ -647,6 +656,36 @@ impl App {
     }
 
     /// Désactive l'écran « terminal trop petit » (mode mobile : la taille est connue).
+    /// Branche la sortie audio : le jeu déclenche ses sons dans ce mixeur.
+    pub fn set_sound(&mut self, mixer: crate::sound::SharedMixer) {
+        if let Ok(mut m) = mixer.lock() {
+            m.set_volume(self.snap.volume);
+        }
+        self.sound = Some(mixer);
+    }
+
+    /// Joue un son, si les sons sont activés et qu'il n'a pas déjà retenti
+    /// à l'instant (récolte continue, rafales d'achats).
+    pub(crate) fn play(&mut self, sfx: crate::sound::Sfx) {
+        let Some(mixer) = &self.sound else {
+            return;
+        };
+        if !self.snap.sound_on {
+            return;
+        }
+        let i = crate::sound::Sfx::ALL
+            .iter()
+            .position(|&s| s == sfx)
+            .unwrap_or(0);
+        if self.now - self.sound_last[i] < sfx.min_interval() {
+            return;
+        }
+        self.sound_last[i] = self.now;
+        if let Ok(mut m) = mixer.lock() {
+            m.play(sfx);
+        }
+    }
+
     pub fn set_mobile(&mut self, mobile: bool) {
         self.mobile = mobile.then(crate::mobile::MobileUi::default);
         self.journal.touch = mobile;
@@ -1166,6 +1205,8 @@ impl App {
                         0 => self.command(Command::CycleColorMode),
                         1 => self.command(Command::CycleFrameRate),
                         2 => self.command(Command::ToggleReducedEffects),
+                        crate::widgets::options::SOUND_ITEM => self.command(Command::ToggleSound),
+                        crate::widgets::options::VOLUME_ITEM => self.command(Command::CycleVolume),
                         crate::widgets::options::SYNC_ITEM => self.open_sync_view(),
                         crate::widgets::options::LEADERBOARD_ITEM => self.open_leaderboard(),
                         _ if self.ui.options_armed => {
@@ -1351,7 +1392,10 @@ impl App {
         }
         match intent {
             Intent::Harvest => self.command(Command::Harvest),
-            Intent::HarvestHeld => self.command(Command::HarvestHeld),
+            Intent::HarvestHeld => {
+                self.harvest_held_until = now + 0.3;
+                self.command(Command::HarvestHeld)
+            }
             Intent::Up => match self.ui.focus {
                 Panel::Generators => self.ui.gen_sel = self.ui.gen_sel.saturating_sub(1),
                 Panel::Upgrades => self.ui.upg_sel = self.ui.upg_sel.saturating_sub(1),
@@ -2061,12 +2105,35 @@ impl App {
         } else {
             ""
         };
+        self.play(crate::sound::Sfx::Supernova);
         self.vis.nova = Some(NovaSequence::crunch_into(
             self.now, crunches, before, after, universe, name,
         ));
     }
 
+    /// Son d'un événement du jeu (les mêmes que les vibrations, et le Défi
+    /// réussi).
+    fn sound_for(&self, ev: &DomainEvent) -> Option<crate::sound::Sfx> {
+        use crate::sound::Sfx;
+        Some(match ev {
+            DomainEvent::Harvested { .. } if self.now < self.harvest_held_until => Sfx::HarvestHeld,
+            DomainEvent::Harvested { .. } => Sfx::Harvest,
+            DomainEvent::Purchased { count, .. } if *count > 1 => Sfx::BuyBatch,
+            DomainEvent::Purchased { .. }
+            | DomainEvent::UpgradePurchased { .. }
+            | DomainEvent::PerkPurchased { .. } => Sfx::Buy,
+            DomainEvent::MilestoneReached { .. } => Sfx::Milestone,
+            DomainEvent::AchievementUnlocked { .. } => Sfx::Achievement,
+            DomainEvent::CometCaught { .. } => Sfx::Comet,
+            // Avec l'animation, son grand son est parti à son début.
+            DomainEvent::Supernova { .. } if self.vis.nova.is_none() => Sfx::Milestone,
+            DomainEvent::ChallengeCompleted { .. } => Sfx::Challenge,
+            _ => return None,
+        })
+    }
+
     pub(crate) fn start_supernova(&mut self) {
+        self.play(crate::sound::Sfx::Supernova);
         let gained = self.snap.fragments_available;
         let old_bonus = self.snap.fragment_bonus;
         let new_bonus = fragment_multiplier(self.snap.fragments + gained) - 1.0;
@@ -2086,6 +2153,23 @@ impl App {
         match ev {
             GameEvent::Domain(d) => self.react_domain(d),
             GameEvent::BuyModeChanged(_) => self.vis.mode_flash = now,
+            GameEvent::SoundChanged { on, volume } => {
+                if let Some(m) = &self.sound {
+                    if let Ok(mut m) = m.lock() {
+                        m.set_volume(volume);
+                    }
+                }
+                let msg = if on {
+                    format!("Sons activés · volume {volume} %")
+                } else {
+                    "Sons coupés".to_string()
+                };
+                self.log(Kind::Info, msg.clone());
+                self.toasts.push(now, theme::CYAN, "Sons", msg);
+                // Aperçu du volume choisi.
+                self.service.fill_snapshot(&mut self.snap);
+                self.play(crate::sound::Sfx::Buy);
+            }
             GameEvent::ReducedEffectsChanged(reduced) => {
                 self.vis.set_reduced(reduced);
                 let msg = if reduced {
@@ -2229,6 +2313,9 @@ impl App {
         let sky = inner(self.ui.layout.sky);
         if let Some(m) = self.mobile.as_mut() {
             m.note_haptic(&ev);
+        }
+        if let Some(sfx) = self.sound_for(&ev) {
+            self.play(sfx);
         }
         match ev {
             DomainEvent::Harvested { amount } => {
@@ -3631,12 +3718,16 @@ pub fn run(
     updates: UpdateService,
     sync: SyncService,
     leaderboard: LeaderboardService,
+    sound: Option<crate::sound::SharedMixer>,
 ) -> io::Result<RunOutcome> {
     let mut guard = TerminalGuard::new()?;
     let mut app = App::new(service, startup);
     app.set_updates(updates);
     app.set_sync(sync);
     app.set_leaderboard(leaderboard);
+    if let Some(mixer) = sound {
+        app.set_sound(mixer);
+    }
     let result = app.run_loop(guard.terminal());
     // Sauvegarde finale, envoyée aussi aux autres appareils.
     let save_error = app.save_now().err();

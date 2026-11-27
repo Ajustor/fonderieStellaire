@@ -11,6 +11,9 @@ default = ["updater", "sync"]
 updater = ["dep:ureq"]
 # Synchronisation entre appareils par le relais en ligne (`crates/relay`).
 sync = ["dep:ureq", "dep:getrandom"]
+# Sortie des sons sur ordinateur (cpal). Sous Linux, il faut ALSA
+# (libasound2-dev pour compiler).
+audio = ["dep:cpal"]
 
 [dependencies]
 domain = { path = "../domain" }
@@ -21,3 +24,4 @@ dirs = "5"
 ureq = { version = "2", optional = true }
 sha2 = "0.10"
 getrandom = { version = "0.2", optional = true }
+cpal = { version = "0.15", optional = true }

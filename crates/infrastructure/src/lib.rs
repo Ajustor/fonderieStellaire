@@ -1,6 +1,8 @@
 //! Couche infrastructure : la seule qui touche au disque, à l'horloge système
 //! et à `serde`. Implémente les ports de la couche application.
 
+#[cfg(feature = "audio")]
+pub mod audio_output;
 #[cfg(feature = "updater")]
 pub mod github_updater;
 pub mod json_repository;
@@ -12,6 +14,8 @@ pub mod save_crypto;
 pub mod system_clock;
 pub mod xorshift;
 
+#[cfg(feature = "audio")]
+pub use audio_output::AudioOutput;
 #[cfg(feature = "updater")]
 pub use github_updater::{ApkReleases, GitHubUpdater};
 pub use json_repository::JsonSaveRepository;

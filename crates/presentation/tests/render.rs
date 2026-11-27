@@ -1017,7 +1017,16 @@ fn options_and_new_game_with_double_confirmation() {
     assert_eq!(app.snapshot().frame_rate, 20);
     // Synchronisation : indisponible sans relais, rien ne s'ouvre.
     assert!(text.contains("Synchronisation"));
+    // Sons : activés par défaut, à 60 % ; Entrée coupe, puis le volume tourne.
+    assert!(app.snapshot().sound_on);
     app.on_intent(Intent::Down);
+    app.on_intent(Intent::Down);
+    app.on_intent(Intent::Buy);
+    assert!(!app.snapshot().sound_on);
+    app.on_intent(Intent::Down);
+    app.on_intent(Intent::Buy);
+    assert_eq!(app.snapshot().volume, 80);
+    assert!(render(&mut app, 100, 30).contains("80 %"));
     app.on_intent(Intent::Down);
     app.on_intent(Intent::Buy);
     assert!(!render(&mut app, 100, 30).contains("SYNCHRONISATION"));
@@ -1063,6 +1072,10 @@ fn options_and_new_game_with_double_confirmation() {
     assert_eq!(snap.stardust, 0.0);
     assert_eq!(snap.fragments, 0.0);
     assert_eq!(snap.frame_rate, 20, "les réglages sont gardés");
+    assert!(
+        !snap.sound_on && snap.volume == 80,
+        "réglages des sons gardés"
+    );
 }
 
 #[test]
