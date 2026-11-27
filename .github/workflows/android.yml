@@ -59,6 +59,8 @@ jobs:
         working-directory: android
         env:
           FONDERIE_SAVE_KEY: ${{ secrets.FONDERIE_SAVE_KEY }}
+          # Clé de signature des fiches du classement (= LEADERBOARD_KEY du relais).
+          FONDERIE_LEADERBOARD_KEY: ${{ secrets.FONDERIE_LEADERBOARD_KEY }}
           # Autre relais de synchronisation (variable du dépôt, facultative).
           FONDERIE_SYNC_URL: ${{ vars.FONDERIE_SYNC_URL }}
           FONDERIE_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}

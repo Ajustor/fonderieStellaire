@@ -13,17 +13,29 @@
 //!   révision actuelle) ;
 //! - `GET /health` → 200.
 //!
+//! Classement (voir [`leaderboard`]) :
+//!
+//! - `GET /` → page du classement ;
+//! - `GET` / `PUT` / `DELETE /v1/player` (Bearer) : pseudo du joueur ;
+//! - `POST /v1/score` (Bearer, `X-Signature`) : fiche de score signée ;
+//! - `GET /v1/leaderboard?board=general|daily&day=N&limit=N&me=ID`.
+//!
 //! Configuration (variables d'environnement) : `PORT` (8080), `DATA_DIR`
 //! (`/data`), `MAX_BODY_KB` (1024), `RATE_PER_MIN` (60 requêtes par minute et
 //! par adresse), `EXPIRE_DAYS` (365 : parties non synchronisées depuis plus
 //! longtemps effacées), `TRUST_PROXY` (1 : adresse lue dans
-//! `X-Forwarded-For`, derrière le proxy de Dokploy).
+//! `X-Forwarded-For`, derrière le proxy de Dokploy), `LEADERBOARD_KEY` (clé de
+//! signature des fiches de score, 64 caractères hexadécimaux).
+
+mod leaderboard;
 
 use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Read};
 use std::path::PathBuf;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use leaderboard::{Board, BoardKind, Card, ClaimError, Reject, SubmitError};
 
 use sha2::{Digest, Sha256};
 use tiny_http::{Header, Method, Request, Response, Server};
@@ -35,6 +47,7 @@ struct Config {
     rate_per_min: u32,
     expire: Duration,
     trust_proxy: bool,
+    leaderboard_key: Option<[u8; 32]>,
 }
 
 fn env_or<T: std::str::FromStr>(name: &str, default: T) -> T {
@@ -53,6 +66,9 @@ impl Config {
             rate_per_min: env_or("RATE_PER_MIN", 60),
             expire: Duration::from_secs(env_or("EXPIRE_DAYS", 365u64) * 86_400),
             trust_proxy: env_or("TRUST_PROXY", 1u8) != 0,
+            leaderboard_key: std::env::var("LEADERBOARD_KEY")
+                .ok()
+                .and_then(|k| leaderboard::parse_key(&k)),
         }
     }
 }
@@ -63,6 +79,7 @@ struct Reply {
     status: u16,
     rev: Option<u64>,
     body: Vec<u8>,
+    content_type: &'static str,
 }
 
 impl Reply {
@@ -71,6 +88,144 @@ impl Reply {
             status,
             rev: None,
             body: msg.as_bytes().to_vec(),
+            content_type: "text/plain; charset=utf-8",
+        }
+    }
+
+    fn json(status: u16, value: &serde_json::Value) -> Self {
+        Reply {
+            status,
+            rev: None,
+            body: value.to_string().into_bytes(),
+            content_type: "application/json",
+        }
+    }
+
+    fn data(status: u16, rev: Option<u64>, body: Vec<u8>) -> Self {
+        Reply {
+            status,
+            rev,
+            body,
+            content_type: "application/octet-stream",
+        }
+    }
+}
+
+/// Page du classement (autonome : ni script ni police externes).
+const SITE: &str = include_str!("site.html");
+
+fn now_unix() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
+/// Valeur d'un paramètre de la requête (`?a=1&b=2`).
+fn query<'a>(url: &'a str, name: &str) -> Option<&'a str> {
+    url.split_once('?')?
+        .1
+        .split('&')
+        .filter_map(|kv| kv.split_once('='))
+        .find(|(k, _)| *k == name)
+        .map(|(_, v)| v)
+}
+
+/// Une requête du classement (indépendante de `tiny_http`, testable).
+struct LbRequest<'a> {
+    method: &'a Method,
+    url: &'a str,
+    auth: Option<&'a str>,
+    signature: Option<&'a str>,
+    body: &'a [u8],
+    now: u64,
+}
+
+/// Routes du classement ; `None` si la requête ne le concerne pas.
+fn handle_leaderboard(board: &mut Board, key: &[u8; 32], req: &LbRequest) -> Option<Reply> {
+    let url = req.url;
+    let path = url.split('?').next().unwrap_or(url);
+    let player_route = matches!(
+        (req.method, path),
+        (Method::Get | Method::Put | Method::Delete, "/v1/player") | (Method::Post, "/v1/score")
+    );
+    if player_route {
+        let Some(id) = slot_id(req.auth) else {
+            return Some(Reply::text(401, "jeton manquant ou invalide"));
+        };
+        return Some(player_request(board, key, req, path, &id));
+    }
+    match (req.method, path) {
+        (Method::Get, "/" | "/index.html") => Some(Reply {
+            status: 200,
+            rev: None,
+            body: SITE.as_bytes().to_vec(),
+            content_type: "text/html; charset=utf-8",
+        }),
+        (Method::Get, "/v1/leaderboard") => {
+            let kind = match query(url, "board") {
+                Some("daily") => BoardKind::Daily,
+                _ => BoardKind::General,
+            };
+            let day = query(url, "day")
+                .and_then(|d| d.parse().ok())
+                .unwrap_or(req.now / 86_400);
+            let limit = query(url, "limit")
+                .and_then(|l| l.parse().ok())
+                .unwrap_or(20);
+            let me = query(url, "me").filter(|m| m.len() == 64);
+            Some(Reply::json(200, &board.standings(kind, day, limit, me)))
+        }
+        _ => None,
+    }
+}
+
+/// Routes qui désignent un joueur (identifiant = empreinte du jeton).
+fn player_request(
+    board: &mut Board,
+    key: &[u8; 32],
+    req: &LbRequest,
+    path: &str,
+    id: &str,
+) -> Reply {
+    match (req.method, path) {
+        (Method::Get, "/v1/player") => match board.player(id) {
+            Some(p) => Reply::json(200, &serde_json::json!({ "id": id, "pseudo": p.pseudo })),
+            None => Reply::text(404, "aucun pseudo"),
+        },
+        (Method::Put, "/v1/player") => {
+            let pseudo = serde_json::from_slice::<serde_json::Value>(req.body)
+                .ok()
+                .and_then(|v| v["pseudo"].as_str().map(str::to_string));
+            let Some(pseudo) = pseudo else {
+                return Reply::text(400, "pseudo manquant");
+            };
+            match board.claim(id, &pseudo, req.now) {
+                Ok(p) => Reply::json(200, &serde_json::json!({ "id": id, "pseudo": p })),
+                Err(ClaimError::Taken) => Reply::text(409, "pseudo déjà pris"),
+                Err(ClaimError::Invalid(why)) => Reply::text(400, why),
+                Err(ClaimError::Storage) => Reply::text(500, "erreur de stockage"),
+            }
+        }
+        (Method::Delete, "/v1/player") => match board.withdraw(id) {
+            Ok(()) => Reply::text(204, ""),
+            Err(_) => Reply::text(500, "erreur de stockage"),
+        },
+        _ => {
+            if !leaderboard::verify(key, req.body, req.signature) {
+                return Reply::text(400, "signature invalide");
+            }
+            let Ok(card) = serde_json::from_slice::<Card>(req.body) else {
+                return Reply::text(400, "fiche illisible");
+            };
+            match board.submit(id, card, req.now) {
+                Ok(()) => Reply::text(204, ""),
+                Err(SubmitError::NoPseudo) => Reply::text(404, "aucun pseudo"),
+                Err(SubmitError::Rejected(Reject::Older)) => {
+                    Reply::text(409, "partie moins jouée qu'une fiche déjà reçue")
+                }
+                Err(SubmitError::Rejected(Reject::Invalid(why))) => Reply::text(400, why),
+                Err(SubmitError::Storage) => Reply::text(500, "erreur de stockage"),
+            }
         }
     }
 }
@@ -148,11 +303,7 @@ impl Store {
         };
         if *method == Method::Get {
             return match current {
-                Some((rev, data)) => Reply {
-                    status: 200,
-                    rev: Some(rev),
-                    body: data,
-                },
+                Some((rev, data)) => Reply::data(200, Some(rev), data),
                 None => Reply::text(404, "aucune partie"),
             };
         }
@@ -167,18 +318,10 @@ impl Store {
         };
         let rev = current.as_ref().map_or(0, |(r, _)| *r);
         if rev != base {
-            return Reply {
-                status: 409,
-                rev: Some(rev),
-                body: b"conflit".to_vec(),
-            };
+            return Reply::data(409, Some(rev), b"conflit".to_vec());
         }
         match self.write(&id, rev + 1, body) {
-            Ok(()) => Reply {
-                status: 200,
-                rev: Some(rev + 1),
-                body: b"ok".to_vec(),
-            },
+            Ok(()) => Reply::data(200, Some(rev + 1), b"ok".to_vec()),
             Err(e) => {
                 eprintln!("écriture {id} : {e}");
                 Reply::text(500, "erreur de stockage")
@@ -193,7 +336,8 @@ impl Store {
         let Ok(dirs) = fs::read_dir(&self.dir) else {
             return 0;
         };
-        for sub in dirs.flatten() {
+        // Seuls les dossiers des parties (deux caractères) : pas `leaderboard`.
+        for sub in dirs.flatten().filter(|d| d.file_name().len() == 2) {
             let Ok(files) = fs::read_dir(sub.path()) else {
                 continue;
             };
@@ -260,10 +404,14 @@ fn respond(req: Request, reply: Reply) {
     if let Ok(h) = Header::from_bytes("Cache-Control", "no-store") {
         resp.add_header(h);
     }
+    if let Ok(h) = Header::from_bytes("Content-Type", reply.content_type) {
+        resp.add_header(h);
+    }
     let _ = req.respond(resp);
 }
 
-fn serve(cfg: &Config, store: &Store, server: &Server) {
+fn serve(cfg: &Config, store: &Store, board: &mut Board, server: &Server) {
+    let key = cfg.leaderboard_key.unwrap_or_else(leaderboard::dev_key);
     let mut limit = RateLimit {
         per_min: cfg.rate_per_min,
         window: Instant::now(),
@@ -275,6 +423,10 @@ fn serve(cfg: &Config, store: &Store, server: &Server) {
             let n = store.expire(cfg.expire);
             if n > 0 {
                 println!("{n} partie(s) expirée(s) effacée(s)");
+            }
+            let n = board.expire(now_unix(), cfg.expire.as_secs());
+            if n > 0 {
+                println!("{n} entrée(s) du classement effacée(s)");
             }
             next_expire = Instant::now() + Duration::from_secs(86_400);
         }
@@ -301,13 +453,23 @@ fn serve(cfg: &Config, store: &Store, server: &Server) {
             respond(req, Reply::text(400, "corps illisible"));
             continue;
         }
-        let reply = store.handle(
-            req.method(),
-            req.url(),
-            header(&req, "Authorization"),
-            header(&req, "X-Base-Rev"),
-            &body,
-        );
+        let lb = LbRequest {
+            method: req.method(),
+            url: req.url(),
+            auth: header(&req, "Authorization"),
+            signature: header(&req, "X-Signature"),
+            body: &body,
+            now: now_unix(),
+        };
+        let reply = handle_leaderboard(board, &key, &lb).unwrap_or_else(|| {
+            store.handle(
+                req.method(),
+                req.url(),
+                header(&req, "Authorization"),
+                header(&req, "X-Base-Rev"),
+                &body,
+            )
+        });
         respond(req, reply);
     }
 }
@@ -347,11 +509,15 @@ fn main() {
         cfg.port,
         cfg.data.display()
     );
+    if cfg.leaderboard_key.is_none() {
+        println!("LEADERBOARD_KEY absente : classement signé avec la clé de développement");
+    }
     let store = Store {
         dir: cfg.data.clone(),
         max_body: cfg.max_body,
     };
-    serve(&cfg, &store, &server);
+    let mut board = Board::load(cfg.data.join("leaderboard"));
+    serve(&cfg, &store, &mut board, &server);
 }
 
 #[cfg(test)]
@@ -422,6 +588,140 @@ mod tests {
         assert!(s.path(&id).exists());
         assert!(!id.contains("00112233445566778899"));
         let _ = fs::remove_dir_all(&s.dir);
+    }
+
+    #[test]
+    fn leaderboard_routes() {
+        let dir = std::env::temp_dir().join(format!("fonderie-relay-lb-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let mut board = Board::load(dir.clone());
+        let key = leaderboard::dev_key();
+        let now = 1_800_000_000;
+        let mut call =
+            |method: Method, url: &str, auth: Option<&str>, sig: Option<&str>, body: &[u8]| {
+                let req = LbRequest {
+                    method: &method,
+                    url,
+                    auth,
+                    signature: sig,
+                    body,
+                    now,
+                };
+                handle_leaderboard(&mut board, &key, &req)
+            };
+        // Les routes de synchronisation ne sont pas concernées.
+        assert!(call(Method::Get, "/v1/save", Some(TOKEN), None, &[]).is_none());
+        assert!(call(Method::Get, "/health", None, None, &[]).is_none());
+        let page = call(Method::Get, "/", None, None, &[]).unwrap();
+        assert_eq!(page.status, 200);
+        assert!(page.content_type.starts_with("text/html"));
+
+        let status = |r: Option<Reply>| r.map(|r| r.status);
+        assert_eq!(
+            status(call(Method::Get, "/v1/player", None, None, &[])),
+            Some(401)
+        );
+        assert_eq!(
+            status(call(Method::Get, "/v1/player", Some(TOKEN), None, &[])),
+            Some(404)
+        );
+        let claim = |pseudo: &str| format!(r#"{{"pseudo":"{pseudo}"}}"#);
+        assert_eq!(
+            status(call(
+                Method::Put,
+                "/v1/player",
+                Some(TOKEN),
+                None,
+                claim("Nova").as_bytes()
+            )),
+            Some(200)
+        );
+        let other = "Bearer ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100";
+        assert_eq!(
+            status(call(
+                Method::Put,
+                "/v1/player",
+                Some(other),
+                None,
+                claim("nova").as_bytes()
+            )),
+            Some(409)
+        );
+        assert_eq!(
+            status(call(
+                Method::Put,
+                "/v1/player",
+                Some(other),
+                None,
+                claim("x").as_bytes()
+            )),
+            Some(400)
+        );
+        let me = call(Method::Get, "/v1/player", Some(TOKEN), None, &[]).unwrap();
+        assert!(String::from_utf8_lossy(&me.body).contains("Nova"));
+
+        let card = format!(
+            r#"{{"act":1,"progress":0.4,"total_log":9.5,"supernovas":2,"crunches":0,"big_bangs":0,"achievements":7,"play_time":4000,"daily":{{"day":{},"score":12345.0}},"platform":"terminal","version":"0.18.0","sent_at":{now}}}"#,
+            now / 86_400
+        );
+        let sig = leaderboard::hex(&leaderboard::hmac(&key, card.as_bytes()));
+        assert_eq!(
+            status(call(
+                Method::Post,
+                "/v1/score",
+                Some(TOKEN),
+                Some("00"),
+                card.as_bytes()
+            )),
+            Some(400),
+            "signature fausse"
+        );
+        assert_eq!(
+            status(call(
+                Method::Post,
+                "/v1/score",
+                Some(other),
+                Some(&sig),
+                card.as_bytes()
+            )),
+            Some(404),
+            "pas de pseudo"
+        );
+        assert_eq!(
+            status(call(
+                Method::Post,
+                "/v1/score",
+                Some(TOKEN),
+                Some(&sig),
+                card.as_bytes()
+            )),
+            Some(204)
+        );
+        let id = slot_id(Some(TOKEN)).unwrap();
+        let general = call(
+            Method::Get,
+            &format!("/v1/leaderboard?me={id}"),
+            None,
+            None,
+            &[],
+        )
+        .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&general.body).unwrap();
+        assert_eq!(json["entries"][0]["pseudo"], "Nova");
+        assert_eq!(json["me"]["rank"], 1);
+        let daily = call(Method::Get, "/v1/leaderboard?board=daily", None, None, &[]).unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&daily.body).unwrap();
+        assert_eq!(json["entries"][0]["score"], 12345.0);
+
+        assert_eq!(
+            status(call(Method::Delete, "/v1/player", Some(TOKEN), None, &[])),
+            Some(204)
+        );
+        assert_eq!(
+            status(call(Method::Get, "/v1/player", Some(TOKEN), None, &[])),
+            Some(404)
+        );
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

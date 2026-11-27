@@ -49,7 +49,7 @@ fn keystream_xor(key: &[u8; 32], nonce: &[u8], data: &mut [u8]) {
 }
 
 /// HMAC-SHA256 (RFC 2104).
-fn hmac(key: &[u8; 32], parts: &[&[u8]]) -> [u8; 32] {
+pub fn hmac(key: &[u8; 32], parts: &[&[u8]]) -> [u8; 32] {
     let mut ipad = [0x36u8; 64];
     let mut opad = [0x5cu8; 64];
     for (i, k) in key.iter().enumerate() {

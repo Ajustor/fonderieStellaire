@@ -29,6 +29,7 @@ pub struct GameView<'a> {
     pub save_path: &'a str,
     pub version: &'a str,
     pub sync: &'a crate::widgets::sync::SyncView,
+    pub leaderboard: &'a crate::widgets::leaderboard::LeaderboardView,
     pub journal: &'a Journal,
     pub toasts: &'a Toasts,
     pub spark_scratch: &'a mut Vec<u64>,
@@ -104,10 +105,12 @@ pub fn render(
     if let Some(popup) = ui.options.filter(|_| ui.options_sync) {
         crate::widgets::sync::render(buf, area, ctx, &popup, ui.options_armed, view.sync);
     } else if let Some(popup) = ui.options {
+        let leaderboard = view.leaderboard.short();
         let info = options::OptionsInfo {
             save_path: view.save_path,
             version: view.version,
             sync: view.sync.short(),
+            leaderboard: &leaderboard,
         };
         options::render(
             buf,
@@ -118,6 +121,9 @@ pub fn render(
             ui.options_armed,
             &info,
         );
+    }
+    if let Some(popup) = ui.leaderboard {
+        crate::widgets::leaderboard::render(buf, area, ctx, &popup, view.leaderboard);
     }
     if let Some(popup) = ui.daily {
         daily::render(buf, area, ctx, &popup, view.today);

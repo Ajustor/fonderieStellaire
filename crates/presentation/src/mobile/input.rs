@@ -512,6 +512,7 @@ impl App {
                 }
             }
             Hit::Key(intent) => self.on_intent(intent),
+            Hit::Leaderboard(board) => self.ui.leaderboard_board = board,
             Hit::Block | Hit::Slider | Hit::Map => {}
             Hit::ToggleVibrations => {
                 if let Some(m) = self.mobile_mut() {

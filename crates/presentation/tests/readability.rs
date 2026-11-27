@@ -607,3 +607,124 @@ fn sync_screen_shows_the_qr_code_without_cutting_text() {
         assert!(render(&mut app, w, h).contains("Synchronisation"));
     }
 }
+
+/// Relais factice du classement : 20 joueurs, le joueur 27e, pseudo « Nova ».
+struct BoardRelay;
+
+impl application::LeaderboardBackend for BoardRelay {
+    fn linked(&self) -> bool {
+        true
+    }
+    fn pseudo(&self) -> Option<String> {
+        Some("Nova".into())
+    }
+    fn refresh_pseudo(&mut self) -> Result<Option<String>, application::LbError> {
+        Ok(Some("Nova".into()))
+    }
+    fn claim(&mut self, pseudo: &str) -> Result<String, application::LbError> {
+        Ok(pseudo.into())
+    }
+    fn withdraw(&mut self) -> Result<(), application::LbError> {
+        Ok(())
+    }
+    fn submit(&self, _: &application::ScoreCard) -> Result<(), application::LbError> {
+        Ok(())
+    }
+    fn standings(
+        &self,
+        board: application::Board,
+        day: u64,
+    ) -> Result<application::Standings, application::LbError> {
+        let entry = |rank: u32| application::Entry {
+            rank,
+            pseudo: format!("Fonderie-{rank:02}-XYZ"),
+            me: rank == 27,
+            act: (5 - rank.min(20) / 5) as u8,
+            progress: 1.0 - rank as f64 / 40.0,
+            score: Some(1e12 / rank as f64),
+            ..application::Entry::default()
+        };
+        Ok(application::Standings {
+            board,
+            day,
+            total: 40,
+            entries: (1..=20).map(entry).collect(),
+            me: Some(entry(27)),
+        })
+    }
+    fn site_url(&self) -> String {
+        "https://fonderie-stellaire-sync.darthoit.eu/".into()
+    }
+}
+
+#[test]
+fn leaderboard_and_pseudo_entry_without_cutting_text() {
+    for (w, h) in SIZES {
+        let mut app = app_with(Some(late_save()));
+        app.set_sync(application::SyncService::spawn(Box::new(LinkedRelay)));
+        app.set_leaderboard(application::LeaderboardService::spawn(Box::new(BoardRelay)));
+        let mut t = 100.0;
+        app.set_time(t);
+        app.enter_game_now();
+        settle(&mut app, &mut t, w, h);
+        // Options › Classement (5e ligne).
+        app.on_intent(Intent::Options);
+        for _ in 0..4 {
+            app.on_intent(Intent::Down);
+        }
+        app.on_intent(Intent::Buy);
+        settle(&mut app, &mut t, w, h);
+        for board in ["Général", "Défi du jour"] {
+            presentation::draw::audit::start();
+            let text = render(&mut app, w, h);
+            let clips = presentation::draw::audit::take();
+            if std::env::var("DUMP").is_ok() {
+                println!("===== {w}x{h} {board} =====\n{text}");
+            }
+            assert!(
+                clips.is_empty(),
+                "{w}×{h} {board} : texte coupé {clips:?}\n{text}"
+            );
+            assert!(text.contains("CLASSEMENT"), "{w}×{h}\n{text}");
+            assert!(text.contains("Fonderie-01-XYZ"), "{w}×{h}\n{text}");
+            assert!(text.contains("toi : Nova"), "{w}×{h}\n{text}");
+            assert!(
+                text.contains(" 27 "),
+                "ma ligne hors du top à {w}×{h}\n{text}"
+            );
+            app.on_intent(Intent::NextPanel);
+        }
+        app.on_intent(Intent::Escape);
+        settle(&mut app, &mut t, w, h);
+
+        // Synchronisation : ligne du pseudo, puis saisie au clavier.
+        app.on_intent(Intent::Up);
+        app.on_intent(Intent::Buy);
+        settle(&mut app, &mut t, w, h);
+        let text = render(&mut app, w, h);
+        assert!(text.contains("Classement : Nova"), "{w}×{h}\n{text}");
+        app.on_intent(Intent::No);
+        for c in "-Stellaire".chars() {
+            app.on_pseudo_key(presentation::leaderboard::PseudoKey::Char(c));
+        }
+        presentation::draw::audit::start();
+        let text = render(&mut app, w, h);
+        let clips = presentation::draw::audit::take();
+        if std::env::var("DUMP").is_ok() {
+            println!("===== {w}x{h} saisie =====\n{text}");
+        }
+        assert!(
+            clips.is_empty(),
+            "{w}×{h} saisie : texte coupé {clips:?}\n{text}"
+        );
+        assert!(text.contains("Pseudo : Nova-Stellaire"), "{w}×{h}\n{text}");
+        assert!(text.contains("valider"), "{w}×{h}\n{text}");
+        // 16 caractères au plus.
+        for _ in 0..10 {
+            app.on_pseudo_key(presentation::leaderboard::PseudoKey::Char('x'));
+        }
+        assert!(render(&mut app, w, h).contains("Pseudo : Nova-Stellairexx▌"));
+        app.on_pseudo_key(presentation::leaderboard::PseudoKey::Cancel);
+        assert!(render(&mut app, w, h).contains("Classement : Nova"));
+    }
+}

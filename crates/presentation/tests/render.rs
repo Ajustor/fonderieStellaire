@@ -125,7 +125,7 @@ fn game_screen_100x30() {
     assert!(text.contains("Production"));
     assert!(text.contains("Journal"));
     assert!(text.contains("Supernova : +6 fragments"));
-    assert!(text.contains("◆ 12 (+67%)"));
+    assert!(text.contains("◆ 12 (+7%)"));
     assert!(text.contains("[Espace] Récolter"));
     assert!(text.contains('▶'));
     // Bordures droites alignées sur la dernière colonne.
@@ -1021,6 +1021,26 @@ fn options_and_new_game_with_double_confirmation() {
     app.on_intent(Intent::Down);
     app.on_intent(Intent::Buy);
     assert!(!render(&mut app, 100, 30).contains("SYNCHRONISATION"));
+    // Classement : la fenêtre s'ouvre, même sans relais, et explique pourquoi.
+    app.on_intent(Intent::Down);
+    app.on_intent(Intent::Buy);
+    for _ in 0..15 {
+        t += 1.0 / 30.0;
+        app.set_time(t);
+        app.update(1.0 / 30.0);
+    }
+    let text = render(&mut app, 100, 30);
+    assert!(text.contains("CLASSEMENT"), "{text}");
+    assert!(text.contains("indisponible"), "{text}");
+    app.on_intent(Intent::NextPanel);
+    assert!(render(&mut app, 100, 30).contains("Défi du jour"));
+    app.on_intent(Intent::Escape);
+    for _ in 0..15 {
+        t += 1.0 / 30.0;
+        app.set_time(t);
+        app.update(1.0 / 30.0);
+    }
+    assert!(!render(&mut app, 100, 30).contains("CLASSEMENT"));
     // Recommencer : une première Entrée arme, changer de ligne désarme.
     app.on_intent(Intent::Down);
     app.on_intent(Intent::Buy);

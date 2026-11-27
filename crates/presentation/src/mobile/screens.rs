@@ -56,6 +56,7 @@ pub struct MobileView<'a> {
     pub version: &'a str,
     /// Jour (depuis 1970), pour le Défi du jour.
     pub today: u64,
+    pub leaderboard: &'a crate::widgets::leaderboard::LeaderboardView,
 }
 
 /// Sous-onglets de l'onglet `tab`, selon les déblocages.
@@ -165,7 +166,7 @@ pub fn render(
         INFOS => render_infos(buf, content, ctx, m),
         ACHIEVEMENTS => render_achievements(buf, content, ctx, m),
         OPTIONS => render_options(buf, content, ctx, m),
-        _ => render_save(buf, content, m, view.version),
+        _ => render_save(buf, content, m, view.version, view.leaderboard),
     }
 
     let fade = (ctx.now - m.tab_changed_at) / TAB_FADE;
@@ -1726,33 +1727,210 @@ fn render_options(buf: &mut Buffer, area: Rect, ctx: &Ctx, m: &mut MobileUi) {
     }
 }
 
-fn render_save(buf: &mut Buffer, area: Rect, m: &mut MobileUi, version: &str) {
-    let text = "Ta sauvegarde est sur ce téléphone. Synchronise-la avec ton \
-                ordinateur ou un autre téléphone grâce à un code de lien (sans \
-                compte), ou exporte-la dans un fichier.";
-    let mut y = area.y + 1;
-    for l in draw::wrap(text, area.width as usize - 4) {
+/// Classement : général ou du jour, la ligne du joueur, pseudo et site.
+fn render_leaderboard(
+    buf: &mut Buffer,
+    area: Rect,
+    m: &mut MobileUi,
+    view: &crate::widgets::leaderboard::LeaderboardView,
+) {
+    use crate::widgets::leaderboard::{board_name, entry_result, rank_color, visible_entries};
+    use application::Board;
+
+    let w = area.width.saturating_sub(2);
+    let half = w / 2;
+    for (i, b) in [Board::General, Board::Daily].into_iter().enumerate() {
+        let r = Rect::new(area.x + 1 + i as u16 * half, area.y, half, BUTTON_H);
+        let color = if b == view.board {
+            theme::GOLD
+        } else {
+            theme::MUTED
+        };
+        button(
+            buf,
+            &mut m.hits,
+            m.press,
+            r,
+            "",
+            board_name(b),
+            color,
+            Some(Hit::Leaderboard(b)),
+        );
+    }
+
+    // Bas de l'écran : état, explication, puis les deux boutons.
+    let text_w = area.width.saturating_sub(4) as usize;
+    let (status, status_color) = view.status();
+    let mut notes: Vec<(String, Rgb)> = draw::wrap(&status, text_w)
+        .into_iter()
+        .map(|l| (l, status_color))
+        .collect();
+    if let Some(join) = view.how_to_join(true) {
+        notes.extend(
+            draw::wrap(join, text_w)
+                .into_iter()
+                .map(|l| (l, theme::MUTED)),
+        );
+    }
+    let actions_y = area.bottom().saturating_sub(BUTTON_H);
+    let notes_y = actions_y.saturating_sub(notes.len() as u16 + 1);
+    let list = Rect::new(
+        area.x,
+        area.y + BUTTON_H + 1,
+        area.width,
+        notes_y.saturating_sub(area.y + BUTTON_H + 1),
+    );
+
+    let right = area.right().saturating_sub(2);
+    match &view.standings {
+        Some(st) if !st.entries.is_empty() => {
+            let (top, mine) = visible_entries(st, 20);
+            let mut rows: Vec<Option<&application::Entry>> = top.into_iter().map(Some).collect();
+            if let Some(e) = mine {
+                rows.push(None);
+                rows.push(Some(e));
+            }
+            set_scroll_max(m, SAVE, rows.len() as u16, list.height);
+            let scroll = m.scroll[SAVE];
+            for (i, row) in rows.iter().enumerate() {
+                let Some(r) = place(list, scroll, i as u16, 1) else {
+                    continue;
+                };
+                let Some(e) = row else {
+                    draw::text(buf, r.x + 3, r.y, "…", theme::fg(theme::GREY), right);
+                    continue;
+                };
+                if e.me {
+                    draw::fill_bg(buf, Rect::new(r.x, r.y, r.width, 1), theme::SELECT_BG);
+                }
+                let rank = format!("{:>3}", e.rank);
+                let x = draw::text(
+                    buf,
+                    r.x + 1,
+                    r.y,
+                    &rank,
+                    theme::bold(rank_color(e.rank)),
+                    right,
+                );
+                let result = entry_result(e, view.board);
+                let rx = right.saturating_sub(result.chars().count() as u16);
+                let color = if e.me { theme::GOLD } else { theme::TEXT };
+                draw::text(
+                    buf,
+                    x + 1,
+                    r.y,
+                    &e.pseudo,
+                    theme::bold(color),
+                    rx.saturating_sub(1),
+                );
+                draw::text_right(buf, right, r.y, &result, theme::fg(theme::CYAN), r.x);
+            }
+            scrollbar(buf, list, scroll, m.scroll_max[SAVE]);
+        }
+        Some(_) => {
+            let empty = match view.board {
+                Board::General => "Aucun joueur pour l'instant.",
+                Board::Daily => "Personne n'a encore joué le défi d'aujourd'hui.",
+            };
+            for (i, l) in draw::wrap(empty, text_w).iter().enumerate() {
+                draw::text(
+                    buf,
+                    area.x + 2,
+                    list.y + i as u16,
+                    l,
+                    theme::fg(theme::GREY),
+                    area.right(),
+                );
+            }
+        }
+        None => {}
+    }
+
+    for (i, (l, c)) in notes.iter().enumerate() {
         draw::text(
             buf,
             area.x + 2,
-            y,
-            &l,
-            theme::fg(theme::MUTED),
+            notes_y + i as u16,
+            l,
+            theme::fg(*c),
             area.right(),
         );
-        y += 1;
     }
-    y += 1;
+    let (label, req) = match (&view.pseudo, view.linked) {
+        (Some(_), _) => ("Changer de pseudo", Request::Pseudo),
+        (None, true) => ("Choisir un pseudo", Request::Pseudo),
+        (None, false) => ("Synchroniser", Request::Sync),
+    };
+    let r = Rect::new(area.x + 1, actions_y, half, BUTTON_H);
+    button(
+        buf,
+        &mut m.hits,
+        m.press,
+        r,
+        "",
+        label,
+        theme::GOLD,
+        Some(Hit::Request(req)),
+    );
+    let r = Rect::new(area.x + 1 + half, actions_y, half, BUTTON_H);
+    button(
+        buf,
+        &mut m.hits,
+        m.press,
+        r,
+        "",
+        "Voir le site",
+        theme::CYAN,
+        Some(Hit::Request(Request::OpenSite)),
+    );
+}
+
+/// Sauver : le classement en haut (il demande la synchronisation), puis la
+/// synchronisation, l'export et l'import de la sauvegarde.
+fn render_save(
+    buf: &mut Buffer,
+    area: Rect,
+    m: &mut MobileUi,
+    version: &str,
+    leaderboard: &crate::widgets::leaderboard::LeaderboardView,
+) {
+    // Bas : synchro, blanc, export + import, version.
+    let save_h = BUTTON_H + 1 + BUTTON_H + 1;
+    let top = Rect::new(
+        area.x,
+        area.y,
+        area.width,
+        area.height.saturating_sub(save_h + 1),
+    );
+    render_leaderboard(buf, top, m, leaderboard);
     let w = area.width.saturating_sub(2);
-    for (label, req, color) in [
-        ("Synchroniser entre appareils", Request::Sync, theme::CYAN),
-        ("Exporter la sauvegarde", Request::ExportSave, theme::GOLD),
-        ("Importer une sauvegarde", Request::ImportSave, theme::FOCUS),
-    ] {
-        if y + BUTTON_H > area.bottom() {
-            break;
-        }
-        let r = Rect::new(area.x + 1, y, w, BUTTON_H);
+    let half = w / 2;
+    let mut y = area.bottom().saturating_sub(save_h);
+    let r = Rect::new(area.x + 1, y, w, BUTTON_H);
+    button(
+        buf,
+        &mut m.hits,
+        m.press,
+        r,
+        "",
+        "Synchroniser entre appareils",
+        theme::CYAN,
+        Some(Hit::Request(Request::Sync)),
+    );
+    y += BUTTON_H + 1;
+    for (i, (label, req, color)) in [
+        ("Exporter", Request::ExportSave, theme::GOLD),
+        ("Importer", Request::ImportSave, theme::FOCUS),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let r = Rect::new(
+            area.x + 1 + i as u16 * half,
+            y.saturating_sub(1),
+            half,
+            BUTTON_H,
+        );
         button(
             buf,
             &mut m.hits,
@@ -1763,7 +1941,6 @@ fn render_save(buf: &mut Buffer, area: Rect, m: &mut MobileUi, version: &str) {
             color,
             Some(Hit::Request(req)),
         );
-        y += BUTTON_H + 1;
     }
     let v = format!("Version {version}");
     draw::text(

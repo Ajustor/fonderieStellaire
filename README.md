@@ -3,7 +3,8 @@
 [![ci](https://github.com/Ajustor/fonderieStellaire/actions/workflows/ci.yml/badge.svg)](https://github.com/Ajustor/fonderieStellaire/actions/workflows/ci.yml)
 [![release](https://img.shields.io/github/v/release/Ajustor/fonderieStellaire)](https://github.com/Ajustor/fonderieStellaire/releases/latest)
 
-Un **idle game cosmique** qui tourne dans ton terminal, écrit en Rust.
+Un **idle game cosmique** qui tourne dans ton terminal et sur Android, écrit
+en Rust.
 
 Tu diriges une fonderie qui récolte de la **poussière d'étoile** (✦). Achète des
 sondes, des drones, des sphères de Dyson… jusqu'aux Tisseurs de galaxies, attrape
@@ -196,8 +197,8 @@ Majuscules et minuscules sont acceptées.
   (gain immédiat). Plus rares : la *comète dorée* (×77 pendant 7 s) et la
   *comète noire* (+1 fragment, mais elle vole 10 % de ta poussière si tu la rates).
 - **Supernova** : `floor(√(récolte du cycle / seuil))` fragments, avec un seuil
-  de 10 M qui augmente de 25 % à chaque Supernova. Les fragments donnent +10 % de
-  production chacun jusqu'à 5, puis le bonus croît en racine carrée. Remet à
+  de 10 M qui augmente de 25 % à chaque Supernova. Les fragments donnent +1 % de
+  production chacun jusqu'à 5, puis le bonus croît en racine cubique. Remet à
   zéro poussière, générateurs et améliorations.
 - **Générateurs de prestige** : *Trou blanc*, *Fabrique de quasars* et *Moteur à
   multivers* apparaissent après 1, 5 et 15 Supernovas.
@@ -298,6 +299,28 @@ Le relais ne voit que des données **chiffrées de bout en bout** : le code ne
 quitte jamais tes appareils, seul un jeton qui en est dérivé lui parvient.
 Garde ce code pour toi : il donne accès à ta partie.
 
+### Classement
+
+Les fonderies synchronisées peuvent apparaître dans un **classement public**,
+sur le site du relais (https://fonderie-stellaire-sync.darthoit.eu/) et dans
+le jeu : un tableau **général** (acte atteint, puis progression) et un tableau
+du **Défi du jour**.
+
+C'est **facultatif** : il faut une partie synchronisée et un **pseudo** (3 à 16
+caractères, unique).
+
+- Ordinateur : Options (`R`) → **Synchronisation** → `N` pour choisir le
+  pseudo ; Options → **Classement** pour voir le top 20 (`←` / `→` : général
+  ou du jour).
+- Android : *Plus* → *Sauver* : le classement en haut, *Choisir un pseudo*,
+  *Voir le site*.
+
+Le jeu envoie alors une **fiche de score** (pseudo, acte, progression,
+Supernovas, Big Crunch, Big Bang, succès, temps de jeu, score du jour) au
+lancement, toutes les 5 minutes, après chaque Défi du jour et à la fermeture.
+Ta partie, elle, reste chiffrée. Vider le pseudo (ou délier l'appareil) te
+retire du classement. Tes appareils liés partagent le même pseudo.
+
 #### Héberger le relais
 
 Le relais (`crates/relay`) est un petit serveur HTTP sans dépendance au jeu.
@@ -311,9 +334,24 @@ docker run -d -p 8080:8080 -v fonderie-relay:/data fonderie-relay
 ```
 
 Réglages (variables d'environnement) : `RATE_PER_MIN` (60 requêtes par minute
-et par adresse), `MAX_BODY_KB` (1024), `EXPIRE_DAYS` (365 : parties sans
-synchronisation depuis plus longtemps effacées), `TRUST_PROXY` (1 : adresse
-client lue dans `X-Forwarded-For`).
+et par adresse), `MAX_BODY_KB` (1024), `EXPIRE_DAYS` (365 : parties et joueurs
+du classement sans activité depuis plus longtemps effacés), `TRUST_PROXY` (1 :
+adresse client lue dans `X-Forwarded-For`), `LEADERBOARD_KEY` (clé de
+signature des fiches de score).
+
+`LEADERBOARD_KEY` est une clé aléatoire de 64 caractères hexadécimaux. Elle
+doit être identique au secret `FONDERIE_LEADERBOARD_KEY` du dépôt, avec lequel
+les versions officielles sont compilées :
+
+```sh
+openssl rand -hex 32   # à mettre dans les deux
+```
+
+Elle est indépendante de `FONDERIE_SAVE_KEY` : la changer n'affecte pas les
+sauvegardes, il suffit de mettre à jour le secret et le relais ensemble (les
+versions déjà publiées ne pourront plus envoyer de fiche). Sans elle, le relais accepte les fiches des compilations locales (clé de
+développement) et refuse celles des versions officielles. Le relais sert aussi
+la page du classement sur `/`.
 
 Par défaut, le jeu utilise le relais officiel
 `https://fonderie-stellaire-sync.darthoit.eu`. Pour en utiliser un autre :
@@ -336,11 +374,28 @@ cargo test -p presentation --test render -- --nocapture   # affiche les écrans 
 L'architecture (Clean Architecture en workspace Cargo) est décrite dans
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
+### Version Android
+
+Le même cœur Rust tourne sur Android (`crates/android` + projet Gradle dans
+`android/`) ; seule la présentation change (mode mobile de `presentation`).
+
+```sh
+cargo test -p presentation --test mobile -- --nocapture   # écrans mobiles
+cd android && ./gradlew testReleaseUnitTest assembleDebug  # NDK + cargo-ndk requis
+```
+
+> **Toute évolution côté terminal doit avoir son pendant Android dans la même
+> version** (écran, action tactile, textes sans touches clavier, tests). La
+> checklist est dans [ARCHITECTURE.md → Parité terminal / Android](ARCHITECTURE.md#parité-terminal--android).
+
 ### Intégration continue et publication
 
 - **`.github/workflows/ci.yml`** — à chaque push et pull request : formatage,
   clippy (warnings = erreurs), règles d'architecture, tests et build release sous
-  Linux **et** Windows, et build de l'image Docker.
+  Linux, Windows et macOS, et build de l'image Docker.
+- **`.github/workflows/android.yml`** — à chaque push sur `master` et sur les
+  pull requests : tests, APK et AAB signés, contrôle des pages de 16 Ko ; sur
+  un tag `v*`, APK joint à la release et AAB envoyé sur le Play Store.
 - **`.github/workflows/release.yml`** — en poussant un tag de version :
 
   ```sh

@@ -23,7 +23,7 @@ pub fn fragments_available(total_run: f64, supernovas: u32, fragments_this_run: 
     (fragments_for(total_run, supernovas) - fragments_this_run).max(0.0)
 }
 
-/// Multiplicateur de production des fragments : +10 % chacun jusqu'à 5, puis
+/// Multiplicateur de production des fragments : +1 % chacun jusqu'à 5, puis
 /// croissance en racine cubique (courbe continue). Évite l'emballement : plus de
 /// fragments rapporte toujours plus, mais de moins en moins vite.
 pub fn fragment_multiplier(fragments: f64) -> f64 {
@@ -67,10 +67,10 @@ mod tests {
     #[test]
     fn multiplier_is_linear_then_cube_root() {
         assert_eq!(fragment_multiplier(0.0), 1.0);
-        assert!((fragment_multiplier(5.0) - 1.5).abs() < 1e-12);
-        assert!((fragment_multiplier(40.0) - 2.0).abs() < 1e-9); // 1 + 0.5 × ∛8
-        assert!((fragment_multiplier(625.0) - 3.5).abs() < 1e-9); // 1 + 0.5 × ∛125
-        assert!(fragment_multiplier(123_456.0) < 16.0, "plus d'emballement");
+        assert!((fragment_multiplier(5.0) - 1.05).abs() < 1e-12);
+        assert!((fragment_multiplier(40.0) - 1.1).abs() < 1e-9); // 1 + 0.05 × ∛8
+        assert!((fragment_multiplier(625.0) - 1.25).abs() < 1e-9); // 1 + 0.05 × ∛125
+        assert!(fragment_multiplier(123_456.0) < 2.5, "plus d'emballement");
         // Continue et croissante.
         assert!(fragment_multiplier(5.01) > fragment_multiplier(5.0));
         assert!(fragment_multiplier(1e6) > fragment_multiplier(1e5));

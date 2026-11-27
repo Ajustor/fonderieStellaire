@@ -6,6 +6,7 @@
 pub mod commands;
 pub mod error;
 pub mod game_service;
+pub mod leaderboard;
 pub mod ports;
 pub mod save_dto;
 pub mod simulator;
@@ -16,6 +17,10 @@ pub mod updates;
 pub use commands::Command;
 pub use error::AppError;
 pub use game_service::{GameEvent, GameService, AUTOSAVE_INTERVAL, HISTORY_LEN};
+pub use leaderboard::{
+    Board, Entry, LbError, LeaderboardBackend, LeaderboardEvent, LeaderboardService, ScoreCard,
+    Standings,
+};
 pub use ports::{Clock, LoadOutcome, RandomSource, RepositoryError, SaveRepository};
 pub use save_dto::{SaveData, SAVE_RESET_BELOW, SAVE_VERSION};
 pub use snapshot::{

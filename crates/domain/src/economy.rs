@@ -3,7 +3,7 @@
 //! ```text
 //! prod_gen(i)  = owned[i] × base_prod[i] × upgrade_mult(i) × 2^(paliers atteints)
 //! prod_totale  = Σ prod_gen(i) × global_mult
-//! global_mult  = Π(upgrades globaux) × (1 + 0.05 × fragments) × (1 + 0.01 × succès) × boost_comète
+//! global_mult  = Π(upgrades globaux) × fragment_multiplier(fragments) × (1 + 0.01 × succès) × boost_comète
 //! ```
 
 use crate::catalog::balance::{ACHIEVEMENT_BONUS, CLICK_BASE};
@@ -202,7 +202,7 @@ mod tests {
         s.upgrades[g0.index()] = true;
         s.fragments = 2.0;
         s.achievements[0] = true;
-        let expected = 10.0 * 1.0 * 2.0 * 1.5 * 1.2 * 1.01;
+        let expected = 10.0 * 1.0 * 2.0 * 1.5 * 1.02 * 1.01;
         assert!(close(total_production(&c, &s), expected));
         assert!(close(steady_production(&c, &s), expected));
         s.comet.start_storm(30.0);

@@ -14,8 +14,8 @@ use ratatui::Frame;
 
 use application::updates::display_version;
 use application::{
-    Command, GameEvent, GameService, GameSnapshot, RemoteSave, SyncEvent, SyncService, SyncState,
-    UpdateEvent, UpdateService,
+    Command, GameEvent, GameService, GameSnapshot, LeaderboardService, RemoteSave, SyncEvent,
+    SyncService, SyncState, UpdateEvent, UpdateService,
 };
 use domain::catalog::balance::ACHIEVEMENT_BONUS;
 use domain::prestige::fragment_multiplier;
@@ -146,6 +146,16 @@ pub struct App {
     pub(crate) sync_pending: Option<Box<RemoteSave>>,
     /// Le joueur attend le résultat d'une action (lier, délier) : erreurs en toast.
     pub(crate) sync_user: bool,
+    /// Classement en ligne (joueurs synchronisés avec un pseudo).
+    pub(crate) leaderboard: LeaderboardService,
+    /// Temps depuis le dernier envoi de la fiche de score.
+    pub(crate) lb_timer: f64,
+    /// Temps depuis le dernier rafraîchissement du classement affiché.
+    pub(crate) lb_fetch_timer: f64,
+    /// Le joueur attend une réponse (pseudo) : erreurs en toast.
+    pub(crate) lb_user: bool,
+    /// Le classement était affiché à l'image précédente.
+    pub(crate) lb_shown: bool,
 }
 
 fn seed() -> u64 {
@@ -187,6 +197,11 @@ impl App {
             sync_timer: 0.0,
             sync_pending: None,
             sync_user: false,
+            leaderboard: LeaderboardService::disabled(),
+            lb_timer: 0.0,
+            lb_fetch_timer: 0.0,
+            lb_user: false,
+            lb_shown: false,
         };
         app.vis.set_reduced(app.snap.reduced_effects);
         app.journal.push(
@@ -406,6 +421,7 @@ impl App {
     }
 
     pub fn sync_unlink(&mut self) {
+        self.withdraw_before_unlink();
         self.sync_user = true;
         self.sync_pending = None;
         self.sync.unlink();
@@ -447,6 +463,8 @@ impl App {
             busy,
             status,
             error,
+            pseudo: self.leaderboard.pseudo().map(str::to_string),
+            pseudo_input: self.ui.pseudo_input.clone(),
         }
     }
 
@@ -530,6 +548,9 @@ impl App {
                 }
             }
             Intent::Buy | Intent::Yes if !self.sync.busy() => self.sync_create(),
+            Intent::No if self.sync.linked() && !self.ui.options_armed => {
+                self.start_pseudo_input();
+            }
             Intent::Escape | Intent::No | Intent::Options | Intent::Quit => {
                 if self.ui.options_armed {
                     self.ui.options_armed = false;
@@ -544,20 +565,27 @@ impl App {
     fn react_sync(&mut self, ev: SyncEvent) {
         let now = self.now;
         match ev {
-            SyncEvent::Linked { .. } => self.toasts.push(
-                now,
-                theme::GREEN,
-                "↕ Lien créé",
-                "Scanne le QR code avec ton autre appareil",
-            ),
-            SyncEvent::Joined { .. } => self.toasts.push(
-                now,
-                theme::GREEN,
-                "↕ Appareils liés",
-                "La partie la plus jouée est gardée sur les deux",
-            ),
+            SyncEvent::Linked { .. } => {
+                self.leaderboard.refresh();
+                self.toasts.push(
+                    now,
+                    theme::GREEN,
+                    "↕ Lien créé",
+                    "Scanne le QR code avec ton autre appareil",
+                );
+            }
+            SyncEvent::Joined { .. } => {
+                self.leaderboard.refresh();
+                self.toasts.push(
+                    now,
+                    theme::GREEN,
+                    "↕ Appareils liés",
+                    "La partie la plus jouée est gardée sur les deux",
+                );
+            }
             SyncEvent::Unlinked => {
                 self.sync_user = false;
+                self.leaderboard.forget();
                 self.toasts.push(
                     now,
                     theme::GREY,
@@ -631,6 +659,23 @@ impl App {
             return;
         }
         if let Event::Key(k) = ev {
+            if self.ui.pseudo_input.is_some() {
+                if k.kind != KeyEventKind::Release {
+                    let key = match k.code {
+                        KeyCode::Enter => Some(crate::leaderboard::PseudoKey::Submit),
+                        KeyCode::Esc => Some(crate::leaderboard::PseudoKey::Cancel),
+                        KeyCode::Backspace => Some(crate::leaderboard::PseudoKey::Backspace),
+                        KeyCode::Char(c) if !k.modifiers.contains(KeyModifiers::CONTROL) => {
+                            Some(crate::leaderboard::PseudoKey::Char(c))
+                        }
+                        _ => None,
+                    };
+                    if let Some(key) = key {
+                        self.on_pseudo_key(key);
+                    }
+                }
+                return;
+            }
             if k.kind == KeyEventKind::Release {
                 self.hold.saw_release();
             }
@@ -683,6 +728,11 @@ impl App {
                     if c.is_closed(now) {
                         self.ui.cosmos = None;
                         self.ui.cosmos_armed = false;
+                    }
+                }
+                if let Some(l) = self.ui.leaderboard {
+                    if l.is_closed(now) {
+                        self.ui.leaderboard = None;
                     }
                 }
                 if let Some(o) = self.ui.options {
@@ -783,6 +833,7 @@ impl App {
             self.react_update(ev);
         }
         self.update_sync(real_dt);
+        self.update_leaderboard(real_dt);
         self.update_restart(now);
     }
 
@@ -1038,6 +1089,12 @@ impl App {
             self.ui.starmap = Some(map);
             return;
         }
+        if let Some(popup) = self.ui.leaderboard {
+            if popup.closing_at.is_none() {
+                self.on_leaderboard_intent(intent);
+            }
+            return;
+        }
         if let Some(popup) = self.ui.options {
             if popup.closing_at.is_none() && self.ui.options_sync {
                 self.on_sync_intent(intent);
@@ -1059,6 +1116,7 @@ impl App {
                         1 => self.command(Command::CycleFrameRate),
                         2 => self.command(Command::ToggleReducedEffects),
                         crate::widgets::options::SYNC_ITEM => self.open_sync_view(),
+                        crate::widgets::options::LEADERBOARD_ITEM => self.open_leaderboard(),
                         _ if self.ui.options_armed => {
                             self.ui.options = None;
                             self.ui.options_armed = false;
@@ -1996,6 +2054,7 @@ impl App {
                 // Sinon, l'ancienne partie (plus jouée) reviendrait des autres
                 // appareils : celui-ci quitte le lien, les autres la gardent.
                 if self.sync.linked() {
+                    self.withdraw_before_unlink();
                     self.sync_pending = None;
                     self.sync.unlink();
                     self.journal.push(
@@ -2030,6 +2089,8 @@ impl App {
                 code,
             } => {
                 let now = self.now;
+                // Envoi à la prochaine image, une fois la partie principale revenue.
+                self.lb_timer = crate::leaderboard::LEADERBOARD_INTERVAL;
                 self.vis.iris_at = Some(now);
                 self.vis.particles.clear();
                 self.log(
@@ -3237,6 +3298,7 @@ impl App {
             .unwrap_or(0);
         let version = display_version(self.updates.current_version());
         let sync_view = self.sync_view();
+        let leaderboard_view = self.leaderboard_view();
         let legacy = self.legacy_open();
         let App {
             service,
@@ -3287,6 +3349,7 @@ impl App {
                             spark_scratch,
                             version: &version,
                             today,
+                            leaderboard: &leaderboard_view,
                         },
                     );
                     if let Some(n) = vis.nova.as_ref() {
@@ -3307,6 +3370,7 @@ impl App {
                             save_path: &save_path,
                             version: &version,
                             sync: &sync_view,
+                            leaderboard: &leaderboard_view,
                             journal,
                             toasts,
                             spark_scratch,
@@ -3472,16 +3536,19 @@ pub fn run(
     startup: Vec<GameEvent>,
     updates: UpdateService,
     sync: SyncService,
+    leaderboard: LeaderboardService,
 ) -> io::Result<RunOutcome> {
     let mut guard = TerminalGuard::new()?;
     let mut app = App::new(service, startup);
     app.set_updates(updates);
     app.set_sync(sync);
+    app.set_leaderboard(leaderboard);
     let result = app.run_loop(guard.terminal());
     // Sauvegarde finale, envoyée aussi aux autres appareils.
     let save_error = app.save_now().err();
     drop(guard);
     app.sync_flush(SYNC_FLUSH);
+    app.leaderboard_flush(SYNC_FLUSH);
     let restart = app.should_restart() && save_error.is_none();
     result.map(|_| RunOutcome {
         save_error,

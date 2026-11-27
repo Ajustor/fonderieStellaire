@@ -217,6 +217,11 @@ impl GameService {
         self.daily.is_some()
     }
 
+    /// Heure Unix selon l'horloge du jeu.
+    pub fn now_unix(&self) -> u64 {
+        self.clock.now_unix_secs()
+    }
+
     /// Jour (depuis 1970) selon l'horloge.
     fn today(&self) -> u64 {
         self.clock.now_unix_secs() / 86_400
@@ -1047,8 +1052,8 @@ mod tests {
         assert_eq!(snap.stardust, 0.0);
         assert_eq!(snap.fragments, 6.0);
         assert_eq!(snap.fragments_spendable, 6.0);
-        // 6 fragments : 1 + 0.5 × √(6/5) (courbe en racine au-delà de 5).
-        assert!((snap.fragment_bonus - 0.5 * (6.0f64 / 5.0).cbrt()).abs() < 1e-12);
+        // 6 fragments : 1 + 0.05 × ∛(6/5) (courbe en racine au-delà de 5).
+        assert!((snap.fragment_bonus - 0.05 * (6.0f64 / 5.0).cbrt()).abs() < 1e-12);
         assert_eq!(snap.perks.len(), 8);
         assert!(snap.perks.iter().any(|p| p.affordable));
         // Nouveau cycle, 1 Supernova faite : le seuil passe de 1e7 à 1.25e7.

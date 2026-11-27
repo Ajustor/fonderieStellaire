@@ -15,7 +15,7 @@ use ratatui::layout::Rect;
 
 use crate::input::Intent;
 
-pub use screens::{render, render_controls, MobileView};
+pub use screens::{render, render_controls, MobileView, SAVE as LEADERBOARD_SCREEN};
 
 /// Onglets de la barre du bas.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -59,6 +59,10 @@ pub enum Request {
     ImportSave,
     /// Synchronisation entre appareils (QR code, scan, code à taper).
     Sync,
+    /// Saisie du pseudo du classement (fenêtre native).
+    Pseudo,
+    /// Ouvrir le site du classement dans le navigateur.
+    OpenSite,
 }
 
 /// Ce que fait une zone touchée.
@@ -114,6 +118,8 @@ pub enum Hit {
     Convergence,
     MegaCell(usize),
     Build(domain::StructureKind),
+    /// Classement affiché : général ou Défi du jour.
+    Leaderboard(application::Board),
 }
 
 impl Hit {

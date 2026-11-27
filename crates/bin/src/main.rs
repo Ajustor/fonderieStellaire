@@ -6,8 +6,10 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use application::simulator::{self, fmt_play_time, SimConfig};
-use application::{GameService, SyncBackend, SyncService, UpdateService};
-use infrastructure::{GitHubUpdater, JsonSaveRepository, RelaySync, SystemClock, XorShift64};
+use application::{GameService, LeaderboardService, SyncBackend, SyncService, UpdateService};
+use infrastructure::{
+    GitHubUpdater, JsonSaveRepository, RelayLeaderboard, RelaySync, SystemClock, XorShift64,
+};
 
 /// Dépôt GitHub où sont publiées les versions (mise à jour automatique).
 const REPO: &str = "Ajustor/fonderieStellaire";
@@ -203,6 +205,13 @@ fn run() -> Result<(), Box<dyn Error>> {
     let sync = relay(&repo)
         .map(|r| SyncService::spawn(Box::new(r)))
         .unwrap_or_else(SyncService::disabled);
+    // Classement : même relais, même dossier que le lien de synchronisation.
+    let leaderboard = repo
+        .path()
+        .parent()
+        .and_then(RelayLeaderboard::from_env)
+        .map(|r| LeaderboardService::spawn(Box::new(r)))
+        .unwrap_or_else(LeaderboardService::disabled);
 
     let mut service = GameService::new(
         Box::new(repo),
@@ -210,7 +219,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         Box::new(XorShift64::from_time()),
     );
     let startup = service.load()?;
-    let outcome = presentation::run(service, startup, updates, sync)?;
+    let outcome = presentation::run(service, startup, updates, sync, leaderboard)?;
     if let Some(e) = outcome.save_error {
         return Err(format!("la sauvegarde finale a échoué : {e}").into());
     }

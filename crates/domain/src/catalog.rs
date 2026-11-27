@@ -14,8 +14,8 @@ use crate::upgrade::{Effect, Requirement, UpgradeDef, UpgradeId};
 
 /// Constantes d'équilibrage.
 pub mod balance {
-    /// Bonus global par fragment de Supernova (+10 %).
-    pub const FRAGMENT_BONUS: f64 = 0.10;
+    /// Bonus global par fragment de Supernova (+1 %).
+    pub const FRAGMENT_BONUS: f64 = 0.01;
     /// Bonus global par succès débloqué (+1 %).
     pub const ACHIEVEMENT_BONUS: f64 = 0.01;
     /// Diviseur de la formule des fragments : `floor(sqrt(total_run / 1e7))`.
