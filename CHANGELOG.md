@@ -1,5 +1,13 @@
 # Journal des versions
 
+## v0.19.3 — Fiches de confirmation sans crash
+
+### Corrections
+- **Android** : l'app ne plante plus en touchant « Lancer » sur un Défi ou le
+  bouton Supernova. Pendant que la fiche de confirmation montait du bas de
+  l'écran, son texte pouvait être dessiné sous l'écran selon le moment où
+  tombait l'image.
+
 ## v0.19.2 — Récolte continue équitable
 
 ### Corrections

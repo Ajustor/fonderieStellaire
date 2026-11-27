@@ -1241,15 +1241,13 @@ pub fn render_confirm(buf: &mut Buffer, area: Rect, ctx: &Ctx, m: &mut MobileUi,
         theme::bold(theme::GOLD),
         r.right() - 1,
     );
+    // Pendant la montée, la fiche est tronquée : rien sous son bord.
     for (i, (l, col)) in wrapped.iter().enumerate() {
-        draw::text(
-            buf,
-            r.x + 2,
-            r.y + 2 + i as u16,
-            l,
-            theme::fg(*col),
-            r.right() - 1,
-        );
+        let y = r.y + 2 + i as u16;
+        if y + 1 >= r.bottom() {
+            break;
+        }
+        draw::text(buf, r.x + 2, y, l, theme::fg(*col), r.right() - 1);
     }
     if rise > 0 {
         return;
