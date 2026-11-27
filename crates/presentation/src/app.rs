@@ -2655,7 +2655,7 @@ impl App {
             }
             DomainEvent::AutoBuyChanged { enabled } => {
                 let msg = if enabled {
-                    "Automate activé : il achète chaque seconde le meilleur générateur"
+                    "Automate activé : il achète chaque seconde le meilleur générateur, par lots du mode d'achat"
                 } else {
                     "Automate arrêté"
                 };
