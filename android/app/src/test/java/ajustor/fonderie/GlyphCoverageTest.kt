@@ -8,7 +8,9 @@ import org.junit.Test
  * Aucun caractère affiché par le jeu ne doit tomber sur le carré de
  * remplacement : chacun est dessiné en primitives (blocs, cadres), ou présent
  * dans JetBrains Mono, ou dans Noto Sans Symbols 2 / Noto Sans Symbols (les
- * polices de repli, dans cet ordre).
+ * polices de repli, dans cet ordre). Les polices de l'APK sont réduites aux
+ * caractères du jeu (android/tools/subset_fonts.py) : ce test garde l'oeil
+ * sur un caractère ajouté sans relancer le script.
  */
 class GlyphCoverageTest {
     // java.awt.Font de la JVM de test (absent du classpath Android à la compilation).
@@ -26,21 +28,23 @@ class GlyphCoverageTest {
 
     private fun covers(font: Any, cp: Int) = canDisplay.invoke(font, cp) as Boolean
 
-    /** Caractères non ASCII des sources de la présentation (hors commentaires). */
+    /** Caractères non ASCII des sources du jeu (hors commentaires). */
     private fun usedGlyphs(): Map<Int, String> {
         val found = sortedMapOf<Int, String>()
-        val sources = File("../../crates/presentation/src").walkTopDown().filter { it.extension == "rs" } +
-            File("src/main/java").walkTopDown().filter { it.extension == "kt" }
+        val crates = listOf("domain", "application", "presentation", "android")
+        val sources = crates.asSequence().flatMap { c ->
+            File("../../crates/$c/src").walkTopDown().filter { it.extension == "rs" }
+        } + File("src/main/java").walkTopDown().filter { it.extension == "kt" }
         for (file in sources) {
-            file.readLines().forEachIndexed { n, line ->
-                val code = line.trim()
+            file.readLines().forEachIndexed { n, raw ->
+                val code = raw.trim()
                 if (code.startsWith("//") || code.startsWith("*") || code.startsWith("/*")) return@forEachIndexed
+                // Commentaire en fin de ligne.
+                val line = raw.substringBefore(" // ")
                 var i = 0
                 while (i < line.length) {
                     val cp = line.codePointAt(i)
-                    // À partir de la ponctuation générale : les lettres accentuées
-                    // du français sont couvertes par toute police latine.
-                    if (cp >= 0x2000) found.putIfAbsent(cp, "${file.name}:${n + 1}")
+                    if (cp > 0x7E) found.putIfAbsent(cp, "${file.name}:${n + 1}")
                     i += Character.charCount(cp)
                 }
             }

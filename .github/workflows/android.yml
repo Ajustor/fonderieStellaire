@@ -69,7 +69,11 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: ./gradlew --no-daemon testReleaseUnitTest assembleRelease bundleRelease
+        # AAB : arm64 et x86_64 (le Play Store ne livre que la bonne) ; APK de
+        # GitHub : arm64 seul (les téléphones), bien plus léger.
+        run: |
+          ./gradlew --no-daemon testReleaseUnitTest bundleRelease
+          ./gradlew --no-daemon -Pabis=arm64-v8a assembleRelease
 
       - name: Pages mémoire de 16 Ko (exigence du Play Store)
         run: python3 android/tools/check_16k.py android/app/build/outputs/apk/release/app-release.apk
@@ -77,6 +81,7 @@ jobs:
       - name: Renommage
         run: |
           mkdir dist
+          # APK des téléphones (arm64) : celui qu'on installe à la main.
           cp android/app/build/outputs/apk/release/app-release.apk dist/fonderie-stellaire.apk
           cp android/app/build/outputs/bundle/release/app-release.aab dist/fonderie-stellaire.aab
           (cd dist && sha256sum fonderie-stellaire.apk > fonderie-stellaire.apk.sha256)

@@ -12,7 +12,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.19.5"
+version = "0.20.0"
 edition = "2021"
 license = "MIT"
 
@@ -21,3 +21,10 @@ opt-level = 3
 lto = true
 codegen-units = 1
 strip = true
+
+# Bibliothèque Android : optimisée pour la taille (APK plus léger). Une panique
+# arrête l'app tout de suite (elle la faisait planter de toute façon).
+[profile.android]
+inherits = "release"
+opt-level = "s"
+panic = "abort"
