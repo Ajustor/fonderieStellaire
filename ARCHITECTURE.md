@@ -80,8 +80,10 @@ grep -rlE "serde|std::fs"     crates | grep -v crates/infrastructure # → rien
   `.bak` si corrompu), `SystemClock`, `XorShift64`, et `GitHubUpdater`
   (`github_updater.rs` : API des releases via `ureq`, vérification SHA-256 avec
   `sha2`, remplacement de l'exécutable ; sous Windows l'ancien devient `.old` ;
-  `ApkReleases` pour Android installé par l'APK : simple avis, la page de la
-  version s'ouvre par `Request::OpenUpdate`, pas pour le Play Store).
+  `ApkReleases` pour Android installé par l'APK : simple avis, lien direct de
+  l'APK ; fenêtre native `ApkUpdates.kt` sur `Request::UpdateAvailable` /
+  `OpenUpdate`, jamais pour le Play Store ; tout se retire avec
+  `apkUpdates=false` dans `android/gradle.properties`).
 - **presentation** — boucle de jeu, entrées, rendu et effets. Ne modifie jamais
   l'état : elle envoie des `Command` et lit le `GameSnapshot`. Tous les états
   purement visuels (tweens, particules, focus, défilement, toasts, journal)
@@ -189,6 +191,8 @@ android/app/src/main/java/ajustor/fonderie/
 ├── CellGrid.kt      décodage du format de cells.rs
 ├── BoxGlyphs.kt     cadres et blocs dessinés en primitives (PRIMITIVES)
 ├── TabBar.kt        barre d'onglets native (Game::tabs, pastilles)
+├── ApkUpdates.kt    avis de nouvelle version (APK de GitHub ; retiré par
+│                    `apkUpdates=false` une fois sur le Play Store)
 └── SyncDialogs.kt   fenêtres de synchronisation (QR code, scan, code) et
                      saisie du pseudo du classement
 android/app/src/test/…/GlyphCoverageTest.kt   chaque glyphe non ASCII des

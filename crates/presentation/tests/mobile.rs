@@ -734,6 +734,14 @@ fn a_new_apk_is_announced_and_opens_its_page() {
         app.update_url().as_deref(),
         Some("https://github.com/o/r/releases/tag/v99.0.0")
     );
+    // La fenêtre native s'ouvre d'elle-même, avec le lien direct de l'APK.
+    assert_eq!(
+        app.take_request(),
+        Some(presentation::mobile::Request::UpdateAvailable)
+    );
+    let (version, _, apk) = app.update_info().unwrap();
+    assert_eq!(version, "v99.0.0");
+    assert_eq!(apk.as_deref(), Some("https://dl/apk"));
     app.mobile_select_tab(Tab::More);
     settle(&mut app, 44, 43);
     let save = find(&app, |h| *h == Hit::SubTab(4)).expect("sous-onglet Sauver");

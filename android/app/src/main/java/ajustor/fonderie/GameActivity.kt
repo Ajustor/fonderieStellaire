@@ -44,6 +44,7 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
     private lateinit var game: Game
     private lateinit var view: CellView
     private lateinit var syncDialogs: SyncDialogs
+    private lateinit var apkUpdates: ApkUpdates
 
     private var running = false
     private var lastFrameNanos = 0L
@@ -110,9 +111,8 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
         super.onCreate(savedInstanceState)
         game = Game(filesDir.absolutePath)
         syncDialogs = SyncDialogs(this, game)
-        // Installée par l'APK de GitHub : le jeu prévient des nouvelles
-        // versions. Depuis le Play Store, c'est lui qui les installe.
-        if (!installedFromPlayStore()) game.checkUpdates()
+        apkUpdates = ApkUpdates(this, game)
+        apkUpdates.start()
         prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         savedVibrations = prefs.getBoolean(PREF_VIBRATIONS, true)
         savedTips = prefs.getInt(PREF_TIPS, 0).toUInt()
@@ -257,7 +257,8 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
             Request.SYNC -> syncDialogs.show()
             Request.PSEUDO -> syncDialogs.askPseudo()
             Request.OPEN_SITE -> openSite()
-            Request.OPEN_UPDATE -> game.updateUrl()?.let { openUrl(it) }
+            Request.OPEN_UPDATE -> apkUpdates.show(auto = false)
+            Request.UPDATE_AVAILABLE -> apkUpdates.show(auto = true)
             null -> {}
         }
     }
@@ -269,17 +270,6 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
         runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
             .onFailure { game.notify("Aucun navigateur", url) }
     }
-
-    /** Installée depuis le Play Store (qui gère alors les mises à jour). */
-    private fun installedFromPlayStore(): Boolean = runCatching {
-        val installer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            packageManager.getInstallSourceInfo(packageName).installingPackageName
-        } else {
-            @Suppress("DEPRECATION")
-            packageManager.getInstallerPackageName(packageName)
-        }
-        installer == "com.android.vending"
-    }.getOrDefault(false)
 
     private fun applyFling(dt: Float) {
         if (gesture != Gesture.NONE || abs(flingRows) < 1f) {

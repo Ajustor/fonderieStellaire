@@ -3496,22 +3496,23 @@ impl App {
                 version,
                 reason,
                 url,
+                ..
             } => {
                 self.log(
                     Kind::Info,
                     format!("Version {version} disponible ({reason}) : {url}"),
                 );
-                let how = if self.mobile.is_some() {
-                    "Plus › Sauver : touche la version pour l'installer"
+                // Android : fenêtre native qui propose le téléchargement.
+                if let Some(m) = self.mobile.as_mut() {
+                    m.requests.push(crate::mobile::Request::UpdateAvailable);
                 } else {
-                    "Télécharge-la sur la page GitHub du jeu"
-                };
-                self.toasts.push(
-                    now,
-                    theme::CYAN,
-                    format!("Version {version} disponible"),
-                    how,
-                );
+                    self.toasts.push(
+                        now,
+                        theme::CYAN,
+                        format!("Version {version} disponible"),
+                        "Télécharge-la sur la page GitHub du jeu",
+                    );
+                }
             }
             UpdateEvent::Failed(msg) => {
                 self.log(Kind::Save, format!("Mises à jour : {msg}"));
@@ -3522,8 +3523,19 @@ impl App {
 
     /// Page d'une nouvelle version à installer à la main (APK Android).
     pub fn update_url(&self) -> Option<String> {
+        self.update_info().map(|(_, page, _)| page)
+    }
+
+    /// Nouvelle version à installer à la main : (version, page, lien direct
+    /// du fichier s'il existe).
+    pub fn update_info(&self) -> Option<(String, String, Option<String>)> {
         match &self.update_status {
-            Some(UpdateEvent::ManualOnly { url, .. }) => Some(url.clone()),
+            Some(UpdateEvent::ManualOnly {
+                version,
+                url,
+                download,
+                ..
+            }) => Some((version.clone(), url.clone(), download.clone())),
             _ => None,
         }
     }
