@@ -12,6 +12,7 @@ pub mod header;
 pub mod help_bar;
 pub mod journal;
 pub mod lab;
+pub mod leaderboard;
 pub mod mega;
 pub mod modal;
 pub mod options;

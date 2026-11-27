@@ -87,6 +87,11 @@ pub struct Ui {
     pub options_armed: bool,
     /// Écran de synchronisation ouvert depuis les Options.
     pub options_sync: bool,
+    /// Saisie du pseudo du classement en cours (terminal).
+    pub pseudo_input: Option<String>,
+    /// Fenêtre du classement (Options › Classement) et tableau affiché.
+    pub leaderboard: Option<Popup>,
+    pub leaderboard_board: application::Board,
     /// Effacement de la partie en cours : instant de départ.
     pub wipe_at: Option<f64>,
     /// Cosmogonie (touche G), sélection, et confirmation armée du Big Bang.

@@ -171,7 +171,7 @@ fn sub_tabs_render() {
         match i {
             1 => assert!(screen.contains("PROGRESSION")),
             2 => assert!(screen.contains("★ 2/55") || screen.contains("2/55")),
-            4 => assert!(screen.contains("Exporter")),
+            4 => assert!(screen.contains("Général") && screen.contains("Exporter")),
             _ => {}
         }
     }
@@ -424,4 +424,138 @@ fn harvest_and_purchase_ask_for_a_vibration() {
     app.set_vibrations(false);
     tap(&mut app, sky);
     assert_eq!(app.take_haptic(), 0, "désactivées dans les options");
+}
+
+/// Relais factice : appareil lié, classement de 3 joueurs (le joueur 2e).
+struct Linked;
+
+impl application::SyncBackend for Linked {
+    fn link_code(&self) -> Option<String> {
+        Some("ABCDE-FGHJK-MNPQR-STVWX-YZ012".into())
+    }
+    fn create_link(&mut self) -> Result<String, application::SyncError> {
+        Ok("ABCDE-FGHJK-MNPQR-STVWX-YZ012".into())
+    }
+    fn join_link(&mut self, code: &str) -> Result<String, application::SyncError> {
+        Ok(code.into())
+    }
+    fn unlink(&mut self) -> Result<(), application::SyncError> {
+        Ok(())
+    }
+    fn synced_rev(&self) -> u64 {
+        0
+    }
+    fn set_synced_rev(&mut self, _: u64) -> Result<(), application::SyncError> {
+        Ok(())
+    }
+    fn pull(&self) -> Result<Option<application::RemoteSave>, application::SyncError> {
+        Ok(None)
+    }
+    fn push(
+        &self,
+        _: &SaveData,
+        _: u64,
+    ) -> Result<application::PushOutcome, application::SyncError> {
+        Ok(application::PushOutcome::Stored { rev: 1 })
+    }
+}
+
+struct Board3;
+
+impl application::LeaderboardBackend for Board3 {
+    fn linked(&self) -> bool {
+        true
+    }
+    fn pseudo(&self) -> Option<String> {
+        Some("Nova".into())
+    }
+    fn refresh_pseudo(&mut self) -> Result<Option<String>, application::LbError> {
+        Ok(Some("Nova".into()))
+    }
+    fn claim(&mut self, p: &str) -> Result<String, application::LbError> {
+        Ok(p.into())
+    }
+    fn withdraw(&mut self) -> Result<(), application::LbError> {
+        Ok(())
+    }
+    fn submit(&self, _: &application::ScoreCard) -> Result<(), application::LbError> {
+        Ok(())
+    }
+    fn standings(
+        &self,
+        board: application::Board,
+        day: u64,
+    ) -> Result<application::Standings, application::LbError> {
+        let e = |rank: u32, pseudo: &str| application::Entry {
+            rank,
+            pseudo: pseudo.into(),
+            me: pseudo == "Nova",
+            act: 4 - rank as u8,
+            progress: 0.5,
+            score: Some(1e9 / rank as f64),
+            ..application::Entry::default()
+        };
+        Ok(application::Standings {
+            board,
+            day,
+            total: 3,
+            entries: vec![e(1, "Orion"), e(2, "Nova"), e(3, "Véga")],
+            me: None,
+        })
+    }
+    fn site_url(&self) -> String {
+        "https://relais/".into()
+    }
+}
+
+#[test]
+fn leaderboard_tab_shows_the_board_and_asks_for_a_pseudo() {
+    let mut app = mobile_app(Some(advanced_save()));
+    app.set_sync(application::SyncService::spawn(Box::new(Linked)));
+    app.set_leaderboard(application::LeaderboardService::spawn(Box::new(Board3)));
+    app.mobile_select_tab(Tab::More);
+    settle(&mut app, 44, 43);
+    let r = find(&app, |h| *h == Hit::SubTab(4)).expect("sous-onglet Sauver");
+    tap(&mut app, r);
+    // L'onglet s'affiche, le classement est demandé à l'image suivante, la
+    // réponse arrive du thread du classement.
+    settle(&mut app, 44, 43);
+    settle(&mut app, 44, 43);
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    let screen = settle(&mut app, 44, 43);
+    println!("{screen}");
+    assert!(
+        screen.contains("Orion") && screen.contains("Véga"),
+        "{screen}"
+    );
+    assert!(screen.contains("Acte III"), "{screen}");
+    assert!(screen.contains("Changer de pseudo"), "{screen}");
+
+    let daily =
+        find(&app, |h| *h == Hit::Leaderboard(application::Board::Daily)).expect("onglet du jour");
+    tap(&mut app, daily);
+    let screen = settle(&mut app, 44, 43);
+    assert!(screen.contains("✦"), "scores du jour\n{screen}");
+
+    let pseudo = find(&app, |h| {
+        *h == Hit::Request(presentation::mobile::Request::Pseudo)
+    })
+    .expect("bouton pseudo");
+    tap(&mut app, pseudo);
+    assert_eq!(
+        app.take_request(),
+        Some(presentation::mobile::Request::Pseudo)
+    );
+    let site = find(&app, |h| {
+        *h == Hit::Request(presentation::mobile::Request::OpenSite)
+    })
+    .expect("bouton site");
+    tap(&mut app, site);
+    assert_eq!(
+        app.take_request(),
+        Some(presentation::mobile::Request::OpenSite)
+    );
+    for (r, hit) in app.mobile_hits() {
+        assert!(r.right() <= 44 && r.bottom() <= 43, "{hit:?} {r:?}");
+    }
 }

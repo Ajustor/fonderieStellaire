@@ -50,3 +50,56 @@ fn two_devices_through_a_real_relay() {
         Ok(Reconciled::Adopt(_))
     ));
 }
+
+#[test]
+#[ignore = "demande un relais lancé (FONDERIE_RELAY_TEST)"]
+fn leaderboard_through_a_real_relay() {
+    use application::{Board, LbError, LeaderboardBackend, ScoreCard};
+    use infrastructure::RelayLeaderboard;
+
+    let url = std::env::var("FONDERIE_RELAY_TEST").expect("FONDERIE_RELAY_TEST");
+    let (pc_dir, phone_dir) = (dir("lb-pc"), dir("lb-phone"));
+    let mut pc_lb = RelayLeaderboard::new(&url, &pc_dir);
+    assert!(matches!(pc_lb.claim("Nova"), Err(LbError::NotLinked)));
+    let code = RelaySync::new(&url, &pc_dir).create_link().unwrap();
+    // Pseudo unique par lien : un nom aléatoire évite les collisions entre essais.
+    let pseudo = format!("e2e-{}", &code[..5]);
+    assert_eq!(pc_lb.claim(&pseudo), Ok(pseudo.clone()));
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let card = ScoreCard {
+        act: 1,
+        progress: 0.3,
+        total_log: 8.0,
+        supernovas: 1,
+        crunches: 0,
+        big_bangs: 0,
+        achievements: 5,
+        play_time: 1800.0,
+        daily: Some((now / 86_400, 123_456.0)),
+        platform: "terminal",
+        version: "e2e".into(),
+        sent_at: now,
+    };
+    pc_lb.submit(&card).unwrap();
+
+    // Le téléphone rejoint le lien : même joueur, pseudo relu depuis le relais.
+    RelaySync::new(&url, &phone_dir).join_link(&code).unwrap();
+    let mut phone_lb = RelayLeaderboard::new(&url, &phone_dir);
+    assert_eq!(phone_lb.pseudo(), None);
+    assert_eq!(phone_lb.refresh_pseudo(), Ok(Some(pseudo.clone())));
+    assert_eq!(phone_lb.pseudo(), Some(pseudo.clone()));
+
+    let general = phone_lb.standings(Board::General, now / 86_400).unwrap();
+    let me = general.me.expect("ma ligne");
+    assert_eq!((me.pseudo.as_str(), me.act), (pseudo.as_str(), 1));
+    let daily = phone_lb.standings(Board::Daily, now / 86_400).unwrap();
+    assert_eq!(daily.me.and_then(|e| e.score), Some(123_456.0));
+
+    phone_lb.withdraw().unwrap();
+    assert_eq!(phone_lb.pseudo(), None);
+    assert_eq!(pc_lb.refresh_pseudo(), Ok(None));
+}

@@ -444,6 +444,8 @@ dependencies = [
 name = "fonderie-relay"
 version = "0.17.2"
 dependencies = [
+ "serde",
+ "serde_json",
  "sha2",
  "tiny_http",
 ]

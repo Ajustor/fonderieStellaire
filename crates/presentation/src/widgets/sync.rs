@@ -28,6 +28,25 @@ pub struct SyncView {
     /// État en clair (« Synchronisé il y a 12 s »…).
     pub status: String,
     pub error: bool,
+    /// Pseudo du classement (facultatif).
+    pub pseudo: Option<String>,
+    /// Saisie du pseudo en cours (texte tapé).
+    pub pseudo_input: Option<String>,
+}
+
+impl SyncView {
+    /// Ligne du pseudo (appareil lié seulement).
+    pub fn pseudo_line(&self) -> Option<(String, Rgb)> {
+        self.code.as_ref()?;
+        Some(match (&self.pseudo_input, &self.pseudo) {
+            (Some(t), _) => (format!("Pseudo : {t}▌"), theme::GOLD),
+            (None, Some(p)) => (format!("★ Classement : {p}"), theme::GOLD),
+            (None, None) => (
+                "Classement : aucun pseudo (facultatif)".to_string(),
+                theme::MUTED,
+            ),
+        })
+    }
 }
 
 impl SyncView {
@@ -123,8 +142,9 @@ pub fn render(
         .as_deref()
         .and_then(|c| qr_modules(&qr_payload(c)));
     let footer = match (&view.code, armed) {
+        _ if view.pseudo_input.is_some() => "[Entrée] valider le pseudo   [Échap] annuler",
         (Some(_), true) => "[Entrée] confirmer : délier cet appareil   [Échap] annuler",
-        (Some(_), false) => "[Entrée] délier cet appareil   [Échap] retour",
+        (Some(_), false) => "[Entrée] délier   [N] pseudo   [Échap] retour",
         (None, _) if view.busy => "[Échap] retour",
         (None, _) => "[Entrée] créer un lien   [Échap] retour",
     };
@@ -143,11 +163,12 @@ pub fn render(
         _ => 0,
     };
     let has_code = u16::from(view.code.is_some());
+    let pseudo = view.pseudo_line();
     let status_h = status.len() as u16;
     let need = |intro_h: u16, qr_rows: u16, gap: u16| {
         let intro_h = if intro_h > 0 { intro_h + gap } else { 0 };
         let qr_h = if qr_rows > 0 { qr_rows + gap } else { 0 };
-        2 + intro_h + qr_h + has_code * (1 + gap) + status_h + gap + 1
+        2 + intro_h + qr_h + has_code * (2 + gap) + status_h + gap + 1
     };
     let mut qr_rows = qr_rows;
     let mut gap = 1;
@@ -198,6 +219,10 @@ pub fn render(
     }
     if let Some(code) = &view.code {
         centered_text(buf, inner, y, code, theme::GOLD, true);
+        y += 1;
+    }
+    if let Some((line, color)) = &pseudo {
+        centered_text(buf, inner, y, line, *color, view.pseudo_input.is_some());
         y += 1 + gap;
     }
     let status_color = if view.error {

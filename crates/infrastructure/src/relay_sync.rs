@@ -112,7 +112,19 @@ fn derive(label: &str, secret: &[u8]) -> [u8; 32] {
     h.finalize().into()
 }
 
-fn hex(bytes: &[u8]) -> String {
+/// Jeton du classement pour le lien `code` (distinct du jeton de la partie).
+pub fn leaderboard_token(code: &str) -> Option<String> {
+    parse_code(code).map(|s| hex(&derive("leaderboard", &s)))
+}
+
+/// Code du lien enregistré dans `dir`, s'il y en a un.
+pub fn stored_code(dir: &Path) -> Option<String> {
+    let text = fs::read_to_string(dir.join(LINK_FILE)).ok()?;
+    let file = serde_json::from_str::<LinkFile>(&text).ok()?;
+    parse_code(&file.code).map(|s| format_code(&s))
+}
+
+pub(crate) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 

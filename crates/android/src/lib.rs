@@ -10,8 +10,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Instant;
 
-use application::{GameService, SyncService};
+use application::{GameService, LeaderboardService, SyncService};
 use infrastructure::relay_sync::{parse_code, RelaySync};
+use infrastructure::RelayLeaderboard;
 use infrastructure::{JsonSaveRepository, SystemClock, XorShift64};
 use presentation::cells::{self, Buffer, Rect};
 use presentation::input::Intent;
@@ -135,6 +136,22 @@ pub enum Request {
     ImportSave,
     /// Ouvrir la fenêtre de synchronisation entre appareils.
     Sync,
+    /// Demander le pseudo du classement (fenêtre native).
+    Pseudo,
+    /// Ouvrir le site du classement (`LeaderboardInfo::site`).
+    OpenSite,
+}
+
+/// État du classement, pour les fenêtres natives.
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct LeaderboardInfo {
+    /// Un relais est configuré dans cette version.
+    pub available: bool,
+    /// Cet appareil est synchronisé (condition pour entrer au classement).
+    pub linked: bool,
+    pub pseudo: Option<String>,
+    /// Adresse du site du classement.
+    pub site: String,
 }
 
 /// État de la synchronisation, pour la fenêtre native.
@@ -189,6 +206,9 @@ impl Game {
         app.set_mobile(true);
         if let Some(relay) = RelaySync::from_env(&dir) {
             app.set_sync(SyncService::spawn(Box::new(relay)));
+        }
+        if let Some(relay) = RelayLeaderboard::from_env(&dir) {
+            app.set_leaderboard(LeaderboardService::spawn(Box::new(relay)));
         }
         Ok(Arc::new(Game {
             inner: Mutex::new(Inner {
@@ -319,6 +339,8 @@ impl Game {
             MobileRequest::ExportSave => Request::ExportSave,
             MobileRequest::ImportSave => Request::ImportSave,
             MobileRequest::Sync => Request::Sync,
+            MobileRequest::Pseudo => Request::Pseudo,
+            MobileRequest::OpenSite => Request::OpenSite,
         })
     }
 
@@ -362,6 +384,7 @@ impl Game {
     pub fn pause(&self) -> Result<(), GameError> {
         let mut g = self.lock();
         g.last_frame = None;
+        g.app.leaderboard_submit();
         g.app.save_now().map_err(GameError::from)
     }
 
@@ -406,6 +429,21 @@ impl Game {
 
     pub fn sync_unlink(&self) {
         self.lock().app.sync_unlink();
+    }
+
+    pub fn leaderboard_info(&self) -> LeaderboardInfo {
+        let v = self.lock().app.leaderboard_view();
+        LeaderboardInfo {
+            available: v.available,
+            linked: v.linked,
+            pseudo: v.pseudo,
+            site: v.site,
+        }
+    }
+
+    /// Choisit le pseudo du classement ; vide : quitte le classement.
+    pub fn set_pseudo(&self, pseudo: String) {
+        self.lock().app.set_pseudo(&pseudo);
     }
 
     /// Synchronise tout de suite.

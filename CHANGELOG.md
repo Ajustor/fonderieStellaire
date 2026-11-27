@@ -1,5 +1,26 @@
 # Journal des versions
 
+## v0.18.0 — Classement en ligne
+
+### Nouveautés
+- **Classement** des fonderies synchronisées, sur le site du relais
+  (https://fonderie-stellaire-sync.darthoit.eu/) et dans le jeu : tableau
+  **général** (acte atteint, puis progression) et tableau du **Défi du jour**.
+  - Facultatif : il faut une partie synchronisée et un **pseudo**, choisi dans
+    la synchronisation (ordinateur : `N` ; Android : la ligne du pseudo).
+  - Ordinateur : Options (`R`) → **Classement**, top 20, `←` / `→` pour passer
+    du général au Défi du jour.
+  - Android : *Plus* → *Sauver* montre le classement en haut, avec *Choisir un
+    pseudo* et *Voir le site*.
+  - Le jeu envoie une fiche de score signée (jamais ta partie, qui reste
+    chiffrée) au lancement, toutes les 5 minutes, après chaque Défi du jour et
+    à la fermeture.
+
+### Équilibrage
+- **Fragments de Supernova** : +1 % de production chacun (au lieu de +10 %),
+  toujours en racine cubique au-delà de 5. Fin de l'Acte IV vers le **62e
+  jour** à 3 h de jeu par jour (49e auparavant).
+
 ## v0.17.2 — Mise à jour automatique réparée
 
 ### Corrections

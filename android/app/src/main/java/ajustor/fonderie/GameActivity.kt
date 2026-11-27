@@ -1,7 +1,9 @@
 package ajustor.fonderie
 
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
@@ -250,8 +252,17 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
             Request.EXPORT_SAVE -> exportLauncher.launch("fonderie-stellaire-save.json")
             Request.IMPORT_SAVE -> importLauncher.launch(arrayOf("*/*"))
             Request.SYNC -> syncDialogs.show()
+            Request.PSEUDO -> syncDialogs.askPseudo()
+            Request.OPEN_SITE -> openSite()
             null -> {}
         }
+    }
+
+    /** Site du classement dans le navigateur. */
+    private fun openSite() {
+        val url = game.leaderboardInfo().site
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+            .onFailure { game.notify("Aucun navigateur", url) }
     }
 
     private fun applyFling(dt: Float) {

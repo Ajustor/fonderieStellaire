@@ -26,12 +26,25 @@ pub enum CryptoError {
     Tampered,
 }
 
-fn key() -> [u8; 32] {
-    let secret = match option_env!("FONDERIE_SAVE_KEY") {
+/// Secret des versions officielles (compilation), sinon clé de développement.
+fn secret() -> &'static str {
+    match option_env!("FONDERIE_SAVE_KEY") {
         Some(k) if !k.trim().is_empty() => k,
         _ => DEV_KEY,
-    };
-    Sha256::digest(secret.as_bytes()).into()
+    }
+}
+
+fn key() -> [u8; 32] {
+    Sha256::digest(secret().as_bytes()).into()
+}
+
+/// Clé dérivée du secret du jeu : SHA-256(`label` ‖ secret). Sert à signer
+/// les fiches du classement sans donner au relais la clé des sauvegardes.
+pub fn derived_key(label: &str) -> [u8; 32] {
+    let mut h = Sha256::new();
+    h.update(label.as_bytes());
+    h.update(secret().as_bytes());
+    h.finalize().into()
 }
 
 /// Flux pseudo-aléatoire : SHA-256(clé ‖ nonce ‖ compteur), bloc après bloc.
@@ -49,7 +62,7 @@ fn keystream_xor(key: &[u8; 32], nonce: &[u8], data: &mut [u8]) {
 }
 
 /// HMAC-SHA256 (RFC 2104).
-fn hmac(key: &[u8; 32], parts: &[&[u8]]) -> [u8; 32] {
+pub fn hmac(key: &[u8; 32], parts: &[&[u8]]) -> [u8; 32] {
     let mut ipad = [0x36u8; 64];
     let mut opad = [0x5cu8; 64];
     for (i, k) in key.iter().enumerate() {

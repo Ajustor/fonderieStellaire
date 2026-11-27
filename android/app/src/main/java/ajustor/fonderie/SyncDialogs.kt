@@ -10,6 +10,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
+import android.text.InputFilter
 import android.text.InputType
 import android.view.Gravity
 import android.widget.EditText
@@ -92,13 +93,71 @@ class SyncDialogs(private val activity: Activity, private val game: Game) {
             textSize = 13f
             gravity = Gravity.CENTER
         })
-        AlertDialog.Builder(activity, dialogTheme)
+        val pseudo = game.leaderboardInfo().pseudo
+        val pseudoLine = TextView(activity).apply {
+            this.text = if (pseudo != null) "★ Classement : $pseudo (toucher pour changer)"
+            else "★ Choisir un pseudo pour le classement (facultatif)"
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setTextColor(Color.rgb(245, 200, 76))
+            setPadding(0, pad / 2, 0, 0)
+        }
+        layout.addView(pseudoLine)
+        val dialog = AlertDialog.Builder(activity, dialogTheme)
             .setTitle("Appareil lié")
             .setView(layout)
             .setPositiveButton("Fermer") { _, _ -> game.syncNow() }
             .setNeutralButton("Copier le code") { _, _ -> copy(info.code ?: "") }
             .setNegativeButton("Délier") { _, _ -> confirmUnlink() }
             .show()
+        // La ligne du pseudo ouvre sa saisie.
+        pseudoLine.setOnClickListener {
+            dialog.dismiss()
+            askPseudo()
+        }
+    }
+
+    /**
+     * Pseudo du classement : facultatif, il faut un appareil synchronisé. Le
+     * réseau et la validation sont dans Rust (`Game.setPseudo`).
+     */
+    fun askPseudo() {
+        val info = game.leaderboardInfo()
+        if (!info.available) {
+            game.notify("Classement", "Indisponible dans cette version")
+            return
+        }
+        if (!info.linked) {
+            AlertDialog.Builder(activity, dialogTheme)
+                .setTitle("Classement")
+                .setMessage("Pour apparaître au classement, synchronise d'abord ta partie, puis choisis un pseudo.")
+                .setPositiveButton("Synchroniser") { _, _ -> show() }
+                .setNegativeButton("Annuler", null)
+                .show()
+            return
+        }
+        val input = EditText(activity).apply {
+            hint = "3 à 16 caractères"
+            setText(info.pseudo ?: "")
+            setSelection(text.length)
+            filters = arrayOf(InputFilter.LengthFilter(PSEUDO_MAX))
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        }
+        val pad = dp(20)
+        val box = LinearLayout(activity).apply {
+            setPadding(pad, pad / 2, pad, 0)
+            addView(input, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        }
+        val builder = AlertDialog.Builder(activity, dialogTheme)
+            .setTitle("Pseudo du classement")
+            .setMessage("Il s'affiche avec ta progression et ton score du Défi du jour, sur le site et dans le jeu.")
+            .setView(box)
+            .setPositiveButton("Enregistrer") { _, _ -> game.setPseudo(input.text.toString()) }
+            .setNegativeButton("Annuler", null)
+        if (info.pseudo != null) {
+            builder.setNeutralButton("Quitter le classement") { _, _ -> game.setPseudo("") }
+        }
+        builder.show()
     }
 
     private fun confirmUnlink() {
@@ -183,5 +242,6 @@ class SyncDialogs(private val activity: Activity, private val game: Game) {
     companion object {
         private const val POLL_MS = 300L
         private const val LINK_TIMEOUT_MS = 20_000L
+        private const val PSEUDO_MAX = 16
     }
 }

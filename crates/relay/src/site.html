@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fonderie Stellaire · Classement</title>
+<meta name="description" content="Classement des joueurs de Fonderie Stellaire : avancée dans le jeu et Défi du jour.">
+<style>
+  :root {
+    --bg: #07080f;
+    --panel: #0e1120;
+    --line: #1f2540;
+    --text: #d8dcf0;
+    --muted: #7d84a8;
+    --gold: #f5c84c;
+    --cyan: #5fd7ff;
+    --pink: #ff7ad9;
+    --green: #7ee787;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body {
+    font: 15px/1.5 ui-monospace, "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    min-height: 100vh;
+    background:
+      radial-gradient(ellipse at 20% -10%, #1a1f4a 0%, transparent 55%),
+      radial-gradient(ellipse at 90% 10%, #2a0f3a 0%, transparent 45%),
+      var(--bg);
+  }
+  main { max-width: 920px; margin: 0 auto; padding: 32px 16px 48px; }
+  header { text-align: center; margin-bottom: 28px; }
+  h1 { margin: 0; font-size: clamp(22px, 5vw, 34px); letter-spacing: .08em; color: var(--gold); }
+  h1 span { color: var(--cyan); }
+  header p { margin: 8px 0 0; color: var(--muted); }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .tabs { display: flex; gap: 6px; }
+  button, select {
+    font: inherit; color: var(--text); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 6px; padding: 7px 14px; cursor: pointer;
+  }
+  button[aria-selected="true"] { border-color: var(--gold); color: var(--gold); }
+  button:focus-visible, select:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+  .panel { background: color-mix(in srgb, var(--panel) 92%, transparent); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 9px 12px; text-align: left; white-space: nowrap; }
+  th { color: var(--muted); font-weight: normal; font-size: 13px; border-bottom: 1px solid var(--line); }
+  tbody tr + tr td { border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+  td.rank { color: var(--muted); width: 3.5em; }
+  tr.top1 td.rank { color: var(--gold); }
+  tr.top2 td.rank { color: #c9d1e8; }
+  tr.top3 td.rank { color: #e0a36b; }
+  td.pseudo { color: var(--text); font-weight: 600; white-space: normal; word-break: break-word; }
+  tr.mine td { background: color-mix(in srgb, var(--gold) 12%, transparent); }
+  tr.mine td.pseudo { color: var(--gold); }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  th.num { text-align: right; }
+  .act { color: var(--cyan); }
+  .act.done { color: var(--pink); }
+  .platform { color: var(--muted); font-size: 12px; }
+  .bar-wrap { display: inline-block; width: 70px; height: 6px; background: var(--line); border-radius: 3px; vertical-align: middle; margin-right: 6px; }
+  .bar-fill { display: block; height: 100%; background: var(--green); border-radius: 3px; }
+  .empty, .error { padding: 28px 16px; text-align: center; color: var(--muted); }
+  .error { color: var(--pink); }
+  .gap td { text-align: center; color: var(--muted); padding: 4px; }
+  footer { margin-top: 22px; color: var(--muted); font-size: 13px; text-align: center; }
+  footer a { color: var(--cyan); }
+  @media (max-width: 640px) {
+    .hide-sm { display: none; }
+    th, td { padding: 8px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>✦ FONDERIE <span>STELLAIRE</span> ✦</h1>
+    <p>Classement des fonderies synchronisées</p>
+  </header>
+
+  <div class="bar">
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-general" aria-selected="true">Général</button>
+      <button role="tab" id="tab-daily" aria-selected="false">Défi du jour</button>
+    </div>
+    <select id="day" aria-label="Jour du défi" hidden></select>
+  </div>
+
+  <div class="panel" id="board" aria-live="polite"><div class="empty">Chargement…</div></div>
+
+  <footer>
+    Pour apparaître ici : dans le jeu, synchronise ta partie et choisis un pseudo
+    (Options › Synchronisation sur ordinateur, Plus › Sauver sur Android).
+  </footer>
+</main>
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  const highlight = (params.get("p") || "").toLowerCase();
+  const today = Math.floor(Date.now() / 86400000);
+  const state = { board: params.get("board") === "daily" ? "daily" : "general", day: today };
+  const el = (id) => document.getElementById(id);
+  const daySel = el("day");
+
+  for (let i = 0; i < 30; i++) {
+    const d = today - i;
+    const opt = document.createElement("option");
+    opt.value = d;
+    opt.textContent = i === 0 ? "Aujourd'hui" : i === 1 ? "Hier"
+      : new Date(d * 86400000).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+    daySel.appendChild(opt);
+  }
+
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const actLabel = (a) => a >= 5 ? '<span class="act done">Cosmos éveillé</span>'
+    : `<span class="act">Acte ${["", "I", "II", "III", "IV"][a] || a}</span>`;
+  const duration = (s) => {
+    const h = Math.floor(s / 3600);
+    return h >= 48 ? `${Math.floor(h / 24)} j ${h % 24} h` : `${h} h ${String(Math.floor(s / 60) % 60).padStart(2, "0")}`;
+  };
+  const big = (log) => {
+    if (!isFinite(log) || log <= 0) return "0";
+    if (log < 6) return Math.round(10 ** log).toLocaleString("fr-FR");
+    const e = Math.floor(log);
+    return `${(10 ** (log - e)).toFixed(2).replace(".", ",")}e${e}`;
+  };
+  const score = (v) => big(Math.log10(Math.max(v, 1)));
+
+  function row(e, kind) {
+    const mine = e.me || (highlight && e.pseudo.toLowerCase() === highlight);
+    const cls = [mine ? "mine" : "", e.rank <= 3 ? `top${e.rank}` : ""].join(" ");
+    const pct = Math.round(e.progress * 100);
+    const main = kind === "daily"
+      ? `<td class="num">${score(e.score)} ✦</td>`
+      : `<td>${actLabel(e.act)}</td><td class="num"><span class="bar-wrap"><span class="bar-fill" style="width:${pct}%"></span></span>${pct} %</td>`;
+    return `<tr class="${cls}">
+      <td class="rank">${e.rank}</td>
+      <td class="pseudo">${esc(e.pseudo)} <span class="platform">${e.platform === "android" ? "📱" : "⌨"}</span></td>
+      ${main}
+      <td class="num hide-sm">${big(e.total_log)}</td>
+      <td class="num hide-sm">${duration(e.play_time)}</td>
+    </tr>`;
+  }
+
+  async function load() {
+    el("tab-general").setAttribute("aria-selected", state.board === "general");
+    el("tab-daily").setAttribute("aria-selected", state.board === "daily");
+    daySel.hidden = state.board !== "daily";
+    const board = el("board");
+    try {
+      const url = `/v1/leaderboard?board=${state.board}&day=${state.day}&limit=100`;
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(res.status);
+      const data = await res.json();
+      if (!data.entries.length) {
+        board.innerHTML = `<div class="empty">${state.board === "daily" ? "Personne n'a encore joué le défi de ce jour." : "Aucun joueur pour l'instant."}</div>`;
+        return;
+      }
+      const head = state.board === "daily"
+        ? '<th class="num">Score</th>'
+        : '<th>Avancée</th><th class="num">Progression</th>';
+      board.innerHTML = `<table><thead><tr><th>#</th><th>Pseudo</th>${head}
+        <th class="num hide-sm">Poussière</th><th class="num hide-sm">Temps de jeu</th></tr></thead>
+        <tbody>${data.entries.map((e) => row(e, state.board)).join("")}</tbody></table>`;
+    } catch (err) {
+      board.innerHTML = '<div class="error">Classement injoignable pour le moment.</div>';
+    }
+  }
+
+  el("tab-general").onclick = () => { state.board = "general"; load(); };
+  el("tab-daily").onclick = () => { state.board = "daily"; load(); };
+  daySel.onchange = () => { state.day = Number(daySel.value); load(); };
+  load();
+  setInterval(load, 60000);
+})();
+</script>
+</body>
+</html>
