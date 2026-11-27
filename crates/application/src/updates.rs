@@ -54,7 +54,10 @@ pub enum UpdateEvent {
     ManualOnly {
         version: String,
         reason: String,
+        /// Page de la version.
         url: String,
+        /// Lien direct du fichier à installer (APK Android), s'il existe.
+        download: Option<String>,
     },
     /// Vérification ou installation impossible (hors-ligne…).
     Failed(String),
@@ -105,6 +108,7 @@ fn check_and_install(provider: &dyn UpdateProvider, current: &str, tx: &Sender<U
             version,
             reason,
             url: release.page_url,
+            download: release.binary_url,
         });
         return;
     }

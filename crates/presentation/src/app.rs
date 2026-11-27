@@ -929,16 +929,14 @@ impl App {
             if let Some(n) = self.vis.nova.as_mut() {
                 n.committed = true;
             }
-            let target = self
-                .vis
-                .nova
-                .as_ref()
-                .filter(|n| n.crunch)
-                .map(|n| n.universe);
-            self.command(match target {
-                Some(universe) => Command::BigCrunch(universe),
+            let cmd = match self.vis.nova.as_ref() {
+                Some(n) if n.crunch => Command::BigCrunch(n.universe),
+                Some(n) => n
+                    .challenge
+                    .map_or(Command::Supernova, Command::StartChallenge),
                 None => Command::Supernova,
-            });
+            };
+            self.command(cmd);
         }
         if done {
             self.vis.nova = None;
@@ -1638,11 +1636,20 @@ impl App {
         if v.active {
             self.command(Command::AbandonChallenge);
         } else {
-            self.command(Command::StartChallenge(v.id));
             if let Some(c) = self.ui.challenges.as_mut() {
                 c.closing_at = Some(self.now);
             }
-            self.vis.cascade_start = self.now;
+            if self.snap.fragments_available >= 1.0 {
+                // Le Défi commence par une Supernova : on la montre, et le Défi
+                // est lancé au moment où elle se produirait.
+                self.start_supernova();
+                if let Some(n) = self.vis.nova.as_mut() {
+                    n.challenge = Some(v.id);
+                }
+            } else {
+                self.command(Command::StartChallenge(v.id));
+                self.vis.cascade_start = self.now;
+            }
         }
     }
 
@@ -3496,22 +3503,23 @@ impl App {
                 version,
                 reason,
                 url,
+                ..
             } => {
                 self.log(
                     Kind::Info,
                     format!("Version {version} disponible ({reason}) : {url}"),
                 );
-                let how = if self.mobile.is_some() {
-                    "Plus › Sauver : touche la version pour l'installer"
+                // Android : fenêtre native qui propose le téléchargement.
+                if let Some(m) = self.mobile.as_mut() {
+                    m.requests.push(crate::mobile::Request::UpdateAvailable);
                 } else {
-                    "Télécharge-la sur la page GitHub du jeu"
-                };
-                self.toasts.push(
-                    now,
-                    theme::CYAN,
-                    format!("Version {version} disponible"),
-                    how,
-                );
+                    self.toasts.push(
+                        now,
+                        theme::CYAN,
+                        format!("Version {version} disponible"),
+                        "Télécharge-la sur la page GitHub du jeu",
+                    );
+                }
             }
             UpdateEvent::Failed(msg) => {
                 self.log(Kind::Save, format!("Mises à jour : {msg}"));
@@ -3522,8 +3530,19 @@ impl App {
 
     /// Page d'une nouvelle version à installer à la main (APK Android).
     pub fn update_url(&self) -> Option<String> {
+        self.update_info().map(|(_, page, _)| page)
+    }
+
+    /// Nouvelle version à installer à la main : (version, page, lien direct
+    /// du fichier s'il existe).
+    pub fn update_info(&self) -> Option<(String, String, Option<String>)> {
         match &self.update_status {
-            Some(UpdateEvent::ManualOnly { url, .. }) => Some(url.clone()),
+            Some(UpdateEvent::ManualOnly {
+                version,
+                url,
+                download,
+                ..
+            }) => Some((version.clone(), url.clone(), download.clone())),
             _ => None,
         }
     }

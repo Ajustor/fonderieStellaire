@@ -269,10 +269,12 @@ titre (`v0.9.0 · à jour`), et un message apparaît dans le journal.
   existe (pour Docker : `docker pull`).
 - Hors-ligne : rien ne se passe, le jeu démarre normalement.
 - `fonderie-stellaire --version` affiche la version installée.
-- Android installé par l'APK de GitHub : le jeu prévient d'une nouvelle
-  version, et *Plus* → *Sauver* → la ligne de la version ouvre sa page pour
-  télécharger l'APK (Android ne permet pas à une app de se remplacer seule).
-  Installé depuis le Play Store : c'est lui qui met le jeu à jour.
+- Android installé par l'APK de GitHub : au lancement, une fenêtre annonce la
+  nouvelle version et propose de **télécharger l'APK** (puis de l'ouvrir pour
+  l'installer : la partie est conservée) ; *Plus* → *Sauver* → la ligne de la
+  version la rouvre. Installé depuis le Play Store : c'est lui qui met le jeu
+  à jour, et cet avis ne s'affiche jamais. Pour le retirer complètement :
+  `apkUpdates=false` dans `android/gradle.properties`.
 
 ## Sauvegarde
 

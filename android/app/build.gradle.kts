@@ -45,6 +45,13 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
         }
+        // Avis de nouvelle version pour l'APK de GitHub (ApkUpdates.kt). À
+        // passer à false (gradle.properties) une fois l'app sur le Play Store.
+        buildConfigField(
+            "boolean",
+            "APK_UPDATES",
+            providers.gradleProperty("apkUpdates").getOrElse("true"),
+        )
     }
 
     signingConfigs {
@@ -75,6 +82,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     sourceSets {

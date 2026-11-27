@@ -1,5 +1,18 @@
 # Journal des versions
 
+## v0.19.1 — Mise à jour Android en un geste
+
+### Nouveautés
+- **Android** (APK de GitHub) : au lancement, une fenêtre annonce la nouvelle
+  version avec **Télécharger** (lien direct de l'APK), *Nouveautés* et *Plus
+  tard* ; toucher la version dans *Plus › Sauver* la rouvre. Rien ne change
+  pour la version du Play Store.
+
+### Corrections
+- **Défis** : lancer un Défi alors qu'une Supernova est à prendre la
+  déclenchait sans son animation ; elle se joue maintenant, et le Défi démarre
+  au moment de l'explosion (ordinateur et Android).
+
 ## v0.19.0 — Navigation
 
 ### Nouveautés (ordinateur)

@@ -150,8 +150,21 @@ pub enum Request {
     Pseudo,
     /// Ouvrir le site du classement (`LeaderboardInfo::site`).
     OpenSite,
-    /// Ouvrir la page de la nouvelle version (`Game::update_url`).
+    /// Ouvrir la fenêtre de la nouvelle version (`Game::update_info`).
     OpenUpdate,
+    /// Nouvelle version trouvée : proposer de la télécharger.
+    UpdateAvailable,
+}
+
+/// Nouvelle version à installer à la main (app installée par l'APK).
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct UpdateInfo {
+    /// `v0.19.0`.
+    pub version: String,
+    /// Page de la release (nouveautés).
+    pub page: String,
+    /// Lien direct de l'APK.
+    pub apk: Option<String>,
 }
 
 /// État du classement, pour les fenêtres natives.
@@ -355,6 +368,7 @@ impl Game {
             MobileRequest::Pseudo => Request::Pseudo,
             MobileRequest::OpenSite => Request::OpenSite,
             MobileRequest::OpenUpdate => Request::OpenUpdate,
+            MobileRequest::UpdateAvailable => Request::UpdateAvailable,
         })
     }
 
@@ -446,16 +460,20 @@ impl Game {
     }
 
     /// Cherche une nouvelle version sur GitHub (app installée par l'APK ; pas
-    /// pour le Play Store, qui gère ses mises à jour). Le jeu prévient, et
-    /// *Plus › Sauver* propose la page de la version.
+    /// pour le Play Store, qui gère ses mises à jour). Si elle existe, le jeu
+    /// émet `Request::UpdateAvailable` et `ApkUpdates.kt` propose l'APK.
+    /// Appelé seulement par `ApkUpdates.kt` : sans lui, rien ne part.
     pub fn check_updates(&self) {
         let updates = UpdateService::spawn(Box::new(ApkReleases::new(REPO)), version());
         self.lock().app.set_updates(updates);
     }
 
-    /// Page de la nouvelle version à installer, s'il y en a une.
-    pub fn update_url(&self) -> Option<String> {
-        self.lock().app.update_url()
+    /// Nouvelle version à installer, s'il y en a une.
+    pub fn update_info(&self) -> Option<UpdateInfo> {
+        self.lock()
+            .app
+            .update_info()
+            .map(|(version, page, apk)| UpdateInfo { version, page, apk })
     }
 
     pub fn leaderboard_info(&self) -> LeaderboardInfo {

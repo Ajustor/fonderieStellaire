@@ -65,6 +65,9 @@ pub enum Request {
     OpenSite,
     /// Ouvrir la page de la nouvelle version (APK à installer).
     OpenUpdate,
+    /// Une nouvelle version vient d'être trouvée : fenêtre native qui
+    /// propose de la télécharger (`App::update_info`).
+    UpdateAvailable,
 }
 
 /// Ce que fait une zone touchée.
