@@ -88,8 +88,8 @@ pub fn render(
         2 => "Moins de secousses, de flashs et de nébuleuses animées. Raccourci : [F].".to_string(),
         SYNC_ITEM => "La même partie sur ton ordinateur et ton téléphone, sans compte : un code de lien (QR code) les relie. Entrée pour l'afficher.".to_string(),
         LEADERBOARD_ITEM => "Les meilleures fonderies et le Défi du jour. Pour y apparaître : synchronise ta partie et choisis un pseudo (facultatif). Entrée pour l'afficher.".to_string(),
-        _ if armed => "ATTENTION : Entrée de nouveau pour TOUT effacer (fragments, Big Crunch, Laboratoire, Clés, particules, succès). C'est définitif. [Échap] pour annuler.".to_string(),
-        _ => "Efface ta sauvegarde et repart de zéro. Pour en garder une copie avant : fonderie-stellaire --export fichier".to_string(),
+        _ if armed => "ATTENTION : Entrée de nouveau pour TOUT effacer (fragments, Big Crunch, Laboratoire, Clés, particules, succès), aussi sur tes appareils synchronisés. C'est définitif. [Échap] pour annuler.".to_string(),
+        _ => "Efface ta sauvegarde et repart de zéro, sur tous tes appareils synchronisés. Pour en garder une copie avant : fonderie-stellaire --export fichier".to_string(),
     };
     let mut detail: Vec<(String, Rgb)> = draw::wrap(&help, text_w)
         .into_iter()

@@ -65,12 +65,17 @@ pub trait SyncBackend: Send {
     fn push(&self, data: &SaveData, base_rev: u64) -> Result<PushOutcome, SyncError>;
 }
 
-/// En cas de conflit : la partie du relais l'emporte si elle a été plus jouée.
+/// En cas de conflit : la partie du relais l'emporte si elle a été commencée
+/// plus tard (« Nouvelle partie » sur un appareil : tous la reprennent), sinon
+/// si elle a été plus jouée.
 ///
 /// `play_time` n'avance qu'en jeu (pas avec les gains hors-ligne) : un
 /// appareil resté fermé ne prend donc jamais le pas sur celui où l'on a joué.
 /// À égalité, la plus productive gagne.
 pub fn prefer_remote(remote: &SaveData, local: &SaveData) -> bool {
+    if remote.started_at != local.started_at {
+        return remote.started_at > local.started_at;
+    }
     if remote.play_time != local.play_time {
         return remote.play_time > local.play_time;
     }
@@ -492,6 +497,37 @@ mod tests {
             reconcile(&mut pc, &save(60.0, 80.0)),
             Ok(Reconciled::Adopt(_))
         ));
+    }
+
+    #[test]
+    fn a_new_game_replaces_the_relay_and_every_device_follows() {
+        let relay = Arc::new(Mutex::new(Relay::default()));
+        let mut pc = Device::new(&relay);
+        let mut phone = Device::new(&relay);
+        reconcile(&mut pc, &save(5000.0, 9.0)).unwrap();
+        let Ok(Reconciled::Adopt(remote)) = reconcile(&mut phone, &save(10.0, 1.0)) else {
+            panic!("le téléphone reprend la partie du PC");
+        };
+        phone.set_synced_rev(remote.rev).unwrap();
+
+        // Nouvelle partie sur le téléphone : moins jouée, mais plus récente.
+        let fresh = SaveData {
+            started_at: 1_800_000_000,
+            ..save(0.0, 0.0)
+        };
+        assert_eq!(reconcile(&mut phone, &fresh), Ok(Reconciled::Pushed));
+        assert_eq!(
+            relay.lock().unwrap().slot.as_ref().unwrap().data.play_time,
+            0.0
+        );
+        // Le PC, bien plus joué, reprend quand même la nouvelle partie.
+        let Ok(Reconciled::Adopt(remote)) = reconcile(&mut pc, &save(6000.0, 10.0)) else {
+            panic!("le PC doit reprendre la nouvelle partie");
+        };
+        assert_eq!(remote.data.started_at, 1_800_000_000);
+        // Même si le PC a raté la mise à jour de révision (relais changé
+        // entre-temps), l'ancienne partie ne revient jamais.
+        assert!(!prefer_remote(&save(6000.0, 10.0), &fresh));
     }
 
     #[test]

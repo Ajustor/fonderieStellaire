@@ -57,6 +57,8 @@ pub struct MobileView<'a> {
     /// Jour (depuis 1970), pour le Défi du jour.
     pub today: u64,
     pub leaderboard: &'a crate::widgets::leaderboard::LeaderboardView,
+    /// Nouvelle version à installer à la main (APK), s'il y en a une.
+    pub update: Option<&'a str>,
 }
 
 /// Sous-onglets de l'onglet `tab`, selon les déblocages.
@@ -166,7 +168,7 @@ pub fn render(
         INFOS => render_infos(buf, content, ctx, m),
         ACHIEVEMENTS => render_achievements(buf, content, ctx, m),
         OPTIONS => render_options(buf, content, ctx, m),
-        _ => render_save(buf, content, m, view.version, view.leaderboard),
+        _ => render_save(buf, content, m, view.version, view.update, view.leaderboard),
     }
 
     let fade = (ctx.now - m.tab_changed_at) / TAB_FADE;
@@ -1734,7 +1736,9 @@ fn render_leaderboard(
     m: &mut MobileUi,
     view: &crate::widgets::leaderboard::LeaderboardView,
 ) {
-    use crate::widgets::leaderboard::{board_name, entry_result, rank_color, visible_entries};
+    use crate::widgets::leaderboard::{
+        board_name, entry_result, prestige_slot, rank_color, visible_entries,
+    };
     use application::Board;
 
     let w = area.width.saturating_sub(2);
@@ -1813,7 +1817,11 @@ fn render_leaderboard(
                     right,
                 );
                 let result = entry_result(e, view.board);
-                let rx = right.saturating_sub(result.chars().count() as u16);
+                let mut rx = right.saturating_sub(result.chars().count() as u16);
+                if let Some((px, text)) = prestige_slot(e, view.board, x + 1, rx) {
+                    draw::text(buf, px, r.y, &text, theme::fg(theme::MUTED), rx);
+                    rx = px;
+                }
                 let color = if e.me { theme::GOLD } else { theme::TEXT };
                 draw::text(
                     buf,
@@ -1892,6 +1900,7 @@ fn render_save(
     area: Rect,
     m: &mut MobileUi,
     version: &str,
+    update: Option<&str>,
     leaderboard: &crate::widgets::leaderboard::LeaderboardView,
 ) {
     // Bas : synchro, blanc, export + import, version.
@@ -1942,15 +1951,29 @@ fn render_save(
             Some(Hit::Request(req)),
         );
     }
-    let v = format!("Version {version}");
-    draw::text(
-        buf,
-        area.x + 2,
-        area.bottom().saturating_sub(1),
-        &v,
-        theme::fg(theme::GREY),
-        area.right(),
-    );
+    // Version ; une nouvelle version (APK) se touche pour ouvrir sa page.
+    let y = area.bottom().saturating_sub(1);
+    match update {
+        Some(new) => {
+            let v = format!("Version {version} · {new} disponible ›");
+            draw::text(
+                buf,
+                area.x + 2,
+                y,
+                &v,
+                theme::bold(theme::CYAN),
+                area.right(),
+            );
+            m.hits.add(
+                Rect::new(area.x, y, area.width, 1),
+                Hit::Request(Request::OpenUpdate),
+            );
+        }
+        None => {
+            let v = format!("Version {version}");
+            draw::text(buf, area.x + 2, y, &v, theme::fg(theme::GREY), area.right());
+        }
+    }
 }
 
 // ----------------------------------------------------------------------

@@ -113,6 +113,39 @@ pub fn entry_result(e: &Entry, board: Board) -> String {
     }
 }
 
+/// Prestiges d'une ligne du classement général : « ✹12 ✶3 ✷1 »
+/// (Supernovas, Big Crunch, Big Bang ; les zéros sont omis).
+pub fn entry_prestiges(e: &Entry) -> String {
+    [("✹", e.supernovas), ("✶", e.crunches), ("✷", e.big_bangs)]
+        .iter()
+        .filter(|(_, n)| *n > 0)
+        .map(|(g, n)| format!("{g}{n}"))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Place des prestiges entre le pseudo (qui commence en `pseudo_x`) et le
+/// résultat (qui commence en `result_x`) : colonne et texte, s'il reste au
+/// moins 8 colonnes au pseudo (classement général seulement).
+pub fn prestige_slot(
+    e: &Entry,
+    board: Board,
+    pseudo_x: u16,
+    result_x: u16,
+) -> Option<(u16, String)> {
+    if board != Board::General {
+        return None;
+    }
+    let text = entry_prestiges(e);
+    let w = text.chars().count() as u16;
+    if w == 0 {
+        return None;
+    }
+    let x = result_x.checked_sub(w + 1)?;
+    let pseudo_w = (e.pseudo.chars().count() as u16).min(8);
+    (x > pseudo_x + pseudo_w).then_some((x, text))
+}
+
 /// Couleur du rang (podium).
 pub fn rank_color(rank: u32) -> Rgb {
     match rank {
@@ -146,7 +179,11 @@ fn draw_entry(buf: &mut Buffer, inner: Rect, y: u16, e: &Entry, board: Board) {
         right,
     );
     let result = entry_result(e, board);
-    let rx = right.saturating_sub(1 + result.chars().count() as u16);
+    let mut rx = right.saturating_sub(1 + result.chars().count() as u16);
+    if let Some((px, text)) = prestige_slot(e, board, x + 2, rx) {
+        draw::text(buf, px, y, &text, theme::fg(theme::MUTED), rx);
+        rx = px;
+    }
     let pseudo_color = if e.me { theme::GOLD } else { theme::TEXT };
     draw::text(
         buf,
@@ -329,5 +366,24 @@ mod tests {
         );
         assert!(entry_result(&entry(1, false), Board::Daily).ends_with('✦'));
         assert_eq!(act_name(5), "Cosmos éveillé");
+    }
+
+    #[test]
+    fn prestiges_fit_or_step_aside() {
+        let mut e = entry(1, false);
+        e.supernovas = 12;
+        e.crunches = 3;
+        assert_eq!(entry_prestiges(&e), "✹12 ✶3");
+        // De la place : juste avant le résultat.
+        assert_eq!(
+            prestige_slot(&e, Board::General, 10, 40),
+            Some((33, "✹12 ✶3".to_string()))
+        );
+        // Trop étroit : le pseudo garde sa place.
+        assert_eq!(prestige_slot(&e, Board::General, 10, 18), None);
+        assert_eq!(prestige_slot(&e, Board::Daily, 10, 40), None);
+        e.supernovas = 0;
+        e.crunches = 0;
+        assert_eq!(prestige_slot(&e, Board::General, 10, 40), None);
     }
 }

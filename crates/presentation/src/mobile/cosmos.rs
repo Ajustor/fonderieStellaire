@@ -1158,7 +1158,7 @@ fn confirm_text(ctx: &Ctx, c: Confirm) -> (String, Vec<(String, Rgb)>, &'static 
         Confirm::NewGame => (
             "Recommencer une partie".into(),
             vec![(
-                "Toute la progression sera effacée (l'ancienne sauvegarde est gardée en .bak)."
+                "Toute la progression sera effacée, aussi sur tes appareils synchronisés (l'ancienne sauvegarde est gardée en .bak)."
                     .into(),
                 theme::TEXT,
             )],

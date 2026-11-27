@@ -559,3 +559,195 @@ fn leaderboard_tab_shows_the_board_and_asks_for_a_pseudo() {
         assert!(r.right() <= 44 && r.bottom() <= 43, "{hit:?} {r:?}");
     }
 }
+
+/// Relais partagé en mémoire entre deux appareils (révisions comme le vrai).
+#[derive(Default)]
+struct Slot {
+    rev: u64,
+    save: Option<SaveData>,
+}
+
+struct SharedRelay {
+    slot: std::sync::Arc<std::sync::Mutex<Slot>>,
+    rev: u64,
+}
+
+impl application::SyncBackend for SharedRelay {
+    fn link_code(&self) -> Option<String> {
+        Some("ABCDE-FGHJK-MNPQR-STVWX-YZ012".into())
+    }
+    fn create_link(&mut self) -> Result<String, application::SyncError> {
+        Ok("ABCDE-FGHJK-MNPQR-STVWX-YZ012".into())
+    }
+    fn join_link(&mut self, code: &str) -> Result<String, application::SyncError> {
+        Ok(code.into())
+    }
+    fn unlink(&mut self) -> Result<(), application::SyncError> {
+        Ok(())
+    }
+    fn synced_rev(&self) -> u64 {
+        self.rev
+    }
+    fn set_synced_rev(&mut self, rev: u64) -> Result<(), application::SyncError> {
+        self.rev = rev;
+        Ok(())
+    }
+    fn pull(&self) -> Result<Option<application::RemoteSave>, application::SyncError> {
+        let s = self.slot.lock().unwrap();
+        Ok(s.save
+            .clone()
+            .map(|data| application::RemoteSave { rev: s.rev, data }))
+    }
+    fn push(
+        &self,
+        data: &SaveData,
+        base: u64,
+    ) -> Result<application::PushOutcome, application::SyncError> {
+        let mut s = self.slot.lock().unwrap();
+        if base != s.rev {
+            return Ok(application::PushOutcome::Conflict);
+        }
+        s.rev += 1;
+        s.save = Some(data.clone());
+        Ok(application::PushOutcome::Stored { rev: s.rev })
+    }
+}
+
+/// Laisse le thread de synchro répondre, puis avance d'une image.
+fn sync_settle(app: &mut App) {
+    for _ in 0..3 {
+        std::thread::sleep(std::time::Duration::from_millis(60));
+        settle(app, 48, 90);
+    }
+}
+
+#[test]
+fn a_new_game_on_one_device_restarts_every_linked_device() {
+    let slot = std::sync::Arc::new(std::sync::Mutex::new(Slot::default()));
+    let relay = |slot: &std::sync::Arc<std::sync::Mutex<Slot>>| SharedRelay {
+        slot: slot.clone(),
+        rev: 0,
+    };
+    // Le téléphone est le plus joué ; le PC reprend sa partie.
+    let mut phone_save = advanced_save();
+    phone_save.play_time = 9_000.0;
+    let mut phone = mobile_app(Some(phone_save));
+    phone.set_sync(application::SyncService::spawn(Box::new(relay(&slot))));
+    sync_settle(&mut phone);
+    let mut pc = mobile_app(Some(advanced_save()));
+    pc.set_sync(application::SyncService::spawn(Box::new(relay(&slot))));
+    sync_settle(&mut pc);
+    assert!(
+        pc.snapshot().play_time >= 9_000.0,
+        "le PC a repris la partie"
+    );
+
+    // Nouvelle partie sur le PC : Plus › Options › Recommencer, glisser.
+    pc.mobile_select_tab(Tab::More);
+    settle(&mut pc, 48, 90);
+    let options = find(&pc, |h| *h == Hit::SubTab(3)).expect("sous-onglet Options");
+    tap(&mut pc, options);
+    settle(&mut pc, 48, 90);
+    let ask = find(&pc, |h| *h == Hit::Ask(Confirm::NewGame)).expect("Recommencer");
+    tap(&mut pc, ask);
+    let screen = settle(&mut pc, 48, 90);
+    assert!(screen.contains("appareils synchronisés"), "{screen}");
+    let slider = find(&pc, |h| *h == Hit::Slider).expect("curseur");
+    let y = slider.y + 1;
+    pc.touch_down(slider.x + 2, y);
+    pc.touch_move(slider.right() - 1, y);
+    pc.touch_up(slider.right() - 1, y);
+    for _ in 0..4 {
+        settle(&mut pc, 48, 90);
+    }
+    sync_settle(&mut pc);
+    assert_eq!(pc.snapshot().clicks, 0, "nouvelle partie sur le PC");
+    assert!(pc.snapshot().started_at > 0);
+    {
+        let s = slot.lock().unwrap();
+        let cloud = s.save.as_ref().expect("partie sur le relais");
+        assert_eq!(
+            cloud.clicks, 0,
+            "l'ancienne partie est remplacée sur le relais"
+        );
+        assert_eq!(cloud.started_at, pc.snapshot().started_at);
+    }
+
+    // Le téléphone, bien plus joué, reprend la nouvelle partie à sa synchro.
+    phone.sync_now();
+    sync_settle(&mut phone);
+    assert_eq!(phone.snapshot().clicks, 0, "le téléphone repart de zéro");
+    assert_eq!(phone.snapshot().started_at, pc.snapshot().started_at);
+    assert_eq!(phone.screen(), presentation::Screen::Title);
+}
+
+#[test]
+fn title_screen_speaks_touch() {
+    let repo = InMemoryRepository::default();
+    *repo.0.borrow_mut() = Some(advanced_save());
+    let mut service = GameService::new(Box::new(repo), Box::new(FakeClock), Box::new(FakeRng(0.1)));
+    let startup = service.load().expect("chargement");
+    let mut app = App::new(service, startup);
+    app.set_mobile(true);
+    app.set_time(100.0);
+    app.update(0.033);
+    let screen = render(&mut app, 44, 43);
+    println!("{screen}");
+    assert_eq!(app.screen(), presentation::Screen::Title);
+    assert!(screen.contains("Touche l'écran"), "{screen}");
+    assert!(
+        !screen.contains("[Q]") && !screen.contains("une touche"),
+        "{screen}"
+    );
+}
+
+/// Version publiée plus récente, à installer à la main (APK).
+struct NewerApk;
+
+impl application::UpdateProvider for NewerApk {
+    fn latest(&self) -> Result<application::ReleaseInfo, application::UpdateError> {
+        Ok(application::ReleaseInfo {
+            version: "v99.0.0".into(),
+            page_url: "https://github.com/o/r/releases/tag/v99.0.0".into(),
+            binary_url: Some("https://dl/apk".into()),
+            checksum_url: None,
+        })
+    }
+    fn install_blocker(&self, _: &application::ReleaseInfo) -> Option<String> {
+        Some("APK".into())
+    }
+    fn install(&self, _: &application::ReleaseInfo) -> Result<(), application::UpdateError> {
+        Err(application::UpdateError("manuel".into()))
+    }
+}
+
+#[test]
+fn a_new_apk_is_announced_and_opens_its_page() {
+    let mut app = mobile_app(Some(advanced_save()));
+    app.set_updates(application::UpdateService::spawn(
+        Box::new(NewerApk),
+        "0.18.0",
+    ));
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    settle(&mut app, 44, 43);
+    assert_eq!(
+        app.update_url().as_deref(),
+        Some("https://github.com/o/r/releases/tag/v99.0.0")
+    );
+    app.mobile_select_tab(Tab::More);
+    settle(&mut app, 44, 43);
+    let save = find(&app, |h| *h == Hit::SubTab(4)).expect("sous-onglet Sauver");
+    tap(&mut app, save);
+    let screen = settle(&mut app, 44, 43);
+    println!("{screen}");
+    assert!(screen.contains("v99.0.0 disponible"), "{screen}");
+    let link = find(&app, |h| {
+        *h == Hit::Request(presentation::mobile::Request::OpenUpdate)
+    })
+    .expect("lien de la nouvelle version");
+    tap(&mut app, link);
+    assert_eq!(
+        app.take_request(),
+        Some(presentation::mobile::Request::OpenUpdate)
+    );
+}

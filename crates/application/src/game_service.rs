@@ -80,6 +80,8 @@ pub struct GameService {
     frame_rate: u32,
     /// Couleurs : 0 normales, 1 daltonien, 2 contraste élevé.
     color_mode: u8,
+    /// Début de la partie (`SaveData::started_at`).
+    started_at: u64,
     repo: Box<dyn SaveRepository>,
     clock: Box<dyn Clock>,
     rng: Box<dyn RandomSource>,
@@ -107,6 +109,7 @@ impl GameService {
             reduced_effects: false,
             frame_rate: 0,
             color_mode: 0,
+            started_at: 0,
             repo,
             clock,
             rng,
@@ -161,6 +164,7 @@ impl GameService {
                 self.reduced_effects = data.reduced_effects;
                 self.frame_rate = data.frame_rate;
                 self.color_mode = data.color_mode.min(2);
+                self.started_at = data.started_at;
                 let now = self.clock.now_unix_secs();
                 let elapsed = now.saturating_sub(data.last_saved);
                 if data.last_saved > 0 && elapsed >= MIN_OFFLINE_SECS {
@@ -201,7 +205,13 @@ impl GameService {
         );
         data.frame_rate = self.frame_rate;
         data.color_mode = self.color_mode;
+        data.started_at = self.started_at;
         data
+    }
+
+    /// Début de la partie (dernier « Nouvelle partie », secondes Unix).
+    pub fn started_at(&self) -> u64 {
+        self.started_at
     }
 
     /// Remplace la sauvegarde par celle d'un autre appareil (l'actuelle est
@@ -343,6 +353,9 @@ impl GameService {
             }
             Command::NewGame => {
                 self.state = GameState::new(&self.catalog);
+                // Plus récente que toutes les parties des appareils liés :
+                // c'est elle qu'ils reprendront.
+                self.started_at = self.clock.now_unix_secs().max(self.started_at + 1);
                 self.history.clear();
                 self.history_mix.clear();
                 self.sample_timer = 0.0;
@@ -637,6 +650,7 @@ impl GameService {
         snap.best_production = st.best_production;
         snap.milestones = st.milestones;
         snap.color_mode = self.color_mode;
+        snap.started_at = self.started_at;
         snap.megastructures_unlocked = st.megastructures_unlocked();
         let today = self.today();
         snap.daily_rules = domain::daily::rules_for(today).0;
@@ -1141,6 +1155,9 @@ mod tests {
         let saved = repo.slot.borrow().clone().unwrap();
         assert_eq!(saved.clicks, 0);
         assert_eq!(saved.frame_rate, 20);
+        // Datée : les appareils liés la préféreront à l'ancienne partie.
+        assert!(saved.started_at > 0);
+        assert_eq!(s.started_at(), saved.started_at);
         let mut again = service(&repo, &clock, vec![0.5]);
         again.load().unwrap();
         assert_eq!(again.snapshot().frame_rate, 20);

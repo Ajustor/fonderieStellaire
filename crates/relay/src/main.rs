@@ -220,9 +220,10 @@ fn player_request(
             match board.submit(id, card, req.now) {
                 Ok(()) => Reply::text(204, ""),
                 Err(SubmitError::NoPseudo) => Reply::text(404, "aucun pseudo"),
-                Err(SubmitError::Rejected(Reject::Older)) => {
-                    Reply::text(409, "partie moins jouée qu'une fiche déjà reçue")
-                }
+                Err(SubmitError::Rejected(Reject::Older)) => Reply::text(
+                    409,
+                    "partie plus ancienne ou moins jouée qu'une fiche déjà reçue",
+                ),
                 Err(SubmitError::Rejected(Reject::Invalid(why))) => Reply::text(400, why),
                 Err(SubmitError::Storage) => Reply::text(500, "erreur de stockage"),
             }

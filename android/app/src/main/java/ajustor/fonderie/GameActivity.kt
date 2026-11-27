@@ -110,6 +110,9 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
         super.onCreate(savedInstanceState)
         game = Game(filesDir.absolutePath)
         syncDialogs = SyncDialogs(this, game)
+        // Installée par l'APK de GitHub : le jeu prévient des nouvelles
+        // versions. Depuis le Play Store, c'est lui qui les installe.
+        if (!installedFromPlayStore()) game.checkUpdates()
         prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         savedVibrations = prefs.getBoolean(PREF_VIBRATIONS, true)
         savedTips = prefs.getInt(PREF_TIPS, 0).toUInt()
@@ -254,16 +257,29 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
             Request.SYNC -> syncDialogs.show()
             Request.PSEUDO -> syncDialogs.askPseudo()
             Request.OPEN_SITE -> openSite()
+            Request.OPEN_UPDATE -> game.updateUrl()?.let { openUrl(it) }
             null -> {}
         }
     }
 
     /** Site du classement dans le navigateur. */
-    private fun openSite() {
-        val url = game.leaderboardInfo().site
+    private fun openSite() = openUrl(game.leaderboardInfo().site)
+
+    private fun openUrl(url: String) {
         runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
             .onFailure { game.notify("Aucun navigateur", url) }
     }
+
+    /** Installée depuis le Play Store (qui gère alors les mises à jour). */
+    private fun installedFromPlayStore(): Boolean = runCatching {
+        val installer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            packageManager.getInstallSourceInfo(packageName).installingPackageName
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.getInstallerPackageName(packageName)
+        }
+        installer == "com.android.vending"
+    }.getOrDefault(false)
 
     private fun applyFling(dt: Float) {
         if (gesture != Gesture.NONE || abs(flingRows) < 1f) {

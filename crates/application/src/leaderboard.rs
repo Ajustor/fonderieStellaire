@@ -39,6 +39,9 @@ pub struct ScoreCard {
     pub version: String,
     /// Heure d'envoi (secondes Unix).
     pub sent_at: u64,
+    /// Début de la partie (dernier « Nouvelle partie », secondes Unix) : le
+    /// relais repart de zéro pour une partie plus récente.
+    pub started_at: u64,
 }
 
 /// Acte atteint : 1 + premier Big Crunch + Grand Attracteur éveillé +
@@ -71,6 +74,7 @@ pub fn score_card(
         platform,
         version: version.to_string(),
         sent_at: now,
+        started_at: snap.started_at,
     }
 }
 

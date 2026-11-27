@@ -13,7 +13,7 @@ pub mod system_clock;
 pub mod xorshift;
 
 #[cfg(feature = "updater")]
-pub use github_updater::GitHubUpdater;
+pub use github_updater::{ApkReleases, GitHubUpdater};
 pub use json_repository::JsonSaveRepository;
 #[cfg(feature = "sync")]
 pub use relay_leaderboard::RelayLeaderboard;

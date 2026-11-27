@@ -493,17 +493,50 @@ impl App {
             || self.ui.wipe_at.is_some()
     }
 
+    /// Tout repart de zéro à l'écran : écran titre, journal et effets neufs
+    /// (nouvelle partie ici ou sur un appareil lié).
+    fn restart_ui(&mut self) {
+        let now = self.now;
+        self.journal = Journal::default();
+        self.journal.push(
+            0.0,
+            now,
+            Kind::Info,
+            "✦ Nouvelle partie : bienvenue dans la Fonderie Stellaire !",
+        );
+        self.vis.particles.clear();
+        self.vis.floaters.clear();
+        self.ui = crate::ui::Ui::default();
+        self.title = TitleScreen::new(now, seed() ^ 0x7177);
+        self.title.touch = self.mobile.is_some();
+        self.screen = Screen::Title;
+        // Fiche de la nouvelle partie au classement dès la prochaine image.
+        self.lb_timer = crate::leaderboard::LEADERBOARD_INTERVAL;
+    }
+
     fn adopt_remote(&mut self) {
         let Some(remote) = self.sync_pending.take() else {
             return;
         };
         let now = self.now;
+        // Partie commencée plus tard sur un autre appareil : nouvelle partie.
+        let restarted = remote.data.started_at > self.service.started_at();
         let result = self
             .service
             .replace_save(&remote.data)
             .map_err(|e| e.to_string())
             .and_then(|()| self.reload_save());
         match result {
+            Ok(()) if restarted => {
+                self.sync.adopted();
+                self.restart_ui();
+                self.toasts.push(
+                    now,
+                    theme::CYAN,
+                    "↕ Nouvelle partie",
+                    "Commencée sur ton autre appareil (l'ancienne est gardée en .bak)",
+                );
+            }
             Ok(()) => {
                 self.sync.adopted();
                 self.toasts.push(
@@ -614,6 +647,7 @@ impl App {
         self.mobile = mobile.then(crate::mobile::MobileUi::default);
         self.journal.touch = mobile;
         self.toasts.touch = mobile;
+        self.title.touch = mobile;
         self.vis.touch = mobile;
     }
 
@@ -2037,31 +2071,19 @@ impl App {
                     .push(now, theme::RED, "Sauvegarde impossible", msg);
             }
             GameEvent::NewGame => {
-                // Tout repart de zéro : écran titre, journal et effets neufs.
-                let now = self.now;
-                self.journal = Journal::default();
-                self.journal.push(
-                    0.0,
-                    now,
-                    Kind::Info,
-                    "✦ Nouvelle partie : bienvenue dans la Fonderie Stellaire !",
-                );
-                self.vis.particles.clear();
-                self.vis.floaters.clear();
-                self.ui = crate::ui::Ui::default();
-                self.title = TitleScreen::new(now, seed() ^ 0x7177);
-                self.screen = Screen::Title;
-                // Sinon, l'ancienne partie (plus jouée) reviendrait des autres
-                // appareils : celui-ci quitte le lien, les autres la gardent.
+                self.restart_ui();
+                // La nouvelle partie, datée, remplace celle du relais : les
+                // autres appareils la reprennent à leur prochaine synchro.
                 if self.sync.linked() {
-                    self.withdraw_before_unlink();
                     self.sync_pending = None;
-                    self.sync.unlink();
+                    self.sync.adopt_failed();
+                    self.sync_user = true;
+                    self.sync_now();
                     self.journal.push(
                         0.0,
-                        now,
+                        self.now,
                         Kind::Info,
-                        "↕ Cet appareil n'est plus synchronisé : ton ancienne partie reste sur les autres.",
+                        "↕ Tes appareils synchronisés repartent aussi de zéro.",
                     );
                 }
             }
@@ -3297,6 +3319,10 @@ impl App {
             .map(|d| d.as_secs() / 86_400)
             .unwrap_or(0);
         let version = display_version(self.updates.current_version());
+        let update_version = match &self.update_status {
+            Some(UpdateEvent::ManualOnly { version, .. }) => Some(version.clone()),
+            _ => None,
+        };
         let sync_view = self.sync_view();
         let leaderboard_view = self.leaderboard_view();
         let legacy = self.legacy_open();
@@ -3350,6 +3376,7 @@ impl App {
                             version: &version,
                             today,
                             leaderboard: &leaderboard_view,
+                            update: update_version.as_deref(),
                         },
                     );
                     if let Some(n) = vis.nova.as_ref() {
@@ -3439,11 +3466,16 @@ impl App {
                     Kind::Info,
                     format!("Version {version} disponible ({reason}) : {url}"),
                 );
+                let how = if self.mobile.is_some() {
+                    "Plus › Sauver : touche la version pour l'installer"
+                } else {
+                    "Télécharge-la sur la page GitHub du jeu"
+                };
                 self.toasts.push(
                     now,
                     theme::CYAN,
                     format!("Version {version} disponible"),
-                    "Télécharge-la sur la page GitHub du jeu",
+                    how,
                 );
             }
             UpdateEvent::Failed(msg) => {
@@ -3451,6 +3483,14 @@ impl App {
             }
         }
         self.update_status = Some(ev);
+    }
+
+    /// Page d'une nouvelle version à installer à la main (APK Android).
+    pub fn update_url(&self) -> Option<String> {
+        match &self.update_status {
+            Some(UpdateEvent::ManualOnly { url, .. }) => Some(url.clone()),
+            _ => None,
+        }
     }
 
     /// Version et état de la mise à jour, en bas à droite de l'écran titre.

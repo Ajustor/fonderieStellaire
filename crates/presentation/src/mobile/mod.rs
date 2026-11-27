@@ -63,6 +63,8 @@ pub enum Request {
     Pseudo,
     /// Ouvrir le site du classement dans le navigateur.
     OpenSite,
+    /// Ouvrir la page de la nouvelle version (APK à installer).
+    OpenUpdate,
 }
 
 /// Ce que fait une zone touchée.

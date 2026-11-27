@@ -258,6 +258,10 @@ titre (`v0.9.0 · à jour`), et un message apparaît dans le journal.
   existe (pour Docker : `docker pull`).
 - Hors-ligne : rien ne se passe, le jeu démarre normalement.
 - `fonderie-stellaire --version` affiche la version installée.
+- Android installé par l'APK de GitHub : le jeu prévient d'une nouvelle
+  version, et *Plus* → *Sauver* → la ligne de la version ouvre sa page pour
+  télécharger l'APK (Android ne permet pas à une app de se remplacer seule).
+  Installé depuis le Play Store : c'est lui qui met le jeu à jour.
 
 ## Sauvegarde
 
@@ -292,7 +296,9 @@ de lien suffit.
 Ensuite, chaque appareil envoie sa partie au lancement, toutes les 2 minutes et
 à la fermeture, et reprend celle de l'autre si elle a été **plus jouée** (temps
 de jeu réel, pas les gains hors-ligne). La partie remplacée est gardée en
-`save.json.bak`. `fonderie-stellaire --unlink` (ou *Délier*) arrête la
+`save.json.bak`. **Recommencer une nouvelle partie** sur un appareil remplace
+la partie du relais : tous les appareils liés repartent de zéro à leur
+prochaine synchronisation, même s'ils avaient plus joué. `fonderie-stellaire --unlink` (ou *Délier*) arrête la
 synchronisation.
 
 Le relais ne voit que des données **chiffrées de bout en bout** : le code ne
@@ -303,8 +309,12 @@ Garde ce code pour toi : il donne accès à ta partie.
 
 Les fonderies synchronisées peuvent apparaître dans un **classement public**,
 sur le site du relais (https://fonderie-stellaire-sync.darthoit.eu/) et dans
-le jeu : un tableau **général** (acte atteint, puis progression) et un tableau
-du **Défi du jour**.
+le jeu : un tableau **général** et un tableau du **Défi du jour**.
+
+Le général classe par acte atteint, puis par **points** (progression × 1000,
++100 par Big Bang, +10 par Big Crunch, +1 par Supernova), puis par poussière
+récoltée. Les compteurs ✹ Supernovas, ✶ Big Crunch et ✷ Big Bang s'affichent
+sur chaque ligne.
 
 C'est **facultatif** : il faut une partie synchronisée et un **pseudo** (3 à 16
 caractères, unique).

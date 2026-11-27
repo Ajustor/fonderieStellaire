@@ -1,5 +1,26 @@
 # Journal des versions
 
+## v0.18.1 — Nouvelle partie synchronisée
+
+### Nouveautés
+- **Classement général** : à acte égal, les joueurs sont départagés par des
+  **points** (progression × 1000, +100 par Big Bang, +10 par Big Crunch, +1 par
+  Supernova), puis par la poussière récoltée. Les compteurs ✹ ✶ ✷ s'affichent
+  sur le site et dans le jeu.
+- **Android** (APK de GitHub) : le jeu prévient d'une nouvelle version ; *Plus
+  › Sauver*, toucher la ligne de la version ouvre sa page pour télécharger
+  l'APK. La version du Play Store reste mise à jour par le Play Store.
+
+### Corrections
+- **Nouvelle partie** sur un appareil synchronisé : elle remplace la partie du
+  relais et **tous les appareils liés** la reprennent à leur prochaine
+  synchronisation (l'ancienne partie reste en `.bak`). Avant, l'appareil
+  quittait le lien et les autres gardaient l'ancienne partie.
+- **Classement** : après une nouvelle partie, la fiche repart de zéro (pseudo
+  conservé) ; un appareil encore sur l'ancienne partie ne peut plus l'écraser.
+- **Android** : l'écran d'accueil invite à toucher l'écran (plus de « [Q]
+  Quitter » ni d'« appuie sur une touche »).
+
 ## v0.18.0 — Classement en ligne
 
 ### Nouveautés

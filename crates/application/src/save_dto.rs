@@ -27,6 +27,9 @@ pub struct SaveData {
     pub play_time: f64,
     /// Timestamp Unix (secondes) de la sauvegarde.
     pub last_saved: u64,
+    /// Timestamp Unix du dernier « Nouvelle partie » (0 : jamais). Entre deux
+    /// appareils synchronisés, la partie commencée le plus tard l'emporte.
+    pub started_at: u64,
     /// Option « effets réduits ».
     pub reduced_effects: bool,
     /// Images par seconde choisies (0 : par défaut).
@@ -140,6 +143,7 @@ impl SaveData {
             meteors_caught: state.meteors_caught,
             play_time: state.play_time,
             last_saved: now,
+            started_at: 0,
             reduced_effects,
             frame_rate: 0,
             perks: catalog

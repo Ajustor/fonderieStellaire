@@ -266,10 +266,93 @@ impl UpdateProvider for GitHubUpdater {
     }
 }
 
+/// Application Android jointe aux releases.
+pub const APK_ASSET: &str = "fonderie-stellaire.apk";
+
+/// Release qui contient l'APK : `binary_url` pointe dessus. Sans APK (encore
+/// en cours de publication), erreur passagère.
+pub fn apk_release(json: &str) -> Result<ReleaseInfo, UpdateError> {
+    let mut release = parse_release(json, None)?;
+    let v: serde_json::Value = serde_json::from_str(json).map_err(|e| err(e.to_string()))?;
+    release.binary_url = v["assets"].as_array().and_then(|assets| {
+        assets
+            .iter()
+            .find(|a| a["name"].as_str() == Some(APK_ASSET))
+            .and_then(|a| a["browser_download_url"].as_str())
+            .map(str::to_string)
+    });
+    if release.binary_url.is_none() {
+        return Err(err(format!(
+            "version {} en cours de publication : nouvel essai au prochain lancement",
+            release.version
+        )));
+    }
+    Ok(release)
+}
+
+/// Nouvelles versions pour l'app Android installée depuis l'APK de GitHub :
+/// le jeu prévient, le joueur installe l'APK lui-même (Android ne permet pas
+/// à une app de se remplacer). Pas utilisé pour la version du Play Store.
+pub struct ApkReleases {
+    github: GitHubUpdater,
+}
+
+impl ApkReleases {
+    /// `repo` au format `propriétaire/dépôt`.
+    pub fn new(repo: impl Into<String>) -> Self {
+        ApkReleases {
+            github: GitHubUpdater::new(repo),
+        }
+    }
+}
+
+impl UpdateProvider for ApkReleases {
+    fn latest(&self) -> Result<ReleaseInfo, UpdateError> {
+        let url = format!(
+            "https://api.github.com/repos/{}/releases/latest",
+            self.github.repo
+        );
+        let body = self
+            .github
+            .get(&url)?
+            .into_string()
+            .map_err(|e| err(format!("réponse illisible : {e}")))?;
+        apk_release(&body)
+    }
+
+    fn install_blocker(&self, _: &ReleaseInfo) -> Option<String> {
+        Some("APK à installer depuis la page de la version".into())
+    }
+
+    fn install(&self, _: &ReleaseInfo) -> Result<(), UpdateError> {
+        Err(err("installation manuelle de l'APK"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn android_waits_for_the_apk() {
+        let r = apk_release(JSON);
+        assert!(r.unwrap_err().0.contains("en cours de publication"));
+        let with_apk = r#"{
+            "tag_name": "v0.18.1",
+            "html_url": "https://github.com/o/r/releases/tag/v0.18.1",
+            "assets": [
+                {"name": "fonderie-stellaire.apk", "browser_download_url": "https://dl/apk"}
+            ]
+        }"#;
+        let r = apk_release(with_apk).unwrap();
+        assert_eq!(r.version, "v0.18.1");
+        assert_eq!(r.binary_url.as_deref(), Some("https://dl/apk"));
+        assert_eq!(r.page_url, "https://github.com/o/r/releases/tag/v0.18.1");
+        // Jamais d'installation automatique : le jeu affiche la page.
+        let p = ApkReleases::new("o/r");
+        assert!(p.install_blocker(&r).is_some());
+    }
 
     const JSON: &str = r#"{
         "tag_name": "v0.2.0",

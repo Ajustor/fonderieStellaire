@@ -6,7 +6,8 @@ license.workspace = true
 
 [features]
 default = ["updater", "sync"]
-# Mise à jour automatique depuis GitHub (désactivée sur Android : le Play Store s'en charge).
+# Mises à jour depuis GitHub : installation automatique (ordinateur) ou
+# simple avis (Android installé par l'APK ; le Play Store gère les siennes).
 updater = ["dep:ureq"]
 # Synchronisation entre appareils par le relais en ligne (`crates/relay`).
 sync = ["dep:ureq", "dep:getrandom"]

@@ -45,10 +45,25 @@ fn two_devices_through_a_real_relay() {
         ..remote.data.clone()
     };
     assert_eq!(reconcile(&mut phone, &more), Ok(Reconciled::Pushed));
-    assert!(matches!(
-        reconcile(&mut pc, &played),
-        Ok(Reconciled::Adopt(_))
-    ));
+    let Ok(Reconciled::Adopt(remote)) = reconcile(&mut pc, &played) else {
+        panic!("le PC doit reprendre la partie du téléphone");
+    };
+    pc.set_synced_rev(remote.rev).unwrap();
+
+    // Nouvelle partie sur le PC : elle remplace celle du relais, et le
+    // téléphone, pourtant plus joué, la reprend.
+    let restarted = SaveData {
+        version: application::SAVE_VERSION,
+        play_time: 1.0,
+        started_at: 1_800_000_000,
+        ..SaveData::default()
+    };
+    assert_eq!(reconcile(&mut pc, &restarted), Ok(Reconciled::Pushed));
+    let Ok(Reconciled::Adopt(remote)) = reconcile(&mut phone, &more) else {
+        panic!("le téléphone doit reprendre la nouvelle partie");
+    };
+    assert_eq!(remote.data.started_at, 1_800_000_000);
+    assert_eq!(remote.data.play_time, 1.0);
 }
 
 #[test]
@@ -83,6 +98,7 @@ fn leaderboard_through_a_real_relay() {
         platform: "terminal",
         version: "e2e".into(),
         sent_at: now,
+        started_at: 0,
     };
     pc_lb.submit(&card).unwrap();
 

@@ -53,6 +53,10 @@ pub struct Card {
     #[serde(default)]
     pub version: String,
     pub sent_at: u64,
+    /// Début de la partie (dernier « Nouvelle partie », secondes Unix ; 0 :
+    /// jamais ou version antérieure à 0.18.1).
+    #[serde(default)]
+    pub started_at: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -62,6 +66,10 @@ pub struct Player {
     pub card: Option<Card>,
     #[serde(default)]
     pub best_play_time: f64,
+    /// Début de la partie de la dernière fiche : `best_play_time` ne vaut que
+    /// pour cette partie.
+    #[serde(default)]
+    pub started_at: u64,
     /// Dernière activité (secondes Unix).
     #[serde(default)]
     pub updated: u64,
@@ -192,6 +200,16 @@ pub fn verify(key: &[u8; 32], body: &[u8], sig: Option<&str>) -> bool {
         == 0
 }
 
+/// Points du classement général, entre joueurs du même acte : la
+/// progression (sur 1000) et les prestiges (Big Bang 100, Big Crunch 10,
+/// Supernova 1).
+pub fn rank_points(c: &Card) -> f64 {
+    c.progress * 1000.0
+        + 100.0 * f64::from(c.big_bangs)
+        + 10.0 * f64::from(c.crunches)
+        + f64::from(c.supernovas)
+}
+
 /// Clé de développement : celle d'une compilation locale du jeu.
 pub fn dev_key() -> [u8; 32] {
     Sha256::digest(b"fonderie-leaderboard/fonderie-stellaire/cle-de-developpement").into()
@@ -217,6 +235,9 @@ pub fn plausible(card: &Card, prev_play_time: f64, now: u64) -> Result<(), Rejec
     }
     if card.sent_at.abs_diff(now) > MAX_CLOCK_SKEW {
         return Err(Reject::Invalid("horloge de l'appareil décalée"));
+    }
+    if card.started_at > now + MAX_CLOCK_SKEW {
+        return Err(Reject::Invalid("partie commencée dans le futur"));
     }
     if let Some(d) = card.daily {
         let today = now / 86_400;
@@ -314,6 +335,7 @@ impl Board {
             pseudo: String::new(),
             card: None,
             best_play_time: 0.0,
+            started_at: 0,
             updated: now,
         });
         entry.pseudo = pseudo.clone();
@@ -342,7 +364,23 @@ impl Board {
         let Some(player) = self.players.get_mut(id) else {
             return Err(SubmitError::NoPseudo);
         };
-        plausible(&card, player.best_play_time, now).map_err(SubmitError::Rejected)?;
+        // Un appareil resté sur l'ancienne partie, après une nouvelle partie
+        // sur un autre : refusé, il la reprendra à sa prochaine synchro.
+        if card.started_at < player.started_at {
+            return Err(SubmitError::Rejected(Reject::Older));
+        }
+        // Nouvelle partie : le temps de jeu repart de zéro.
+        let restarted = card.started_at > player.started_at;
+        let prev = if restarted {
+            0.0
+        } else {
+            player.best_play_time
+        };
+        plausible(&card, prev, now).map_err(SubmitError::Rejected)?;
+        if restarted {
+            player.started_at = card.started_at;
+            player.best_play_time = 0.0;
+        }
         player.best_play_time = player.best_play_time.max(card.play_time);
         player.updated = now;
         let daily = card.daily;
@@ -385,7 +423,7 @@ impl Board {
         let key = |p: &Player| {
             p.card
                 .as_ref()
-                .map_or((0, 0.0, 0.0), |c| (c.act, c.progress, c.total_log))
+                .map_or((0, 0.0, 0.0), |c| (c.act, rank_points(c), c.total_log))
         };
         rows.sort_by(|a, b| match kind {
             BoardKind::General => {
@@ -416,6 +454,7 @@ impl Board {
                 "big_bangs": c.map_or(0, |c| c.big_bangs),
                 "achievements": c.map_or(0, |c| c.achievements),
                 "play_time": c.map_or(0.0, |c| c.play_time),
+                "points": c.map_or(0.0, rank_points).round(),
                 "platform": c.map_or("", |c| c.platform.as_str()),
                 "score": e.map(|e| e.score),
             })
@@ -492,7 +531,38 @@ mod tests {
             platform: "terminal".into(),
             version: "0.18.0".into(),
             sent_at: NOW,
+            started_at: 0,
         }
+    }
+
+    #[test]
+    fn a_new_game_restarts_the_player_and_older_games_are_refused() {
+        let mut b = Board::load(dir("restart"));
+        b.claim("p", "Astra", NOW).unwrap();
+        b.submit("p", card(4, 0.5, 200_000.0), NOW).unwrap();
+        // Nouvelle partie : moins jouée, acceptée car commencée plus tard.
+        let mut fresh = card(1, 0.01, 120.0);
+        fresh.started_at = NOW - 200;
+        assert_eq!(b.submit("p", fresh.clone(), NOW), Ok(()));
+        assert_eq!(b.player("p").unwrap().card.as_ref().unwrap().act, 1);
+        // L'autre appareil, encore sur l'ancienne partie : refusé.
+        assert_eq!(
+            b.submit("p", card(4, 0.6, 210_000.0), NOW),
+            Err(SubmitError::Rejected(Reject::Older))
+        );
+        // La nouvelle partie continue normalement…
+        fresh.play_time = 400.0;
+        assert_eq!(b.submit("p", fresh.clone(), NOW), Ok(()));
+        // … et ne recule pas.
+        fresh.play_time = 100.0;
+        assert_eq!(
+            b.submit("p", fresh.clone(), NOW),
+            Err(SubmitError::Rejected(Reject::Older))
+        );
+        // Commencée dans le futur : refusée.
+        let mut future = card(1, 0.01, 10.0);
+        future.started_at = NOW + 3_600;
+        assert!(b.submit("p", future, NOW).is_err());
     }
 
     #[test]
@@ -620,6 +690,39 @@ mod tests {
         b.submit("b", worse, NOW).unwrap();
         let d = b.standings(BoardKind::Daily, today, 10, None);
         assert_eq!(d["entries"][0]["pseudo"], "joueur-b");
+        let _ = fs::remove_dir_all(&b.dir);
+    }
+
+    #[test]
+    fn prestiges_count_in_the_general_ranking() {
+        let mut b = Board::load(dir("points"));
+        // Même acte : 0,55 de progression sans Big Crunch (553 points) contre
+        // 0,5 avec 10 Big Crunch (603) et 0,4 avec 2 Big Bang (603 + 3 = 603).
+        let mut ahead = card(2, 0.5, 100_000.0);
+        ahead.crunches = 10;
+        let behind = card(2, 0.55, 100_000.0);
+        let mut bangs = card(2, 0.4, 100_000.0);
+        bangs.big_bangs = 2;
+        bangs.total_log = 99.0;
+        for (id, c) in [("a", ahead), ("b", behind), ("c", bangs)] {
+            b.claim(id, &format!("joueur-{id}"), NOW).unwrap();
+            b.submit(id, c, NOW).unwrap();
+        }
+        let g = b.standings(BoardKind::General, NOW / 86_400, 10, None);
+        let names: Vec<&str> = g["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["pseudo"].as_str().unwrap())
+            .collect();
+        // À points égaux, la poussière départage.
+        assert_eq!(names, ["joueur-c", "joueur-a", "joueur-b"]);
+        assert_eq!(g["entries"][1]["points"], 603.0);
+        // L'acte passe avant les points.
+        b.claim("d", "joueur-d", NOW).unwrap();
+        b.submit("d", card(3, 0.0, 100_000.0), NOW).unwrap();
+        let g = b.standings(BoardKind::General, NOW / 86_400, 1, None);
+        assert_eq!(g["entries"][0]["pseudo"], "joueur-d");
         let _ = fs::remove_dir_all(&b.dir);
     }
 

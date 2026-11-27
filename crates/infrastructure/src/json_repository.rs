@@ -34,6 +34,7 @@ struct SaveFile {
     meteors_caught: u32,
     play_time: f64,
     last_saved: u64,
+    started_at: u64,
     reduced_effects: bool,
     frame_rate: u32,
     perks: Vec<String>,
@@ -108,6 +109,7 @@ impl From<&SaveData> for SaveFile {
             meteors_caught: d.meteors_caught,
             play_time: d.play_time,
             last_saved: d.last_saved,
+            started_at: d.started_at,
             reduced_effects: d.reduced_effects,
             frame_rate: d.frame_rate,
             perks: d.perks.clone(),
@@ -183,6 +185,7 @@ impl From<SaveFile> for SaveData {
             meteors_caught: f.meteors_caught,
             play_time: f.play_time,
             last_saved: f.last_saved,
+            started_at: f.started_at,
             reduced_effects: f.reduced_effects,
             frame_rate: f.frame_rate,
             perks: f.perks,
@@ -462,6 +465,7 @@ mod tests {
             owned: vec![3, 1],
             upgrades: vec!["gen0_t0".into()],
             last_saved: 99,
+            started_at: 1_700_000_000,
             reduced_effects: true,
             ..SaveData::default()
         };

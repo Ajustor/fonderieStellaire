@@ -57,6 +57,7 @@
   .act { color: var(--cyan); }
   .act.done { color: var(--pink); }
   .platform { color: var(--muted); font-size: 12px; }
+  .prestige { color: var(--muted); white-space: nowrap; }
   .bar-wrap { display: inline-block; width: 70px; height: 6px; background: var(--line); border-radius: 3px; vertical-align: middle; margin-right: 6px; }
   .bar-fill { display: block; height: 100%; background: var(--green); border-radius: 3px; }
   .empty, .error { padding: 28px 16px; text-align: center; color: var(--muted); }
@@ -89,7 +90,9 @@
 
   <footer>
     Pour apparaître ici : dans le jeu, synchronise ta partie et choisis un pseudo
-    (Options › Synchronisation sur ordinateur, Plus › Sauver sur Android).
+    (Options › Synchronisation sur ordinateur, Plus › Sauver sur Android).<br>
+    Général : acte atteint, puis points (progression × 1000, +100 par Big Bang,
+    +10 par Big Crunch, +1 par Supernova), puis poussière récoltée.
   </footer>
 </main>
 <script>
@@ -131,7 +134,9 @@
     const pct = Math.round(e.progress * 100);
     const main = kind === "daily"
       ? `<td class="num">${score(e.score)} ✦</td>`
-      : `<td>${actLabel(e.act)}</td><td class="num"><span class="bar-wrap"><span class="bar-fill" style="width:${pct}%"></span></span>${pct} %</td>`;
+      : `<td>${actLabel(e.act)}</td><td class="num"><span class="bar-wrap"><span class="bar-fill" style="width:${pct}%"></span></span>${pct} %</td>`
+        + `<td class="num prestige" title="Supernovas · Big Crunch · Big Bang">${e.supernovas} · ${e.crunches} · ${e.big_bangs}</td>`
+        + `<td class="num hide-sm">${Math.round(e.points || 0).toLocaleString("fr-FR")}</td>`;
     return `<tr class="${cls}">
       <td class="rank">${e.rank}</td>
       <td class="pseudo">${esc(e.pseudo)} <span class="platform">${e.platform === "android" ? "📱" : "⌨"}</span></td>
@@ -157,7 +162,7 @@
       }
       const head = state.board === "daily"
         ? '<th class="num">Score</th>'
-        : '<th>Avancée</th><th class="num">Progression</th>';
+        : '<th>Avancée</th><th class="num">Progression</th><th class="num" title="Supernovas · Big Crunch · Big Bang">✹ · ✶ · ✷</th><th class="num hide-sm" title="Progression × 1000 + 100 par Big Bang + 10 par Big Crunch + 1 par Supernova">Points</th>';
       board.innerHTML = `<table><thead><tr><th>#</th><th>Pseudo</th>${head}
         <th class="num hide-sm">Poussière</th><th class="num hide-sm">Temps de jeu</th></tr></thead>
         <tbody>${data.entries.map((e) => row(e, state.board)).join("")}</tbody></table>`;

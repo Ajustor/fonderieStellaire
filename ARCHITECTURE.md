@@ -79,7 +79,9 @@ grep -rlE "serde|std::fs"     crates | grep -v crates/infrastructure # → rien
   (miroir `serde` du DTO avec `#[serde(default)]`, écriture `.tmp` + renommage,
   `.bak` si corrompu), `SystemClock`, `XorShift64`, et `GitHubUpdater`
   (`github_updater.rs` : API des releases via `ureq`, vérification SHA-256 avec
-  `sha2`, remplacement de l'exécutable ; sous Windows l'ancien devient `.old`).
+  `sha2`, remplacement de l'exécutable ; sous Windows l'ancien devient `.old` ;
+  `ApkReleases` pour Android installé par l'APK : simple avis, la page de la
+  version s'ouvre par `Request::OpenUpdate`, pas pour le Play Store).
 - **presentation** — boucle de jeu, entrées, rendu et effets. Ne modifie jamais
   l'état : elle envoie des `Command` et lit le `GameSnapshot`. Tous les états
   purement visuels (tweens, particules, focus, défilement, toasts, journal)
@@ -354,8 +356,9 @@ jeu continu. À relancer après tout changement d'équilibrage.
 
 - **application** (`sync.rs`) : port `SyncBackend` (lien enregistré, `pull`,
   `push` avec la révision de base), `reconcile` (envoi optimiste ; en cas de
-  conflit, `prefer_remote` garde la partie au plus grand `play_time`, qui
-  n'avance qu'en jeu) et `SyncService` (thread, rafales fusionnées, envois
+  conflit, `prefer_remote` garde la partie commencée le plus tard
+  (`SaveData::started_at`, posé par « Nouvelle partie »), puis celle au plus
+  grand `play_time`, qui n'avance qu'en jeu) et `SyncService` (thread, rafales fusionnées, envois
   suspendus entre l'annonce `SyncEvent::Adopt` et `adopted()`, pour qu'une
   partie sur le point d'être remplacée n'écrase pas le relais).
 - **infrastructure** (`relay_sync.rs`) : code de lien (120 bits en base 32 de
@@ -399,6 +402,8 @@ chiffrée : le jeu envoie à part une **fiche de score** signée.
   navigateur.
 - **relay** (`leaderboard.rs`, `site.html`) : `GET`/`PUT`/`DELETE /v1/player`,
   `POST /v1/score` (`X-Signature`), `GET /v1/leaderboard`, page sur `/`.
+  Classement général : acte, puis `rank_points` (progression × 1000 + 100 par
+  Big Bang + 10 par Big Crunch + 1 par Supernova), puis poussière.
   Vérifie signature et vraisemblance (`plausible` : acte selon le temps de
   jeu, horloge, Défi du jour d'aujourd'hui ou d'hier, temps de jeu qui ne
   recule pas). Fichiers JSON dans `DATA_DIR/leaderboard/`.

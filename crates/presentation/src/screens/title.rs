@@ -37,6 +37,8 @@ pub const LOGO: [&str; 13] = [
 pub const COMPACT_TITLE: &str = "✦ FONDERIE STELLAIRE ✦";
 pub const SUBTITLE: &str = "un idle game cosmique";
 pub const PROMPT: &str = "▸ Appuie sur une touche pour commencer ◂";
+/// Invite de l'écran tactile (Android) : pas de clavier ni de [Q].
+pub const PROMPT_TOUCH: &str = "▸ Touche l'écran pour commencer ◂";
 
 /// Fin de l'intro (au-delà, une touche lance la partie).
 pub const INTRO_END: f64 = 3.0;
@@ -71,6 +73,8 @@ pub struct TitleScreen {
     pub report: Vec<(char, String, crate::fx::Rgb)>,
     /// L'ancienne sauvegarde a été effacée (nouvel équilibrage) : on prévient.
     pub wiped: bool,
+    /// Écran tactile : invite adaptée, sans « [Q] Quitter ».
+    pub touch: bool,
 }
 
 impl TitleScreen {
@@ -91,6 +95,7 @@ impl TitleScreen {
             offline: None,
             report: Vec::new(),
             wiped: false,
+            touch: false,
         }
     }
 
@@ -427,8 +432,12 @@ impl TitleScreen {
         if t >= INTRO_END - 0.2 {
             let b = 0.55 + 0.45 * (now * 3.0).sin();
             let c = theme::GOLD.dim(0.65 * (1.0 - b)).glow(0.2 * b);
-            centered_text(buf, area, y, PROMPT, c, true);
-            centered_text(buf, area, y + 1, "[Q] Quitter", theme::GREY, false);
+            if self.touch {
+                centered_text(buf, area, y, PROMPT_TOUCH, c, true);
+            } else {
+                centered_text(buf, area, y, PROMPT, c, true);
+                centered_text(buf, area, y + 1, "[Q] Quitter", theme::GREY, false);
+            }
         }
     }
 }

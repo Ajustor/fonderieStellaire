@@ -52,6 +52,7 @@ struct CardJson<'a> {
     platform: &'a str,
     version: &'a str,
     sent_at: u64,
+    started_at: u64,
 }
 
 #[derive(Serialize)]
@@ -120,6 +121,7 @@ pub fn card_json(card: &ScoreCard) -> Vec<u8> {
         platform: card.platform,
         version: &card.version,
         sent_at: card.sent_at,
+        started_at: card.started_at,
     };
     serde_json::to_vec(&json).unwrap_or_default()
 }
@@ -460,11 +462,13 @@ mod tests {
             platform: "terminal",
             version: "0.18.0".into(),
             sent_at: 1_800_000_000,
+            started_at: 1_700_000_000,
         };
         let v: serde_json::Value = serde_json::from_slice(&card_json(&card)).unwrap();
         assert_eq!(v["act"], 2);
         assert_eq!(v["daily"]["day"], 20_000);
         assert_eq!(v["daily"]["score"], 1e6);
+        assert_eq!(v["started_at"], 1_700_000_000u64);
         assert_eq!(v["platform"], "terminal");
         assert_eq!(v["sent_at"], 1_800_000_000u64);
     }

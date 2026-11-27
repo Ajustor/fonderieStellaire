@@ -10,9 +10,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Instant;
 
-use application::{GameService, LeaderboardService, SyncService};
+use application::{GameService, LeaderboardService, SyncService, UpdateService};
 use infrastructure::relay_sync::{parse_code, RelaySync};
-use infrastructure::RelayLeaderboard;
+use infrastructure::{ApkReleases, RelayLeaderboard};
 use infrastructure::{JsonSaveRepository, SystemClock, XorShift64};
 use presentation::cells::{self, Buffer, Rect};
 use presentation::input::Intent;
@@ -23,6 +23,16 @@ uniffi::setup_scaffolding!();
 
 /// Nom du fichier de sauvegarde dans le dossier privé de l'app.
 const SAVE_FILE: &str = "save.json";
+/// Dépôt GitHub des releases (APK).
+const REPO: &str = "Ajustor/fonderieStellaire";
+
+/// Version du jeu : celle du tag compilé par la CI, sinon celle du crate.
+fn version() -> &'static str {
+    match option_env!("FONDERIE_VERSION") {
+        Some(v) if !v.trim().is_empty() => v.trim().trim_start_matches('v'),
+        _ => env!("CARGO_PKG_VERSION"),
+    }
+}
 /// Taille de grille maximale acceptée (garde-fou contre une vue mal mesurée).
 const MAX_CELLS: u32 = 400 * 400;
 
@@ -140,6 +150,8 @@ pub enum Request {
     Pseudo,
     /// Ouvrir le site du classement (`LeaderboardInfo::site`).
     OpenSite,
+    /// Ouvrir la page de la nouvelle version (`Game::update_url`).
+    OpenUpdate,
 }
 
 /// État du classement, pour les fenêtres natives.
@@ -204,6 +216,7 @@ impl Game {
         let startup = service.load().map_err(|e| e.to_string())?;
         let mut app = App::new(service, startup);
         app.set_mobile(true);
+        app.set_updates(UpdateService::disabled(version()));
         if let Some(relay) = RelaySync::from_env(&dir) {
             app.set_sync(SyncService::spawn(Box::new(relay)));
         }
@@ -341,6 +354,7 @@ impl Game {
             MobileRequest::Sync => Request::Sync,
             MobileRequest::Pseudo => Request::Pseudo,
             MobileRequest::OpenSite => Request::OpenSite,
+            MobileRequest::OpenUpdate => Request::OpenUpdate,
         })
     }
 
@@ -429,6 +443,19 @@ impl Game {
 
     pub fn sync_unlink(&self) {
         self.lock().app.sync_unlink();
+    }
+
+    /// Cherche une nouvelle version sur GitHub (app installée par l'APK ; pas
+    /// pour le Play Store, qui gère ses mises à jour). Le jeu prévient, et
+    /// *Plus › Sauver* propose la page de la version.
+    pub fn check_updates(&self) {
+        let updates = UpdateService::spawn(Box::new(ApkReleases::new(REPO)), version());
+        self.lock().app.set_updates(updates);
+    }
+
+    /// Page de la nouvelle version à installer, s'il y en a une.
+    pub fn update_url(&self) -> Option<String> {
+        self.lock().app.update_url()
     }
 
     pub fn leaderboard_info(&self) -> LeaderboardInfo {

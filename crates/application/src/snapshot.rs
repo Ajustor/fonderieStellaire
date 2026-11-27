@@ -212,6 +212,9 @@ pub struct GameSnapshot {
     pub clicks: u64,
     pub meteors_caught: u32,
     pub play_time: f64,
+    /// Début de la partie (dernier « Nouvelle partie », secondes Unix ; 0 :
+    /// jamais).
+    pub started_at: u64,
     pub achievements_unlocked: usize,
     pub achievements_total: usize,
     /// Succès débloqués, indexés comme le catalogue.
