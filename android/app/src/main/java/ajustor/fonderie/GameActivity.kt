@@ -3,10 +3,12 @@ package ajustor.fonderie
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.media.AudioAttributes
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
+import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -206,12 +208,25 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
         // Récolte continue : pas plus d'une vibration légère toutes les 80 ms.
         if (level == 1 && now - lastVibration < 80) return
         lastVibration = now
-        val effect = if (level >= 2) {
-            VibrationEffect.createOneShot(35, 200)
+        // Effets prédéfinis : réglés par le constructeur pour être bien sentis
+        // (une impulsion de 12 ms à faible amplitude passe inaperçue sur
+        // beaucoup de téléphones).
+        val effect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            VibrationEffect.createPredefined(
+                if (level >= 2) VibrationEffect.EFFECT_HEAVY_CLICK else VibrationEffect.EFFECT_CLICK,
+            )
+        } else if (level >= 2) {
+            VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE)
         } else {
-            VibrationEffect.createOneShot(12, 90)
+            VibrationEffect.createOneShot(20, VibrationEffect.DEFAULT_AMPLITUDE)
         }
-        v.vibrate(effect)
+        // Vibration de jeu : suit le réglage « vibrations multimédia ».
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            v.vibrate(effect, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_MEDIA))
+        } else {
+            @Suppress("DEPRECATION")
+            v.vibrate(effect, GAME_AUDIO)
+        }
     }
 
     private fun persistSettings() {
@@ -363,6 +378,9 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
     companion object {
         private const val TAG = "Fonderie"
         private const val PREFS = "fonderie"
+        private val GAME_AUDIO: AudioAttributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_GAME)
+            .build()
         private const val PREF_VIBRATIONS = "vibrations"
         private const val PREF_TIPS = "tips_seen"
         private const val STATS_EVERY_MS = 5_000L
