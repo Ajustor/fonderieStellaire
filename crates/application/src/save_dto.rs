@@ -34,6 +34,10 @@ pub struct SaveData {
     pub reduced_effects: bool,
     /// Images par seconde choisies (0 : par défaut).
     pub frame_rate: u32,
+    /// Sons coupés dans les options.
+    pub sound_off: bool,
+    /// Volume des sons en % (0 : par défaut).
+    pub volume: u8,
     /// Identifiants texte des améliorations de l'Atelier achetées.
     pub perks: Vec<String>,
     pub fragments_spent: f64,
@@ -146,6 +150,8 @@ impl SaveData {
             started_at: 0,
             reduced_effects,
             frame_rate: 0,
+            sound_off: false,
+            volume: 0,
             perks: catalog
                 .perks
                 .iter()

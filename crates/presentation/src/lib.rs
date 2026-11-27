@@ -16,6 +16,7 @@ pub mod leaderboard;
 pub mod mobile;
 pub mod nav;
 pub mod screens;
+pub mod sound;
 #[cfg(feature = "terminal")]
 pub mod terminal;
 pub mod theme;

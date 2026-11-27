@@ -18,13 +18,17 @@ use crate::theme;
 use crate::ui::Popup;
 
 /// Nombre de lignes réglables.
-pub const ITEMS: usize = 6;
+pub const ITEMS: usize = 8;
+/// Ligne « Sons ».
+pub const SOUND_ITEM: usize = 3;
+/// Ligne « Volume des sons ».
+pub const VOLUME_ITEM: usize = 4;
 /// Ligne « Recommencer une nouvelle partie ».
-pub const RESET_ITEM: usize = 5;
+pub const RESET_ITEM: usize = 7;
 /// Ligne « Synchronisation ».
-pub const SYNC_ITEM: usize = 3;
+pub const SYNC_ITEM: usize = 5;
 /// Ligne « Classement ».
-pub const LEADERBOARD_ITEM: usize = 4;
+pub const LEADERBOARD_ITEM: usize = 6;
 /// Durée de l'effacement ; la nouvelle partie commence à la fin.
 pub const WIPE_DURATION: f64 = 2.6;
 const EMBER: Rgb = Rgb(255, 110, 60);
@@ -74,6 +78,12 @@ pub fn render(
             if snap.reduced_effects { "oui" } else { "non" }.to_string(),
             theme::CYAN,
         ),
+        (
+            "Sons",
+            if snap.sound_on { "oui" } else { "non" }.to_string(),
+            theme::CYAN,
+        ),
+        ("Volume des sons", format!("{} %", snap.volume), theme::CYAN),
         ("Synchronisation", info.sync.to_string(), theme::CYAN),
         ("Classement", info.leaderboard.to_string(), theme::GOLD),
         (
@@ -86,6 +96,8 @@ pub fn render(
         0 => "Normales, daltonien (les verts deviennent bleus et les rouges orangés : plus de rouge et de vert à distinguer) ou contraste élevé (texte plus clair, fonds plus sombres).".to_string(),
         1 => "60, 30, 20 ou 15 images par seconde. 60 rend les animations très fluides si ton terminal suit ; baisse-les s'il saccade : le jeu tourne pareil, seules les animations changent.".to_string(),
         2 => "Moins de secousses, de flashs et de nébuleuses animées. Raccourci : [F].".to_string(),
+        SOUND_ITEM => "Petits sons à la récolte, aux achats, aux paliers et succès, aux comètes et à la Supernova. Générés par le jeu, sans fichier audio.".to_string(),
+        VOLUME_ITEM => "20, 40, 60, 80 ou 100 %.".to_string(),
         SYNC_ITEM => "La même partie sur ton ordinateur et ton téléphone, sans compte : un code de lien (QR code) les relie. Entrée pour l'afficher.".to_string(),
         LEADERBOARD_ITEM => "Les meilleures fonderies et le Défi du jour. Pour y apparaître : synchronise ta partie et choisis un pseudo (facultatif). Entrée pour l'afficher.".to_string(),
         _ if armed => "ATTENTION : Entrée de nouveau pour TOUT effacer (fragments, Big Crunch, Laboratoire, Clés, particules, succès), aussi sur tes appareils synchronisés. C'est définitif. [Échap] pour annuler.".to_string(),

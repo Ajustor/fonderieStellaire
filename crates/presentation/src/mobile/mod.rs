@@ -109,6 +109,8 @@ pub enum Hit {
     DailyToggle,
     CloseAbsence,
     ToggleVibrations,
+    ToggleSound,
+    CycleVolume,
     /// Ferme la bulle d'aide en cours.
     DismissTip(Tip),
     /// Recherche du Labo, par position d'affichage.

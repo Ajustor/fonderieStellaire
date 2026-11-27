@@ -22,6 +22,8 @@ pub const AUTOSAVE_INTERVAL: f64 = 30.0;
 const SAMPLE_INTERVAL: f64 = 1.0;
 /// En dessous de ce délai, pas de gain hors-ligne.
 const MIN_OFFLINE_SECS: u64 = 10;
+/// Volume des sons par défaut, en %.
+const DEFAULT_VOLUME: u8 = 60;
 
 /// Événements renvoyés à la présentation : ceux du domaine, plus ceux propres
 /// à l'application (sauvegarde, préférences).
@@ -47,6 +49,11 @@ pub enum GameEvent {
     /// Le joueur a effacé sa partie pour recommencer.
     NewGame,
     FrameRateChanged(u32),
+    /// Sons activés ou coupés, et leur volume en %.
+    SoundChanged {
+        on: bool,
+        volume: u8,
+    },
     /// 0 : normales, 1 : daltonien, 2 : contraste élevé.
     ColorModeChanged(u8),
     /// Le Défi du jour commence.
@@ -78,6 +85,9 @@ pub struct GameService {
     reduced_effects: bool,
     /// Images par seconde choisies (0 : par défaut, 30).
     frame_rate: u32,
+    sound_off: bool,
+    /// Volume en % (0 : par défaut).
+    volume: u8,
     /// Couleurs : 0 normales, 1 daltonien, 2 contraste élevé.
     color_mode: u8,
     /// Début de la partie (`SaveData::started_at`).
@@ -108,6 +118,8 @@ impl GameService {
             buy_mode: BuyMode::One,
             reduced_effects: false,
             frame_rate: 0,
+            sound_off: false,
+            volume: 0,
             color_mode: 0,
             started_at: 0,
             repo,
@@ -155,6 +167,8 @@ impl GameService {
                 self.state = GameState::new(&self.catalog);
                 self.reduced_effects = data.reduced_effects;
                 self.frame_rate = data.frame_rate;
+                self.sound_off = data.sound_off;
+                self.volume = data.volume.min(100);
                 self.color_mode = data.color_mode.min(2);
                 self.save()?;
                 out.push(GameEvent::SaveWiped);
@@ -163,6 +177,8 @@ impl GameService {
                 self.state = data.to_state(&self.catalog);
                 self.reduced_effects = data.reduced_effects;
                 self.frame_rate = data.frame_rate;
+                self.sound_off = data.sound_off;
+                self.volume = data.volume.min(100);
                 self.color_mode = data.color_mode.min(2);
                 self.started_at = data.started_at;
                 let now = self.clock.now_unix_secs();
@@ -180,6 +196,22 @@ impl GameService {
         self.sample_timer = 0.0;
         self.autosave_timer = 0.0;
         Ok(out)
+    }
+
+    /// Volume des sons en % (60 par défaut).
+    fn volume(&self) -> u8 {
+        if self.volume == 0 {
+            DEFAULT_VOLUME
+        } else {
+            self.volume
+        }
+    }
+
+    fn sound_event(&self) -> GameEvent {
+        GameEvent::SoundChanged {
+            on: !self.sound_off,
+            volume: self.volume(),
+        }
     }
 
     /// Sauvegarde immédiate.
@@ -204,6 +236,8 @@ impl GameService {
             self.reduced_effects,
         );
         data.frame_rate = self.frame_rate;
+        data.sound_off = self.sound_off;
+        data.volume = self.volume;
         data.color_mode = self.color_mode;
         data.started_at = self.started_at;
         data
@@ -351,6 +385,17 @@ impl GameService {
                 };
                 out.push(GameEvent::FrameRateChanged(self.frame_rate));
             }
+            Command::ToggleSound => {
+                self.sound_off = !self.sound_off;
+                out.push(self.sound_event());
+            }
+            Command::CycleVolume => {
+                self.volume = match self.volume() {
+                    v if v >= 100 => 20,
+                    v => (v / 20 + 1) * 20,
+                };
+                out.push(self.sound_event());
+            }
             Command::NewGame => {
                 self.state = GameState::new(&self.catalog);
                 // Plus récente que toutes les parties des appareils liés :
@@ -483,6 +528,8 @@ impl GameService {
         snap.storm_remaining = st.comet.storm_remaining;
         snap.comet_progress = st.comet.progress();
         snap.reduced_effects = self.reduced_effects;
+        snap.sound_on = !self.sound_off;
+        snap.volume = self.volume();
         snap.frame_rate = if self.frame_rate == 0 {
             30
         } else {

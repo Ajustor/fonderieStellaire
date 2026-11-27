@@ -219,7 +219,13 @@ fn run() -> Result<(), Box<dyn Error>> {
         Box::new(XorShift64::from_time()),
     );
     let startup = service.load()?;
-    let outcome = presentation::run(service, startup, updates, sync, leaderboard)?;
+    // Sons : ouverts avant le terminal plein écran (une carte son absente,
+    // sur un serveur, laisse simplement le jeu muet).
+    #[cfg(feature = "audio")]
+    let (_audio, sound) = start_audio();
+    #[cfg(not(feature = "audio"))]
+    let sound = None;
+    let outcome = presentation::run(service, startup, updates, sync, leaderboard, sound)?;
     if let Some(e) = outcome.save_error {
         return Err(format!("la sauvegarde finale a échoué : {e}").into());
     }
@@ -229,6 +235,28 @@ fn run() -> Result<(), Box<dyn Error>> {
         }
     }
     Ok(())
+}
+
+/// Ouvre la sortie audio et le mixeur des sons du jeu.
+#[cfg(feature = "audio")]
+fn start_audio() -> (
+    Option<infrastructure::AudioOutput>,
+    Option<presentation::sound::SharedMixer>,
+) {
+    use presentation::sound::Mixer;
+    let mut mixer = None;
+    let output = infrastructure::AudioOutput::start(|rate| {
+        let shared = Mixer::shared(rate);
+        mixer = Some(shared.clone());
+        Box::new(move |buf: &mut [f32]| match shared.lock() {
+            Ok(mut m) => m.render(buf),
+            Err(_) => buf.fill(0.0),
+        })
+    });
+    match output {
+        Ok(output) => (Some(output), mixer),
+        Err(_) => (None, None),
+    }
 }
 
 fn main() -> ExitCode {

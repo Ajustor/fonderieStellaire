@@ -47,6 +47,7 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
     private lateinit var view: CellView
     private lateinit var syncDialogs: SyncDialogs
     private lateinit var apkUpdates: ApkUpdates
+    private lateinit var audio: GameAudio
 
     private var running = false
     private var lastFrameNanos = 0L
@@ -115,6 +116,7 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
         syncDialogs = SyncDialogs(this, game)
         apkUpdates = ApkUpdates(this, game)
         apkUpdates.start()
+        audio = GameAudio(this, game)
         prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         savedVibrations = prefs.getBoolean(PREF_VIBRATIONS, true)
         savedTips = prefs.getInt(PREF_TIPS, 0).toUInt()
@@ -157,10 +159,13 @@ class GameActivity : ComponentActivity(), Choreographer.FrameCallback {
         running = true
         lastFrameNanos = 0L
         Choreographer.getInstance().postFrameCallback(this)
+        audio.start()
     }
 
     override fun onPause() {
         running = false
+        // Arrière-plan : plus aucun son.
+        audio.stop()
         Choreographer.getInstance().removeFrameCallback(this)
         runCatching { game.pause() }.onFailure { Log.e(TAG, "sauvegarde", it) }
         super.onPause()

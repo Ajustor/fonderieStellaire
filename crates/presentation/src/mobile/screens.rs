@@ -1665,7 +1665,7 @@ fn option_row(
 
 fn render_options(buf: &mut Buffer, area: Rect, ctx: &Ctx, m: &mut MobileUi) {
     let snap = ctx.snap;
-    let rows: [(String, String, String, Rgb, Hit); 6] = [
+    let rows: [(String, String, String, Rgb, Hit); 8] = [
         (
             "Couleurs".into(),
             crate::fx::palette::mode_name(snap.color_mode).to_string(),
@@ -1709,6 +1709,28 @@ fn render_options(buf: &mut Buffer, area: Rect, ctx: &Ctx, m: &mut MobileUi) {
             },
             theme::FOCUS,
             Hit::ToggleVibrations,
+        ),
+        (
+            "Sons".into(),
+            if snap.sound_on {
+                "activés".into()
+            } else {
+                "coupés".into()
+            },
+            if snap.sound_on {
+                "Couper".into()
+            } else {
+                "Activer".into()
+            },
+            theme::FOCUS,
+            Hit::ToggleSound,
+        ),
+        (
+            "Volume des sons".into(),
+            format!("{} %", snap.volume),
+            "Changer".into(),
+            theme::FOCUS,
+            Hit::CycleVolume,
         ),
         (
             "Statistiques de rendu".into(),

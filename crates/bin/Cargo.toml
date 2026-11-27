@@ -8,6 +8,11 @@ license.workspace = true
 name = "fonderie-stellaire"
 path = "src/main.rs"
 
+[features]
+default = ["audio"]
+# Sons du jeu (sans elle, le jeu est muet : image Docker, serveurs).
+audio = ["infrastructure/audio"]
+
 [dependencies]
 domain = { path = "../domain" }
 application = { path = "../application" }

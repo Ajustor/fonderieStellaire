@@ -579,7 +579,7 @@ fn sync_screen_shows_the_qr_code_without_cutting_text() {
         app.enter_game_now();
         settle(&mut app, &mut t, w, h);
         app.on_intent(Intent::Options);
-        for _ in 0..3 {
+        for _ in 0..presentation::widgets::options::SYNC_ITEM {
             app.on_intent(Intent::Down);
         }
         app.on_intent(Intent::Buy);
@@ -667,9 +667,9 @@ fn leaderboard_and_pseudo_entry_without_cutting_text() {
         app.set_time(t);
         app.enter_game_now();
         settle(&mut app, &mut t, w, h);
-        // Options › Classement (5e ligne).
+        // Options › Classement.
         app.on_intent(Intent::Options);
-        for _ in 0..4 {
+        for _ in 0..presentation::widgets::options::LEADERBOARD_ITEM {
             app.on_intent(Intent::Down);
         }
         app.on_intent(Intent::Buy);
