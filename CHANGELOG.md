@@ -1,5 +1,12 @@
 # Journal des versions
 
+## v0.19.4 — Vibrations perceptibles
+
+### Corrections
+- **Android** : les vibrations se sentent enfin. Elles utilisent les effets
+  « clic » du téléphone (réglés par le constructeur) au lieu d'une impulsion
+  trop courte et trop faible, et suivent le réglage « vibrations multimédia ».
+
 ## v0.19.3 — Fiches de confirmation sans crash
 
 ### Corrections
