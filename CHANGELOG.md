@@ -1,5 +1,17 @@
 # Journal des versions
 
+## v0.19.5 — Automate fidèle au mode d'achat, vibrations tactiles
+
+### Nouveautés
+- **Automate** : il suit le mode d'achat choisi. En ×10 ou ×25, il attend de
+  pouvoir prendre le lot entier du générateur le plus rentable ; en PALIER, il
+  complète le palier suivant ; en MAX, il prend tout ce qui est abordable.
+
+### Corrections
+- **Android** : les vibrations suivent le réglage « retour tactile » du
+  téléphone (et non plus « vibrations multimédia », souvent coupé en mode
+  vibreur ou silencieux).
+
 ## v0.19.4 — Vibrations perceptibles
 
 ### Corrections
