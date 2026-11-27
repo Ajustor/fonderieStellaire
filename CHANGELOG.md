@@ -1,5 +1,12 @@
 # Journal des versions
 
+## v0.20.1 — Sons au volume multimédia
+
+### Corrections
+- **Android** : les sons suivent le volume multimédia du téléphone, comme dans
+  les autres jeux ; ils ne se coupent plus en mode vibreur ou silencieux (l'option
+  « Sons » du jeu les coupe).
+
 ## v0.20.0 — Sons du jeu, APK allégé
 
 ### Nouveautés

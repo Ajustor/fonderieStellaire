@@ -441,7 +441,7 @@ impl Game {
             .collect()
     }
 
-    /// Coupe ou rétablit le son (mode silencieux ou vibreur du téléphone).
+    /// Coupe ou rétablit le son, sans oublier les réglages.
     pub fn set_audio_muted(&self, muted: bool) {
         let mixer = self.audio.lock().unwrap_or_else(|e| e.into_inner()).clone();
         if let Some(m) = mixer {
