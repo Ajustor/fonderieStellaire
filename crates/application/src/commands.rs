@@ -39,6 +39,10 @@ pub enum Command {
     BuildAttractor,
     /// Images par seconde : 30 → 60 → 20 → 15 → 30.
     CycleFrameRate,
+    /// Sons : activés ↔ coupés.
+    ToggleSound,
+    /// Volume des sons : 20 → 40 → 60 → 80 → 100 → 20 %.
+    CycleVolume,
     /// Efface la partie et repart de zéro (les réglages sont gardés).
     NewGame,
     /// Envoie une flotte explorer un système de la Carte stellaire.

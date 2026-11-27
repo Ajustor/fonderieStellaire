@@ -4,6 +4,8 @@
 //!
 //! Kotlin n'appelle `Game` que depuis le thread principal ; le `Mutex` ne sert
 //! qu'à satisfaire UniFFI, qui exige des objets partageables entre threads.
+//! Seule exception : le fil audio de Kotlin tire les sons avec
+//! [`Game::audio_fill`], qui ne touche qu'au mixeur (son propre verrou).
 
 use std::fmt;
 use std::path::PathBuf;
@@ -17,6 +19,7 @@ use infrastructure::{JsonSaveRepository, SystemClock, XorShift64};
 use presentation::cells::{self, Buffer, Rect};
 use presentation::input::Intent;
 use presentation::mobile::{Request as MobileRequest, Tab as MobileTab};
+use presentation::sound::{Mixer, SharedMixer};
 use presentation::App;
 
 uniffi::setup_scaffolding!();
@@ -210,6 +213,9 @@ unsafe impl Send for Inner {}
 #[derive(uniffi::Object)]
 pub struct Game {
     inner: Mutex<Inner>,
+    /// Mixeur des sons, créé par `audio_start` (verrou séparé : le fil audio
+    /// n'attend jamais le rendu d'une image).
+    audio: Mutex<Option<SharedMixer>>,
 }
 
 #[uniffi::export]
@@ -245,6 +251,7 @@ impl Game {
                 out: Vec::with_capacity(64 * 1024),
                 last_frame: None,
             }),
+            audio: Mutex::new(None),
         }))
     }
 
@@ -408,6 +415,42 @@ impl Game {
         self.lock().app.should_quit()
     }
 
+    /// Prépare les sons à `sample_rate` Hz (fréquence native de la sortie).
+    /// Appelé une fois par le fil audio ; les appels suivants ne font rien.
+    pub fn audio_start(&self, sample_rate: u32) {
+        let mut audio = self.audio.lock().unwrap_or_else(|e| e.into_inner());
+        if audio.is_none() {
+            let mixer = Mixer::shared(sample_rate);
+            self.lock().app.set_sound(mixer.clone());
+            *audio = Some(mixer);
+        }
+    }
+
+    /// Prochains `frames` échantillons mono, en PCM 16 bits petit-boutiste
+    /// (silence tant que `audio_start` n'a pas été appelé).
+    pub fn audio_fill(&self, frames: u32) -> Vec<u8> {
+        let mut pcm = vec![0.0f32; frames as usize];
+        let mixer = self.audio.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        if let Some(m) = mixer {
+            if let Ok(mut m) = m.lock() {
+                m.render(&mut pcm);
+            }
+        }
+        pcm.iter()
+            .flat_map(|&s| ((s.clamp(-1.0, 1.0) * 32767.0) as i16).to_le_bytes())
+            .collect()
+    }
+
+    /// Coupe ou rétablit le son (mode silencieux ou vibreur du téléphone).
+    pub fn set_audio_muted(&self, muted: bool) {
+        let mixer = self.audio.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        if let Some(m) = mixer {
+            if let Ok(mut m) = m.lock() {
+                m.set_muted(muted);
+            }
+        }
+    }
+
     /// Mise en arrière-plan : sauvegarde immédiate (Android peut tuer l'app ensuite).
     pub fn pause(&self) -> Result<(), GameError> {
         let mut g = self.lock();
@@ -533,6 +576,38 @@ fn clamp_size(cols: u16, rows: u16) -> (u16, u16) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn audio_is_silent_until_started_then_plays_game_sounds() {
+        let game = Game::new(temp_dir("audio")).unwrap();
+        assert!(
+            game.audio_fill(64).iter().all(|&b| b == 0),
+            "pas encore de sons"
+        );
+        assert_eq!(game.audio_fill(64).len(), 128, "16 bits par échantillon");
+        game.audio_start(22_050);
+        game.audio_start(22_050);
+        game.lock().app.enter_game_now();
+        // Toucher le ciel : une récolte, donc un « tic ».
+        let sky = (0..200)
+            .find_map(|_| {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                game.frame(44, 40);
+                game.lock()
+                    .app
+                    .mobile_hits()
+                    .into_iter()
+                    .find(|(_, h)| *h == presentation::mobile::Hit::Harvest)
+                    .map(|(r, _)| r)
+            })
+            .expect("ciel");
+        game.touch_down(sky.x + 1, sky.y + 1);
+        game.touch_up(sky.x + 1, sky.y + 1);
+        let pcm = game.audio_fill(2048);
+        assert!(pcm.iter().any(|&b| b != 0), "la récolte s'entend");
+        game.set_audio_muted(true);
+        assert!(game.audio_fill(256).iter().all(|&b| b == 0), "coupé");
+    }
 
     /// Dossier neuf (le dépôt crée les dossiers manquants à la sauvegarde).
     fn temp_dir(tag: &str) -> String {

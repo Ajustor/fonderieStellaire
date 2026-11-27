@@ -240,6 +240,10 @@ pub struct GameSnapshot {
     pub reduced_effects: bool,
     /// Images par seconde (60, 30, 20 ou 15).
     pub frame_rate: u32,
+    /// Sons activés dans les options.
+    pub sound_on: bool,
+    /// Volume des sons en % (20 à 100).
+    pub volume: u8,
     /// « Récolte continue » achetée : maintenir Espace récolte en continu.
     pub hold_harvest: bool,
     /// Fragments disponibles pour l'Atelier.
