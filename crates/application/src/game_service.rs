@@ -404,6 +404,7 @@ impl GameService {
         let mut ev = std::mem::take(&mut self.scratch);
         ev.clear();
         let roll = self.rng.next_f64();
+        self.state.autobuy_mode = self.buy_mode;
         self.state.tick(&self.catalog, dt, roll, &mut ev);
         // Pendant le défi, la partie principale continue en temps réel
         // (recherches, chantiers, flottes, matière exotique), comme jeu fermé.

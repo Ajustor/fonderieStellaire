@@ -171,6 +171,9 @@ pub struct GameState {
     /// Niveau de chaque Constellation.
     pub constellations: Vec<u32>,
     revealed: Vec<bool>,
+    /// Mode d'achat choisi par le joueur (×1, ×10…) : l'automate le suit.
+    /// Réglage d'interface, non sauvegardé.
+    pub autobuy_mode: BuyMode,
     autobuy_timer: f64,
     achievement_timer: f64,
     /// `play_time` de la dernière récolte « touche maintenue » acceptée.
@@ -247,6 +250,7 @@ impl GameState {
             milestones: [0.0; 6],
             constellations: Vec::new(),
             revealed: Vec::new(),
+            autobuy_mode: BuyMode::One,
             autobuy_timer: 0.0,
             achievement_timer: 0.0,
             last_hold_harvest: f64::NEG_INFINITY,
@@ -2647,8 +2651,10 @@ impl GameState {
     }
 
     /// Automate : achète le générateur visible qui rapporte le plus par
-    /// poussière dépensée, tant que c'est abordable (10 achats max par passage).
+    /// poussière dépensée, par lots du mode d'achat du joueur (×10 : attend
+    /// d'avoir de quoi en prendre 10), au plus 10 achats par passage.
     fn run_autobuyer(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
+        let mode = self.autobuy_mode;
         for _ in 0..AUTOBUY_MAX_PER_TICK {
             let best = catalog
                 .generators
@@ -2657,15 +2663,24 @@ impl GameState {
                 .map(|g| {
                     let cost = self.generator_cost(catalog, g.id, 1);
                     let gain = g.base_prod * economy::generator_multiplier(catalog, self, g.id);
-                    (g.id, cost, gain / cost)
+                    (g, gain / cost)
                 })
-                .max_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal));
-            match best {
-                Some((id, cost, _)) if self.stardust.can_afford(cost) => {
-                    self.buy_generator(catalog, id, BuyMode::One, events);
-                }
-                _ => break,
+                .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+            let Some((def, _)) = best else { break };
+            let owned = self.owned_of(def.id);
+            let budget = self.stardust.value() / self.generator_cost_factor(catalog);
+            let count = match mode {
+                BuyMode::Max => def.max_affordable(owned, budget),
+                other => other.quantity(def, owned, budget),
+            };
+            if count == 0
+                || !self
+                    .stardust
+                    .can_afford(self.generator_cost(catalog, def.id, count))
+            {
+                break;
             }
+            self.buy_generator(catalog, def.id, mode, events);
         }
     }
 
@@ -2909,6 +2924,29 @@ mod tests {
         s.stardust = Stardust::new(1e6);
         s.tick(&c, 2.0, 0.5, &mut ev);
         assert_eq!(s.owned, spent_on, "arrêté : plus d'achats");
+    }
+
+    #[test]
+    fn autobuyer_follows_the_buy_mode() {
+        let (c, mut s, mut ev) = setup();
+        s.fragments = 5.0;
+        s.buy_perk(&c, perk(&c, "perk_auto"), &mut ev);
+        assert!(s.autobuy);
+        // ×10 : pas assez pour 10 Sondes, l'automate attend.
+        s.autobuy_mode = BuyMode::Ten;
+        let ten = s.generator_cost(&c, GeneratorId(0), 10);
+        s.stardust = Stardust::new(ten * 0.9);
+        s.tick(&c, 1.0, 0.5, &mut ev);
+        assert_eq!(s.owned.iter().sum::<u64>(), 0, "attend le lot complet");
+        // Assez : il en prend 10 d'un coup.
+        s.stardust = Stardust::new(ten * 1.05);
+        s.tick(&c, 1.0, 0.5, &mut ev);
+        assert_eq!(s.owned_of(GeneratorId(0)), 10, "un lot de 10");
+        // MAX : tout ce qui est abordable.
+        s.autobuy_mode = BuyMode::Max;
+        s.stardust = Stardust::new(1e4);
+        s.tick(&c, 1.0, 0.5, &mut ev);
+        assert!(s.owned.iter().sum::<u64>() > 11, "lot maximal");
     }
 
     #[test]
