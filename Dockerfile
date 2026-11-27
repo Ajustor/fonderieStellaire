@@ -30,8 +30,8 @@ COPY crates crates
 # Autre relais de synchronisation (vide : relais officiel).
 ARG FONDERIE_SYNC_URL=""
 # Force la recompilation de nos crates (les mtimes des sources factices sont plus récents).
-# La clé de chiffrement des sauvegardes arrive en secret BuildKit (vide en local).
-RUN --mount=type=secret,id=save_key touch crates/*/src/*.rs     && FONDERIE_SAVE_KEY="$(cat /run/secrets/save_key 2>/dev/null || true)" FONDERIE_SYNC_URL="$FONDERIE_SYNC_URL" cargo build --release --locked -p fonderie-stellaire
+# Les clés des sauvegardes et du classement arrivent en secrets BuildKit (vides en local).
+RUN --mount=type=secret,id=save_key --mount=type=secret,id=leaderboard_key touch crates/*/src/*.rs     && FONDERIE_SAVE_KEY="$(cat /run/secrets/save_key 2>/dev/null || true)" FONDERIE_LEADERBOARD_KEY="$(cat /run/secrets/leaderboard_key 2>/dev/null || true)" FONDERIE_SYNC_URL="$FONDERIE_SYNC_URL" cargo build --release --locked -p fonderie-stellaire
 
 FROM debian:bookworm-slim
 LABEL org.opencontainers.image.title="Fonderie Stellaire" \

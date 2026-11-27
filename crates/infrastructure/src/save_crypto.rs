@@ -26,25 +26,12 @@ pub enum CryptoError {
     Tampered,
 }
 
-/// Secret des versions officielles (compilation), sinon clé de développement.
-fn secret() -> &'static str {
-    match option_env!("FONDERIE_SAVE_KEY") {
+fn key() -> [u8; 32] {
+    let secret = match option_env!("FONDERIE_SAVE_KEY") {
         Some(k) if !k.trim().is_empty() => k,
         _ => DEV_KEY,
-    }
-}
-
-fn key() -> [u8; 32] {
-    Sha256::digest(secret().as_bytes()).into()
-}
-
-/// Clé dérivée du secret du jeu : SHA-256(`label` ‖ secret). Sert à signer
-/// les fiches du classement sans donner au relais la clé des sauvegardes.
-pub fn derived_key(label: &str) -> [u8; 32] {
-    let mut h = Sha256::new();
-    h.update(label.as_bytes());
-    h.update(secret().as_bytes());
-    h.finalize().into()
+    };
+    Sha256::digest(secret.as_bytes()).into()
 }
 
 /// Flux pseudo-aléatoire : SHA-256(clé ‖ nonce ‖ compteur), bloc après bloc.

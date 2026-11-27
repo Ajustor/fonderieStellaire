@@ -64,8 +64,8 @@ un `Board` depuis le dossier) ; expiration.
 
 - `Reply` gagne `content_type: &'static str`.
 - `Config` : `LEADERBOARD_KEY` (64 hex ; sinon clé de développement =
-  SHA-256(`fonderie-leaderboard/` ‖ clé de dév. du jeu), avec un message au
-  démarrage).
+  SHA-256(`fonderie-leaderboard/fonderie-stellaire/cle-de-developpement`),
+  avec un message au démarrage).
 - Routage dans `serve` : `/`, `/v1/player`, `/v1/score`, `/v1/leaderboard` →
   `Board` ; le reste → `Store::handle` inchangé. Lecture de `X-Signature`.
   L'identifiant joueur = `slot_id(auth)` (empreinte du jeton, fonction
@@ -113,16 +113,16 @@ fiche d'une rafale seule part, standings mis en cache.
 ## Tâche 4 — Infrastructure : `RelayLeaderboard`
 
 **Fichiers :** créer `crates/infrastructure/src/relay_leaderboard.rs` (feature
-`sync`) ; modifier `lib.rs`, `save_crypto.rs` (`pub fn derived_key(label)` =
-SHA-256(label ‖ secret du jeu)), `relay_sync.rs` (`pub fn
+`sync`) ; modifier `lib.rs`, `save_crypto.rs` (`hmac` public),
+`relay_sync.rs` (`pub fn
 leaderboard_secret(code) -> Option<String>` = hex de
 `derive("leaderboard", secret)`).
 
 - État local `leaderboard.json` : `{ code, pseudo }` ; le pseudo ne vaut que si
   `code` = code de `sync.json` actuel.
 - `linked()` relit `sync.json` ; requêtes `ureq` avec `Authorization: Bearer`
-  ; signature `X-Signature` = HMAC(`derived_key("fonderie-leaderboard/")`,
-  corps).
+  ; signature `X-Signature` = HMAC(clé `FONDERIE_LEADERBOARD_KEY` lue à la
+  compilation, sinon clé de développement, corps).
 - Statuts : 409 → `Taken` (claim) ; 400 → `Invalid(message du relais)` ;
   transport → `Network`.
 
@@ -176,8 +176,8 @@ Tests : `tests/mobile.rs` (onglet Classement rendu, hit-test des boutons),
 ## Tâche 7 — Documentation et publication
 
 - README : Synchronisation → Classement ; Héberger le relais →
-  `LEADERBOARD_KEY` (`printf 'fonderie-leaderboard/%s' "$FONDERIE_SAVE_KEY" |
-  sha256sum`).
+  `LEADERBOARD_KEY` (= secret `FONDERIE_LEADERBOARD_KEY`, `openssl rand -hex
+  32`).
 - ARCHITECTURE : relais (routes), port et service, fichiers, tests.
 - CHANGELOG : section `v0.18.0` (classement + bonus des fragments à +1 %).
 - `android/play/politique-confidentialite.md` et `fiche-fr.txt` si utile.

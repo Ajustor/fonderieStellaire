@@ -63,11 +63,11 @@ Construite par `application` depuis le `GameSnapshot` :
 | `version` | version du jeu |
 | `sent_at` | horodatage d'envoi (secondes Unix) |
 
-Signée par HMAC-SHA256 avec une clé dérivée : `LEADERBOARD_KEY` =
-SHA-256(« leaderboard » ‖ `FONDERIE_SAVE_KEY`). Le relais reçoit cette clé
-dérivée par variable d'environnement, **jamais** la clé des saves. Sans clé
-(compilation locale), une clé de développement est utilisée et le relais
-officiel refuse ses fiches.
+Signée par HMAC-SHA256 avec une clé propre au classement, indépendante de la
+clé des saves : secret `FONDERIE_LEADERBOARD_KEY` du dépôt (64 caractères
+hexadécimaux) injecté à la compilation, même valeur dans `LEADERBOARD_KEY` du
+relais. Sans clé (compilation locale), une clé de développement est utilisée
+et le relais officiel refuse ses fiches.
 
 ## Serveur (`crates/relay`)
 
@@ -153,7 +153,8 @@ infrastructure ou relay » reste vraie.
 - README (section Synchronisation → Classement, hébergement du relais :
   `LEADERBOARD_KEY`), ARCHITECTURE (port, routes, fichiers), CHANGELOG
   (ordinateur et Android).
-- CI : secret `LEADERBOARD_KEY` dérivé à fournir au déploiement du relais.
+- CI : secret `FONDERIE_LEADERBOARD_KEY` (compilations), même valeur dans
+  `LEADERBOARD_KEY` au déploiement du relais.
 
 ## Tests
 

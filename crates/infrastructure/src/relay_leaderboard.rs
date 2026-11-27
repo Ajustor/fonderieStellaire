@@ -5,9 +5,12 @@
 //! Le pseudo est gardé par le relais et recopié dans `leaderboard.json`, avec
 //! le code du lien auquel il appartient (un nouveau lien = nouvelle identité).
 //!
-//! La fiche de score est signée par HMAC-SHA256 avec une clé dérivée du secret
-//! du jeu (`save_crypto::derived_key`) : le relais la vérifie sans connaître la
-//! clé des sauvegardes.
+//! La fiche de score est signée par HMAC-SHA256 avec la clé du classement,
+//! injectée à la compilation par la CI (`FONDERIE_LEADERBOARD_KEY`, secret du
+//! dépôt, 64 caractères hexadécimaux) ; le relais reçoit la même valeur dans
+//! `LEADERBOARD_KEY`. Elle est indépendante de la clé des sauvegardes. Une
+//! compilation locale utilise la clé de développement, que le relais accepte
+//! quand `LEADERBOARD_KEY` n'est pas fourni.
 
 use std::fs;
 use std::io::{self, Read};
@@ -21,9 +24,10 @@ use crate::relay_sync::{self, hex};
 use crate::save_crypto;
 
 const STATE_FILE: &str = "leaderboard.json";
-/// Préfixe de la clé de signature : le relais reçoit
-/// SHA-256(`fonderie-leaderboard/` ‖ secret du jeu) dans `LEADERBOARD_KEY`.
-pub const KEY_LABEL: &str = "fonderie-leaderboard/";
+/// Clé du classement des versions officielles, vérifiée à la compilation : une
+/// valeur qui n'est pas 64 caractères hexadécimaux fait échouer la compilation
+/// au lieu de produire une version dont toutes les fiches seraient refusées.
+const OFFICIAL_KEY: Option<[u8; 32]> = parse_key(option_env!("FONDERIE_LEADERBOARD_KEY"));
 const MAX_BODY: u64 = 512 * 1024;
 const LIMIT: u32 = 20;
 
@@ -120,6 +124,54 @@ pub fn card_json(card: &ScoreCard) -> Vec<u8> {
     serde_json::to_vec(&json).unwrap_or_default()
 }
 
+/// Lit une clé hexadécimale (espaces et retours à la ligne ignorés). Absente
+/// ou vide : `None`. Mal formée : erreur de compilation (fonction `const`).
+const fn parse_key(value: Option<&str>) -> Option<[u8; 32]> {
+    let bytes = match value {
+        Some(v) => v.as_bytes(),
+        None => return None,
+    };
+    let mut key = [0u8; 32];
+    let mut digits = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        i += 1;
+        let nibble = match c {
+            b' ' | b'\t' | b'\r' | b'\n' => continue,
+            b'0'..=b'9' => c - b'0',
+            b'a'..=b'f' => c - b'a' + 10,
+            b'A'..=b'F' => c - b'A' + 10,
+            _ => panic!("FONDERIE_LEADERBOARD_KEY : caractère non hexadécimal"),
+        };
+        assert!(
+            digits < 64,
+            "FONDERIE_LEADERBOARD_KEY : 64 caractères hexadécimaux attendus"
+        );
+        key[digits / 2] |= if digits % 2 == 0 { nibble << 4 } else { nibble };
+        digits += 1;
+    }
+    if digits == 0 {
+        return None;
+    }
+    assert!(
+        digits == 64,
+        "FONDERIE_LEADERBOARD_KEY : 64 caractères hexadécimaux attendus"
+    );
+    Some(key)
+}
+
+/// Clé de développement, la même que celle du relais sans `LEADERBOARD_KEY`.
+fn dev_key() -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(b"fonderie-leaderboard/fonderie-stellaire/cle-de-developpement").into()
+}
+
+/// Clé de signature des fiches : officielle si la CI l'a fournie.
+pub fn signing_key() -> [u8; 32] {
+    OFFICIAL_KEY.unwrap_or_else(dev_key)
+}
+
 /// Signature hexadécimale d'un corps avec la clé `key`.
 pub fn sign(key: &[u8; 32], body: &[u8]) -> String {
     hex(&save_crypto::hmac(key, &[body]))
@@ -165,7 +217,7 @@ impl RelayLeaderboard {
             url: url.into(),
             dir: dir.to_path_buf(),
             agent,
-            key: save_crypto::derived_key(KEY_LABEL),
+            key: signing_key(),
         }
     }
 
@@ -348,6 +400,41 @@ impl LeaderboardBackend for RelayLeaderboard {
 mod tests {
     use super::*;
     use application::SyncBackend;
+
+    #[test]
+    fn leaderboard_keys_are_read_from_hex() {
+        assert_eq!(parse_key(None), None);
+        assert_eq!(parse_key(Some("")), None);
+        assert_eq!(parse_key(Some(" \n")), None);
+        let hex64 = "07".repeat(32);
+        assert_eq!(parse_key(Some(&hex64)), Some([7u8; 32]));
+        assert_eq!(
+            parse_key(Some(&format!("{}\r\n", hex64.to_uppercase()))),
+            Some([7u8; 32])
+        );
+        let ab = "ab".repeat(32);
+        assert_eq!(parse_key(Some(&ab)), Some([0xab; 32]));
+    }
+
+    #[test]
+    #[should_panic(expected = "64 caractères")]
+    fn a_short_leaderboard_key_is_refused() {
+        parse_key(Some("abcd"));
+    }
+
+    #[test]
+    #[should_panic(expected = "non hexadécimal")]
+    fn a_non_hex_leaderboard_key_is_refused() {
+        parse_key(Some(&"zz".repeat(32)));
+    }
+
+    #[test]
+    fn local_builds_sign_with_the_relay_dev_key() {
+        // Valeur de `crates/relay/src/leaderboard.rs::dev_key`.
+        if OFFICIAL_KEY.is_none() {
+            assert_eq!(signing_key(), dev_key());
+        }
+    }
 
     #[test]
     fn signature_matches_the_relay() {

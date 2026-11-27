@@ -386,8 +386,10 @@ chiffrée : le jeu envoie à part une **fiche de score** signée.
 - **infrastructure** (`relay_leaderboard.rs`) : identité dérivée du code de
   lien (`relay_sync::leaderboard_token`, distinct du jeton de la partie ;
   identifiant public = SHA-256 du jeton), pseudo recopié dans
-  `leaderboard.json` avec le code du lien, signature HMAC-SHA256 avec
-  `save_crypto::derived_key("fonderie-leaderboard/")`.
+  `leaderboard.json` avec le code du lien, signature HMAC-SHA256 avec la clé
+  `FONDERIE_LEADERBOARD_KEY` (compilation, vérifiée par une fonction `const` :
+  une valeur mal formée fait échouer la compilation), sinon la clé de
+  développement.
 - **presentation** : `leaderboard.rs` (envoi au lancement, toutes les
   `LEADERBOARD_INTERVAL` secondes, après le Défi du jour, à la fermeture ;
   jamais pendant un Défi du jour ; quitter le classement avant de délier),
@@ -401,9 +403,11 @@ chiffrée : le jeu envoie à part une **fiche de score** signée.
   jeu, horloge, Défi du jour d'aujourd'hui ou d'hier, temps de jeu qui ne
   recule pas). Fichiers JSON dans `DATA_DIR/leaderboard/`.
 
-La clé du relais (`LEADERBOARD_KEY`) se calcule depuis `FONDERIE_SAVE_KEY`
-(voir le README) : **changer l'un sans l'autre** fait refuser toutes les
-fiches des versions officielles.
+La clé du relais (`LEADERBOARD_KEY`) est la même valeur que le secret
+`FONDERIE_LEADERBOARD_KEY` du dépôt, injecté à la compilation par
+`release.yml`, `android.yml` et en secret BuildKit (image Docker) ;
+**changer l'un sans l'autre** fait refuser toutes les fiches des versions
+officielles. Elle est indépendante de la clé des sauvegardes.
 
 ### Chiffrement des sauvegardes
 

@@ -339,14 +339,17 @@ du classement sans activité depuis plus longtemps effacés), `TRUST_PROXY` (1 :
 adresse client lue dans `X-Forwarded-For`), `LEADERBOARD_KEY` (clé de
 signature des fiches de score).
 
-`LEADERBOARD_KEY` doit correspondre au secret `FONDERIE_SAVE_KEY` avec lequel
+`LEADERBOARD_KEY` est une clé aléatoire de 64 caractères hexadécimaux. Elle
+doit être identique au secret `FONDERIE_LEADERBOARD_KEY` du dépôt, avec lequel
 les versions officielles sont compilées :
 
 ```sh
-printf 'fonderie-leaderboard/%s' "$FONDERIE_SAVE_KEY" | sha256sum | cut -d' ' -f1
+openssl rand -hex 32   # à mettre dans les deux
 ```
 
-Sans elle, le relais accepte les fiches des compilations locales (clé de
+Elle est indépendante de `FONDERIE_SAVE_KEY` : la changer n'affecte pas les
+sauvegardes, il suffit de mettre à jour le secret et le relais ensemble (les
+versions déjà publiées ne pourront plus envoyer de fiche). Sans elle, le relais accepte les fiches des compilations locales (clé de
 développement) et refuse celles des versions officielles. Le relais sert aussi
 la page du classement sur `/`.
 

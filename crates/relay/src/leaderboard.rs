@@ -1,7 +1,8 @@
 //! Classement : joueurs (pseudo et dernière fiche de score) et Défi du jour.
 //!
 //! Le jeu envoie une **fiche de score** en clair, signée par HMAC-SHA256 avec
-//! une clé dérivée du secret des versions officielles (`LEADERBOARD_KEY`). Le
+//! la clé du classement des versions officielles (`LEADERBOARD_KEY`, même
+//! valeur que le secret `FONDERIE_LEADERBOARD_KEY` de leur compilation). Le
 //! relais vérifie la signature et la vraisemblance, garde la dernière fiche de
 //! chaque joueur et son meilleur score du jour. Un joueur est désigné par
 //! l'empreinte de son jeton (comme une partie synchronisée) ; il n'apparaît
