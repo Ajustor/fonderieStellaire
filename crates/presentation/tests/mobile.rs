@@ -332,25 +332,49 @@ fn challenges_launch_after_confirmation() {
 }
 
 #[test]
-fn confirm_sheet_rises_inside_the_screen() {
-    // Chaque image de la montée de la fiche : le texte ne déborde jamais
-    // sous l'écran (crash au toucher de « Lancer » sur un Défi).
-    for h in [30, 38, 46] {
-        let mut save = advanced_save();
-        save.supernovas = 60;
-        let mut app = mobile_app(Some(save));
-        app.mobile_open(Page::Challenges);
-        settle(&mut app, 44, h);
-        let Some(ask) = find(&app, |x| matches!(x, Hit::Ask(Confirm::Challenge(_)))) else {
-            panic!("aucun Défi lançable");
-        };
-        tap(&mut app, ask);
-        for _ in 0..60 {
-            let t = app.time() + 0.004;
-            app.set_time(t);
-            render(&mut app, 44, h);
+fn confirm_sheets_rise_inside_the_screen() {
+    // Chaque image de la montée de chaque fiche de confirmation : le texte ne
+    // déborde jamais sous l'écran (crash au toucher de « Lancer » sur un Défi
+    // ou du bouton Supernova).
+    type Open = fn(&mut App);
+    let opens: [(&str, Open); 3] = [
+        ("Supernova", |app| app.mobile_select_tab(Tab::Foundry)),
+        ("Défi", |app| app.mobile_open(Page::Challenges)),
+        ("Nouvelle partie", |app| app.mobile_select_tab(Tab::More)),
+    ];
+    for h in [30, 34, 38, 42, 46, 52] {
+        for (name, open) in opens {
+            let mut save = advanced_save();
+            save.supernovas = 60;
+            let mut app = mobile_app(Some(save));
+            open(&mut app);
+            settle(&mut app, 44, h);
+            if name == "Nouvelle partie" {
+                let options = find(&app, |x| *x == Hit::SubTab(3)).expect("Options");
+                tap(&mut app, options);
+                settle(&mut app, 44, h);
+                for _ in 0..10 {
+                    if find(&app, |x| *x == Hit::Ask(Confirm::NewGame)).is_some() {
+                        break;
+                    }
+                    app.scroll_by(4);
+                    settle(&mut app, 44, h);
+                }
+            }
+            let Some(ask) = find(&app, |x| matches!(x, Hit::Ask(_))) else {
+                panic!("{name} {h} : rien à confirmer");
+            };
+            tap(&mut app, ask);
+            for _ in 0..60 {
+                let t = app.time() + 0.004;
+                app.set_time(t);
+                render(&mut app, 44, h);
+            }
+            assert!(
+                find(&app, |x| *x == Hit::Slider).is_some(),
+                "{name} {h} : curseur"
+            );
         }
-        assert!(find(&app, |x| *x == Hit::Slider).is_some(), "curseur");
     }
 }
 
