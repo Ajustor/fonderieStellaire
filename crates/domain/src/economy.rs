@@ -60,44 +60,122 @@ pub fn global_multiplier(catalog: &Catalog, state: &GameState) -> f64 {
     permanent_multiplier(catalog, state) * state.comet.boost()
 }
 
-/// Multiplicateur global hors tempête solaire.
-pub fn permanent_multiplier(catalog: &Catalog, state: &GameState) -> f64 {
+/// Source d'un multiplicateur global de production (détail affiché au joueur).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProductionSource {
+    Upgrades,
+    Fragments,
+    DarkMatter,
+    Particles,
+    Attractor,
+    Nebulae,
+    Relics,
+    Boosts,
+    Megastructures,
+    Awakening,
+    Convergence,
+    Lab,
+    Universe,
+    Constellations,
+    Challenges,
+    Achievements,
+}
+
+impl ProductionSource {
+    pub fn label(self) -> &'static str {
+        match self {
+            ProductionSource::Upgrades => "Améliorations globales",
+            ProductionSource::Fragments => "Fragments de Supernova",
+            ProductionSource::DarkMatter => "Matière noire (Big Crunch)",
+            ProductionSource::Particles => "Particules (Big Bang)",
+            ProductionSource::Attractor => "Grand Attracteur",
+            ProductionSource::Nebulae => "Nébuleuses explorées",
+            ProductionSource::Relics => "Reliques",
+            ProductionSource::Boosts => "Boosts cosmiques",
+            ProductionSource::Megastructures => "Mégastructures",
+            ProductionSource::Awakening => "Éveil du Cosmos",
+            ProductionSource::Convergence => "Convergence",
+            ProductionSource::Lab => "Laboratoire",
+            ProductionSource::Universe => "Univers en cours",
+            ProductionSource::Constellations => "Constellations",
+            ProductionSource::Challenges => "Défis réussis",
+            ProductionSource::Achievements => "Succès",
+        }
+    }
+}
+
+/// Nombre de sources de [`production_breakdown`].
+pub const SOURCES: usize = 16;
+
+/// Détail du multiplicateur global hors tempête : chaque source et son
+/// facteur (1 : sans effet). Leur produit est [`permanent_multiplier`].
+pub fn production_breakdown(
+    catalog: &Catalog,
+    state: &GameState,
+) -> [(ProductionSource, f64); SOURCES] {
+    use ProductionSource as P;
     let upgrades: f64 = bought_effects(catalog, state)
         .filter_map(|e| match e {
             Effect::GlobalMultiplier(f) => Some(f),
             _ => None,
         })
         .product();
-    upgrades
-        * fragment_multiplier(state.fragments)
-        * state.crunch_production(catalog)
-        * state.particle_production()
-        * state.attractor_production(catalog)
-        * state.map_bonus(crate::starmap::SystemKind::Nebula, 0.10)
-        * state.relic_production(catalog)
-        * state.boost_factor(crate::cosmic::BoostKind::Production)
-        * state.grid_effects().production
-        * if state.awakened {
-            crate::megastructure::AWAKENED_PRODUCTION
-        } else {
-            1.0
-        }
-        * if state.converged {
-            crate::cosmic::CONVERGENCE_PRODUCTION
-        } else {
-            1.0
-        }
-        * state.lab_production(catalog)
-        * state.universe_production(catalog)
-        * state.constellation_production(catalog)
-        * state
-            .challenge_rewards(catalog)
-            .filter_map(|r| match r {
-                ChallengeReward::Production(f) => Some(f),
-                _ => None,
-            })
-            .product::<f64>()
-        * (1.0 + ACHIEVEMENT_BONUS * state.achievements_unlocked() as f64)
+    let challenges: f64 = state
+        .challenge_rewards(catalog)
+        .filter_map(|r| match r {
+            ChallengeReward::Production(f) => Some(f),
+            _ => None,
+        })
+        .product();
+    [
+        (P::Upgrades, upgrades),
+        (P::Fragments, fragment_multiplier(state.fragments)),
+        (P::DarkMatter, state.crunch_production(catalog)),
+        (P::Particles, state.particle_production()),
+        (P::Attractor, state.attractor_production(catalog)),
+        (
+            P::Nebulae,
+            state.map_bonus(crate::starmap::SystemKind::Nebula, 0.10),
+        ),
+        (P::Relics, state.relic_production(catalog)),
+        (
+            P::Boosts,
+            state.boost_factor(crate::cosmic::BoostKind::Production),
+        ),
+        (P::Megastructures, state.grid_effects().production),
+        (
+            P::Awakening,
+            if state.awakened {
+                crate::megastructure::AWAKENED_PRODUCTION
+            } else {
+                1.0
+            },
+        ),
+        (
+            P::Convergence,
+            if state.converged {
+                crate::cosmic::CONVERGENCE_PRODUCTION
+            } else {
+                1.0
+            },
+        ),
+        (P::Lab, state.lab_production(catalog)),
+        (P::Universe, state.universe_production(catalog)),
+        (P::Constellations, state.constellation_production(catalog)),
+        (P::Challenges, challenges),
+        (
+            P::Achievements,
+            1.0 + ACHIEVEMENT_BONUS * state.achievements_unlocked() as f64,
+        ),
+    ]
+}
+
+/// Multiplicateur global hors tempête solaire.
+pub fn permanent_multiplier(catalog: &Catalog, state: &GameState) -> f64 {
+    production_breakdown(catalog, state)
+        .iter()
+        .map(|(_, f)| f)
+        .product()
 }
 
 /// Production effective d'un générateur (multiplicateur global inclus).
@@ -163,6 +241,22 @@ pub fn click_value(catalog: &Catalog, state: &GameState) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_breakdown_is_the_multiplier() {
+        let c = Catalog::standard();
+        let mut s = GameState::new(&c);
+        s.crunches = 2;
+        s.fragments = 40.0;
+        let parts = production_breakdown(&c, &s);
+        let product: f64 = parts.iter().map(|(_, f)| f).product();
+        assert!((product - permanent_multiplier(&c, &s)).abs() < 1e-9 * product);
+        let dark = parts
+            .iter()
+            .find(|(p, _)| *p == ProductionSource::DarkMatter)
+            .unwrap();
+        assert_eq!(dark.1, 3.0, "2 Big Crunch : ×3");
+    }
 
     fn setup() -> (Catalog, GameState) {
         let c = Catalog::standard();

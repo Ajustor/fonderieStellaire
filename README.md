@@ -241,7 +241,8 @@ Majuscules et minuscules sont acceptées.
   pour terminer l'Acte III.
 - **Succès** : 51 succès, **+1 %** de production chacun.
 - **Progression** : le pourcentage dans l'en-tête et l'écran `I` indiquent où tu
-  en es (générateurs, succès, Atelier, poussière avant le prochain fragment).
+  en es (générateurs, succès, Atelier, poussière avant le prochain fragment),
+  avec le **détail de la production** : chaque multiplicateur et le total.
 - **Hors-ligne** : ta fonderie produit à 50 % pendant ton absence (12 h max).
 
 ## Mise à jour automatique

@@ -255,6 +255,11 @@ pub struct GameSnapshot {
     pub comet_kind: CometKind,
     /// Multiplicateur de la tempête (ou frénésie dorée) en cours.
     pub storm_multiplier: f64,
+    /// Détail du multiplicateur global (hors tempête) : sources actives
+    /// (facteur ≠ 1), avec leur nom.
+    pub production_sources: Vec<(&'static str, f64)>,
+    /// Produit des sources (hors tempête).
+    pub permanent_multiplier: f64,
     /// Big Crunch déclenchés (matière noire).
     pub crunches: u32,
     /// Big Crunch possible maintenant.

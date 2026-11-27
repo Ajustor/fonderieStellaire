@@ -534,6 +534,15 @@ impl GameService {
         });
         snap.comet_kind = st.comet.kind;
         snap.storm_multiplier = st.comet.boost();
+        let parts = economy::production_breakdown(c, st);
+        snap.permanent_multiplier = parts.iter().map(|(_, f)| f).product();
+        snap.production_sources.clear();
+        snap.production_sources.extend(
+            parts
+                .iter()
+                .filter(|(_, f)| (f - 1.0).abs() > 1e-9)
+                .map(|(p, f)| (p.label(), *f)),
+        );
         snap.crunches = st.crunches;
         snap.crunch_available = st.can_big_crunch();
         snap.crunch_needed = domain::catalog::balance::CRUNCH_SUPERNOVAS;

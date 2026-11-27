@@ -751,3 +751,21 @@ fn a_new_apk_is_announced_and_opens_its_page() {
         Some(presentation::mobile::Request::OpenUpdate)
     );
 }
+
+#[test]
+fn progress_tab_details_every_production_multiplier() {
+    let mut save = advanced_save();
+    save.crunches = 2;
+    let mut app = mobile_app(Some(save));
+    app.mobile_select_tab(Tab::More);
+    settle(&mut app, 48, 90);
+    let progress = find(&app, |h| *h == Hit::SubTab(1)).expect("sous-onglet Progrès");
+    tap(&mut app, progress);
+    let screen = settle(&mut app, 48, 90);
+    println!("{screen}");
+    assert!(screen.contains("PRODUCTION"), "{screen}");
+    assert!(
+        screen.contains("×3") && screen.contains("Matière noire (Big Crunch)"),
+        "{screen}"
+    );
+}

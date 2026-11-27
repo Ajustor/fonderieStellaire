@@ -1,5 +1,14 @@
 # Journal des versions
 
+## v0.18.2 — Détail de la production
+
+### Nouveautés
+- **Détail de la production** dans l'écran `I` (ou *Plus › Progrès* sur
+  Android) : chaque multiplicateur global avec sa valeur (matière noire,
+  fragments, particules, Laboratoire, Constellations, Défis, succès…), la
+  tempête solaire en cours et le total. Le clic en profite aussi : il rapporte
+  une part de la production par seconde.
+
 ## v0.18.1 — Nouvelle partie synchronisée
 
 ### Nouveautés

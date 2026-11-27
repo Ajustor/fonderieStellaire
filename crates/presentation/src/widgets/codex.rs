@@ -18,6 +18,48 @@ use crate::theme;
 use crate::ui::Popup;
 
 /// Lignes du contenu (texte, style), recalculées à l'ouverture.
+/// Détail de la production : chaque multiplicateur global et le total.
+pub fn production_lines(ctx: &Ctx) -> Vec<(String, Style)> {
+    let snap = ctx.snap;
+    let mut out = vec![(
+        format!(
+            "PRODUCTION  ×{} au total",
+            fmt::short(snap.permanent_multiplier * snap.storm_multiplier)
+        ),
+        theme::bold(theme::GOLD),
+    )];
+    for (name, factor) in &snap.production_sources {
+        out.push((
+            format!(" ×{:<8} {name}", fmt::short(*factor)),
+            theme::fg(if *factor < 1.0 {
+                theme::ORANGE
+            } else {
+                theme::TEXT
+            }),
+        ));
+    }
+    if snap.storm_multiplier > 1.0 {
+        out.push((
+            format!(
+                " ×{:<8} Tempête solaire (temporaire)",
+                fmt::short(snap.storm_multiplier)
+            ),
+            theme::fg(theme::CYAN),
+        ));
+    }
+    if snap.production_sources.is_empty() && snap.storm_multiplier <= 1.0 {
+        out.push((
+            " Aucun bonus pour l'instant.".into(),
+            theme::fg(theme::GREY),
+        ));
+    }
+    out.push((
+        " Hors améliorations propres à chaque générateur et paliers (×2 à 25, 50, 100…).".into(),
+        theme::fg(theme::MUTED),
+    ));
+    out
+}
+
 pub fn lines(ctx: &Ctx) -> Vec<(String, Style)> {
     let snap = ctx.snap;
     let mut out: Vec<(String, Style)> = Vec::new();
@@ -82,6 +124,9 @@ pub fn lines(ctx: &Ctx) -> Vec<(String, Style)> {
     out.push((String::new(), Style::default()));
 
     out.extend(stats_lines(ctx));
+    out.push((String::new(), Style::default()));
+
+    out.extend(production_lines(ctx));
     out.push((String::new(), Style::default()));
 
     let unlocked = snap.achievements_unlocked;
