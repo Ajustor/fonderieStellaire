@@ -352,9 +352,29 @@ impl GameService {
                 out.push(GameEvent::ReducedEffectsChanged(self.reduced_effects));
             }
         }
+        self.clear_chart_after_prestige(&ev);
         out.extend(ev.drain(..).map(GameEvent::Domain));
         self.scratch = ev;
         out
+    }
+
+    /// Après une Supernova, un Big Crunch ou un Big Bang (à la main ou par un
+    /// automatisme), la production repart de presque rien : le graphique
+    /// repart de zéro au lieu de tasser la nouvelle courbe sous l'ancienne.
+    fn clear_chart_after_prestige(&mut self, ev: &[DomainEvent]) {
+        let prestige = ev.iter().any(|e| {
+            matches!(
+                e,
+                DomainEvent::Supernova { .. }
+                    | DomainEvent::BigCrunch { .. }
+                    | DomainEvent::BigBang { .. }
+            )
+        });
+        if prestige {
+            self.history.clear();
+            self.history_mix.clear();
+            self.sample_timer = 0.0;
+        }
     }
 
     /// Fait avancer le jeu de `dt` secondes (temps réel).
@@ -377,6 +397,7 @@ impl GameService {
                 out.push(self.end_daily());
             }
         }
+        self.clear_chart_after_prestige(&ev);
         out.extend(ev.drain(..).map(GameEvent::Domain));
         self.scratch = ev;
 
@@ -957,6 +978,33 @@ mod tests {
         );
         let h = snap.history.len();
         assert!((60..=61).contains(&h), "{h}");
+    }
+
+    /// Après un prestige, la production repart de presque rien : le graphique
+    /// repart de zéro au lieu d'écraser la nouvelle courbe sous l'ancienne.
+    #[test]
+    fn a_prestige_clears_the_production_chart() {
+        let (repo, clock) = fixture();
+        let mut s = service(&repo, &clock, vec![0.5]);
+        s.load().unwrap();
+        let mut data = SaveData::from_state(s.state(), s.catalog(), 0, false);
+        data.total_run = 4e8;
+        data.total_all = 4e8;
+        data.owned[0] = 50;
+        *repo.slot.borrow_mut() = Some(data);
+        s.load().unwrap();
+        for _ in 0..30 {
+            s.tick(0.1);
+        }
+        s.tick(5.0);
+        assert!(!s.snapshot().history.is_empty());
+        let ev = s.handle(Command::Supernova);
+        assert!(ev
+            .iter()
+            .any(|e| matches!(e, GameEvent::Domain(DomainEvent::Supernova { .. }))));
+        let snap = s.snapshot();
+        assert!(snap.history.is_empty(), "{:?}", snap.history);
+        assert!(snap.history_mix.is_empty());
     }
 
     #[test]

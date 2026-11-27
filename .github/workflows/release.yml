@@ -115,8 +115,9 @@ jobs:
           merge-multiple: true
       - name: Notes de version (section du CHANGELOG)
         run: |
+          # Titre « ## v0.17.1 » ou « ## v0.17.1 — sous-titre ».
           awk -v tag="## ${GITHUB_REF_NAME}" '
-            $0 == tag { keep = 1; next }
+            $0 == tag || index($0, tag " ") == 1 { keep = 1; next }
             /^## / && keep { exit }
             keep { print }
           ' CHANGELOG.md > notes.md

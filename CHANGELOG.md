@@ -1,5 +1,16 @@
 # Journal des versions
 
+## v0.17.2 — Mise à jour automatique réparée
+
+### Corrections
+- **Mise à jour automatique (ordinateur)** : une nouvelle version n'est plus
+  annoncée « à télécharger sur GitHub » pendant les minutes où ses binaires
+  sont encore en cours de publication ; le jeu réessaie au lancement suivant.
+  La version Android n'est plus publiée avant celle des ordinateurs.
+- **Graphique de production** : il repart de zéro après chaque Supernova,
+  Big Crunch et Big Bang, au lieu de garder la courbe du cycle précédent.
+- Les notes de chaque version sur GitHub reprennent enfin ce journal.
+
 ## v0.17.1 — Android : pages mémoire de 16 Ko
 
 ### Corrections

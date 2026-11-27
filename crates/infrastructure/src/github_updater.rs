@@ -80,6 +80,23 @@ pub fn parse_release(json: &str, target: Option<&str>) -> Result<ReleaseInfo, Up
     })
 }
 
+/// Une release sans le binaire d'une plateforme pourtant publiée est en cours
+/// de publication (les binaires arrivent quelques minutes après la création de
+/// la release) : erreur passagère, la vérification sera refaite au prochain
+/// lancement. Sans plateforme connue, la release est rendue telle quelle.
+pub fn require_binary(
+    release: ReleaseInfo,
+    target: Option<&str>,
+) -> Result<ReleaseInfo, UpdateError> {
+    if target.is_some() && release.binary_url.is_none() {
+        return Err(err(format!(
+            "version {} en cours de publication : nouvel essai au prochain lancement",
+            release.version
+        )));
+    }
+    Ok(release)
+}
+
 /// Vérifie `bytes` contre un fichier `.sha256` (« <hex>  <nom> » ou « <hex> »).
 pub fn verify_sha256(bytes: &[u8], checksum_file: &str) -> Result<(), UpdateError> {
     let expected = checksum_file
@@ -196,7 +213,8 @@ impl UpdateProvider for GitHubUpdater {
             .get(&url)?
             .into_string()
             .map_err(|e| err(format!("réponse illisible : {e}")))?;
-        parse_release(&body, current_target())
+        let target = current_target();
+        require_binary(parse_release(&body, target)?, target)
     }
 
     fn install_blocker(&self, release: &ReleaseInfo) -> Option<String> {
@@ -276,6 +294,31 @@ mod tests {
         assert_eq!(r.binary_url, None);
         assert!(parse_release("{}", None).is_err());
         assert!(parse_release("pas du json", None).is_err());
+    }
+
+    /// v0.17.1 : la CI Android a publié la release avec seule l'APK, avant les
+    /// binaires des ordinateurs. Une telle release est « en cours de
+    /// publication » : on réessaiera, sans proposer de téléchargement manuel.
+    #[test]
+    fn a_release_without_our_binary_yet_is_not_ready() {
+        let apk_only = r#"{
+            "tag_name": "v0.17.1",
+            "html_url": "https://github.com/o/r/releases/tag/v0.17.1",
+            "assets": [
+                {"name": "fonderie-stellaire.apk", "browser_download_url": "https://dl/apk"},
+                {"name": "fonderie-stellaire.apk.sha256", "browser_download_url": "https://dl/apk.sha256"}
+            ]
+        }"#;
+        let target = Some("x86_64-pc-windows-msvc");
+        let r = parse_release(apk_only, target).unwrap();
+        let e = require_binary(r, target).unwrap_err();
+        assert!(e.0.contains("en cours de publication"), "{}", e.0);
+        // Binaire présent : rien ne change.
+        let r = parse_release(JSON, target).unwrap();
+        assert_eq!(require_binary(r.clone(), target), Ok(r));
+        // Plateforme sans binaire publié : la page reste proposée.
+        let r = parse_release(apk_only, None).unwrap();
+        assert_eq!(require_binary(r.clone(), None), Ok(r));
     }
 
     #[test]
