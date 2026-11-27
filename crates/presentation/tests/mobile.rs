@@ -332,6 +332,29 @@ fn challenges_launch_after_confirmation() {
 }
 
 #[test]
+fn confirm_sheet_rises_inside_the_screen() {
+    // Chaque image de la montée de la fiche : le texte ne déborde jamais
+    // sous l'écran (crash au toucher de « Lancer » sur un Défi).
+    for h in [30, 38, 46] {
+        let mut save = advanced_save();
+        save.supernovas = 60;
+        let mut app = mobile_app(Some(save));
+        app.mobile_open(Page::Challenges);
+        settle(&mut app, 44, h);
+        let Some(ask) = find(&app, |x| matches!(x, Hit::Ask(Confirm::Challenge(_)))) else {
+            panic!("aucun Défi lançable");
+        };
+        tap(&mut app, ask);
+        for _ in 0..60 {
+            let t = app.time() + 0.004;
+            app.set_time(t);
+            render(&mut app, 44, h);
+        }
+        assert!(find(&app, |x| *x == Hit::Slider).is_some(), "curseur");
+    }
+}
+
+#[test]
 fn mega_and_map_pages_take_touches() {
     let mut app = mobile_app(Some(advanced_save()));
     app.mobile_open(Page::Mega);
