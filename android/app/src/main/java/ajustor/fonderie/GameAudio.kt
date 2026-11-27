@@ -6,14 +6,14 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
 import android.os.Process
-import android.os.SystemClock
 import android.util.Log
 import uniffi.fonderie.Game
 
 /**
  * Sortie des sons du jeu : un fil qui tire le PCM mélangé par Rust
  * (`Game.audioFill`) et l'écrit dans un AudioTrack en faible latence.
- * Arrêtée en arrière-plan ; muette en mode silencieux ou vibreur.
+ * Arrêtée en arrière-plan. Comme dans les autres jeux, le volume est celui
+ * du multimédia : le mode sonnerie (vibreur, silencieux) n'y change rien.
  */
 class GameAudio(context: Context, private val game: Game) {
     private val audioManager = context.getSystemService(AudioManager::class.java)
@@ -70,16 +70,9 @@ class GameAudio(context: Context, private val game: Game) {
             running = false
             return
         }
-        var lastRingerCheck = 0L
         try {
             track.play()
             while (running) {
-                // Mode silencieux ou vibreur : le jeu se tait.
-                val now = SystemClock.elapsedRealtime()
-                if (now - lastRingerCheck > RINGER_CHECK_MS) {
-                    lastRingerCheck = now
-                    game.setAudioMuted(audioManager.ringerMode != AudioManager.RINGER_MODE_NORMAL)
-                }
                 val pcm = game.audioFill(burst.toUInt())
                 // Écriture bloquante : elle cadence la boucle sur la sortie.
                 if (track.write(pcm, 0, pcm.size) < 0) break
@@ -94,6 +87,5 @@ class GameAudio(context: Context, private val game: Game) {
 
     companion object {
         private const val TAG = "FonderieAudio"
-        private const val RINGER_CHECK_MS = 500L
     }
 }
