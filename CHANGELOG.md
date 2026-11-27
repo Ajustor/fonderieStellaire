@@ -1,5 +1,20 @@
 # Journal des versions
 
+## v0.20.0 — Sons du jeu, APK allégé
+
+### Nouveautés
+- **Sons**, générés par le jeu (aucun fichier audio) : « tic » de récolte (plus
+  aigu en récolte continue), « pop » d'achat et mini-arpège pour un lot, accord
+  égrené aux paliers et succès, glissando de comète, fanfare de Défi réussi, et
+  une Supernova qui gonfle, éclate puis s'illumine au rythme de son animation.
+  Options « Sons » et « Volume des sons ». Sur Android, silence en mode
+  silencieux ou vibreur et en arrière-plan.
+
+### Android
+- **APK bien plus léger** : 16 Mo → moins de 5 Mo (code inutilisé retiré,
+  bibliothèque du jeu optimisée pour la taille, APK pour les téléphones arm64,
+  polices réduites aux caractères du jeu).
+
 ## v0.19.5 — Automate fidèle au mode d'achat, vibrations tactiles
 
 ### Nouveautés
