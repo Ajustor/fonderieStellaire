@@ -212,7 +212,7 @@ fn render_detail(
     );
     let rows = (desc_h - 1) as usize;
     // Sans le focus, l'encart est un aperçu : le panneau s'agrandit dès qu'on y
-    // entre ([Tab]) et montre alors tout le texte.
+    // entre ([→]) et montre alors tout le texte.
     if focused && lines.len() > rows {
         let lost: Vec<&str> = lines[rows..].iter().map(|(l, _)| l.as_str()).collect();
         draw::audit::record(&lost.join(" "), 0);

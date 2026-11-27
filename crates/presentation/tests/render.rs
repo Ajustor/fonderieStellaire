@@ -1265,25 +1265,96 @@ fn help_bar_only_shows_what_is_possible_now() {
     let text = render(&mut fresh, 120, 30);
     let bar = text.lines().last().unwrap().to_string();
     println!("{bar}");
-    assert!(bar.contains("[Espace] Récolter") && bar.contains("[R] Options"));
+    assert!(bar.contains("[Espace] Récolter") && bar.contains("[Échap] Menu"));
+    assert!(bar.contains("[?] Aide"), "{bar}");
     for absent in [
-        "[P]", "[U]", "[E]", "[L]", "[X]", "[H]", "[V]", "[G]", "[S]", "[F]",
+        "[P]", "[K]", "[E]", "[L]", "[X]", "[R]", "[V]", "[G]", "[S]", "[F]",
     ] {
         assert!(
             !bar.contains(absent),
             "{absent} n'a rien à faire là : {bar}"
         );
     }
-    // Partie avancée : la Supernova rapporte, l'Atelier est ouvert.
+    // Partie avancée : la Supernova rapporte, plusieurs écrans (Tab).
     let mut app = game_app();
     let text = render(&mut app, 120, 30);
     let bar = text.lines().last().unwrap().to_string();
     println!("{bar}");
     assert!(
-        bar.contains("[P] Nova") && bar.contains("[E] Atelier"),
+        bar.contains("[P] Nova") && bar.contains("[Tab] Écrans"),
         "{bar}"
     );
-    assert!(!bar.contains("[U]") && !bar.contains("[X]"));
+    assert!(!bar.contains("[K]") && !bar.contains("[X]"));
+    // La barre d'onglets donne les écrans et leur lettre.
+    assert!(text.contains("Atelier E"), "{text}");
+}
+
+#[test]
+fn tab_menu_and_help_find_every_screen() {
+    let mut app = game_app();
+    render(&mut app, 120, 30);
+    // Tab : écran suivant de la barre, puis retour à la fonderie.
+    app.on_intent(Intent::NextScreen);
+    app.update(0.033);
+    app.set_time(app.time() + 0.5);
+    let text = render(&mut app, 120, 30);
+    assert!(
+        text.contains("ATELIER"),
+        "Tab ouvre l'Atelier :
+{text}"
+    );
+    let bar = text.lines().last().unwrap().to_string();
+    assert!(
+        bar.contains("[Échap] Fermer"),
+        "aide de l'écran ouvert : {bar}"
+    );
+    app.on_intent(Intent::PrevScreen);
+    app.update(0.033);
+    let text = render(&mut app, 120, 30);
+    assert!(
+        !text.contains("ATELIER"),
+        "Maj+Tab revient :
+{text}"
+    );
+
+    // Échap : menu central ; sa lettre ouvre l'écran.
+    app.on_intent(Intent::Escape);
+    app.update(0.033);
+    app.set_time(app.time() + 0.5);
+    let text = render(&mut app, 120, 30);
+    println!("{text}");
+    assert!(text.contains("MENU") && text.contains("Quitter"), "{text}");
+    assert!(!app.should_quit(), "Échap n'quitte plus");
+    app.on_intent(Intent::Info);
+    app.update(0.033);
+    app.set_time(app.time() + 0.5);
+    let text = render(&mut app, 120, 30);
+    assert!(
+        !text.contains(" MENU "),
+        "le menu se ferme :
+{text}"
+    );
+
+    // ? : aide, sans rien de verrouillé.
+    app.on_intent(Intent::Escape);
+    app.on_intent(Intent::Help);
+    app.update(0.033);
+    app.set_time(app.time() + 0.5);
+    let text = render(&mut app, 120, 40);
+    println!("{text}");
+    assert!(
+        text.contains("AIDE") && text.contains("NAVIGATION"),
+        "{text}"
+    );
+    assert!(!text.contains("Mégastructures"), "{text}");
+    app.on_intent(Intent::Escape);
+    app.set_time(app.time() + 0.5);
+    let text = render(&mut app, 120, 40);
+    assert!(
+        !text.contains("NAVIGATION"),
+        "Échap ferme l'aide :
+{text}"
+    );
 }
 
 #[test]
@@ -1482,4 +1553,74 @@ fn v0_16_cosmos_awakening_finale() {
     println!("{text}");
     assert!(text.contains("FIN DE L'ACTE IV"), "{text}");
     assert!(text.contains("Conçu et forgé par Ajustor"));
+}
+
+/// Relais dont la partie est plus jouée que celle de l'appareil.
+struct CloudAhead(SaveData);
+
+impl application::SyncBackend for CloudAhead {
+    fn link_code(&self) -> Option<String> {
+        Some("ABCDE-FGHJK-MNPQR-STVWX-YZ012".into())
+    }
+    fn create_link(&mut self) -> Result<String, application::SyncError> {
+        Ok("ABCDE-FGHJK-MNPQR-STVWX-YZ012".into())
+    }
+    fn join_link(&mut self, code: &str) -> Result<String, application::SyncError> {
+        Ok(code.into())
+    }
+    fn unlink(&mut self) -> Result<(), application::SyncError> {
+        Ok(())
+    }
+    fn synced_rev(&self) -> u64 {
+        0
+    }
+    fn set_synced_rev(&mut self, _: u64) -> Result<(), application::SyncError> {
+        Ok(())
+    }
+    fn pull(&self) -> Result<Option<application::RemoteSave>, application::SyncError> {
+        Ok(Some(application::RemoteSave {
+            rev: 7,
+            data: self.0.clone(),
+        }))
+    }
+    fn push(
+        &self,
+        _: &SaveData,
+        _: u64,
+    ) -> Result<application::PushOutcome, application::SyncError> {
+        Ok(application::PushOutcome::Conflict)
+    }
+}
+
+#[test]
+fn the_absence_card_follows_the_save_taken_from_the_cloud() {
+    // Cet appareil n'a pas servi depuis 3 jours…
+    let mut local = advanced_save();
+    local.last_saved -= 3 * 86_400;
+    let mut app = app_with(Some(local));
+    app.set_time(100.0);
+    app.update(0.033);
+    let text = render(&mut app, 120, 40);
+    assert!(text.contains("PENDANT TON ABSENCE (72h"), "{text}");
+
+    // … mais la partie du cloud a été jouée il y a 30 secondes.
+    let mut cloud = advanced_save();
+    cloud.play_time = 9_000.0;
+    cloud.last_saved -= 30;
+    app.set_sync(application::SyncService::spawn(Box::new(CloudAhead(cloud))));
+    for _ in 0..10 {
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        app.update(0.033);
+    }
+    assert!(
+        app.snapshot().play_time >= 9_000.0,
+        "partie du cloud reprise"
+    );
+    let text = render(&mut app, 120, 40);
+    println!("{text}");
+    // La carte parle de l'absence de la partie reprise, pas de l'appareil.
+    assert!(
+        text.contains("PENDANT TON ABSENCE (30s)") && !text.contains("(72h"),
+        "{text}"
+    );
 }

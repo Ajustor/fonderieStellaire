@@ -1,4 +1,4 @@
-//! Reliques (touche H, Acte III) : la collection par ensemble, les
+//! Reliques (touche R, Acte III) : la collection par ensemble, les
 //! emplacements, les bonus d'ensemble ; et la carte qui se retourne quand une
 //! relique est rapportée d'expédition.
 
@@ -245,7 +245,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, selected: 
         draw::text(buf, inner.x + 1, y, &l, st, right);
         y += 1;
     }
-    let long = "[←→↑↓] choisir   [Entrée] équiper / ranger   [H] / [Échap] fermer";
+    let long = "[←→↑↓] choisir   [Entrée] équiper / ranger   [R] / [Échap] fermer";
     let footer = if long.chars().count() <= inner.width as usize {
         long
     } else {

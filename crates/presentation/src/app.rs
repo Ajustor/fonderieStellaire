@@ -357,6 +357,10 @@ impl App {
         let events = self.service.load().map_err(|e| e.to_string())?;
         self.service.fill_snapshot(&mut self.snap);
         let mut report = self.absence_report(&events);
+        // La carte de l'écran titre décrit l'absence de la partie relue (celle
+        // du cloud, après une synchro), pas celle de l'appareil au lancement.
+        self.title.offline = None;
+        self.title.report = report.clone();
         // La carte commence par la poussière produite pendant l'absence.
         for ev in &events {
             if let GameEvent::Domain(DomainEvent::OfflineGains { seconds, amount }) = ev {
@@ -988,6 +992,21 @@ impl App {
             }
             return;
         }
+        // Navigation (terminal) : aide, menu, écran suivant / précédent.
+        if self.ui.help.is_some() {
+            self.on_help_intent(intent);
+            return;
+        }
+        if self.ui.menu.is_some() {
+            self.on_menu_intent(intent);
+            return;
+        }
+        match intent {
+            Intent::NextScreen => return self.cycle_screen(1),
+            Intent::PrevScreen => return self.cycle_screen(-1),
+            Intent::Help if !self.nav_blocked() => return self.open_help(),
+            _ => {}
+        }
         if let Some(mut popup) = self.ui.event {
             let count = self
                 .snap
@@ -1578,8 +1597,20 @@ impl App {
             Intent::JournalDown => {
                 self.ui.journal_scroll = self.ui.journal_scroll.saturating_sub(2);
             }
-            Intent::Quit | Intent::Escape => self.quit = true,
-            Intent::Yes | Intent::No | Intent::Other | Intent::ToggleDebug => {}
+            Intent::Quit => self.quit = true,
+            // Échap dans la fonderie : menu central (le mobile a ses onglets
+            // et son bouton retour).
+            Intent::Escape if self.mobile.is_none() => self.open_menu(),
+            Intent::Escape => self.quit = true,
+            // `O` dans la fonderie : Options (« Oui » dans une confirmation).
+            Intent::Yes if self.mobile.is_none() => self.on_intent(Intent::Options),
+            Intent::Yes
+            | Intent::No
+            | Intent::Other
+            | Intent::ToggleDebug
+            | Intent::NextScreen
+            | Intent::PrevScreen
+            | Intent::Help => {}
         }
     }
 
@@ -3065,13 +3096,13 @@ impl App {
             DomainEvent::MegastructuresOpened => {
                 self.log(
                     Kind::Achievement,
-                    "◈ Acte IV : la matière exotique afflue. Bâtis des mégastructures [W] !",
+                    "◈ Acte IV : la matière exotique afflue. Bâtis des mégastructures [B] !",
                 );
                 self.toasts.push(
                     now,
                     theme::GOLD,
                     "◈ ACTE IV : LES ARCHITECTES",
-                    "Les Mégastructures s'ouvrent [W]",
+                    "Les Mégastructures s'ouvrent [B]",
                 );
                 self.vis.fireworks(now + 8.0);
             }
@@ -3326,6 +3357,8 @@ impl App {
         let sync_view = self.sync_view();
         let leaderboard_view = self.leaderboard_view();
         let legacy = self.legacy_open();
+        let nav_screen = self.current_screen();
+        let next_screen = crate::nav::neighbour(&crate::nav::available(&self.snap), nav_screen, 1);
         let App {
             service,
             snap,
@@ -3401,6 +3434,8 @@ impl App {
                             journal,
                             toasts,
                             spark_scratch,
+                            screen: nav_screen,
+                            next_screen,
                         },
                     );
                     if let Some(m) = mobile.as_mut() {

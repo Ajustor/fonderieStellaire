@@ -1,4 +1,4 @@
-//! Mégastructures (touche W, Acte IV) : la grille, ses liaisons qui brillent,
+//! Mégastructures (touche B, Acte IV) : la grille, ses liaisons qui brillent,
 //! la palette des structures et le détail de la case visée.
 
 use std::f64::consts::TAU;
@@ -372,7 +372,7 @@ pub fn render(
     let long = if snap.awakening_ready {
         "[←→↑↓] case   [1-6] bâtir   [D] démolir   [Entrée sur le Cœur] Éveil   [Échap] fermer"
     } else {
-        "[←→↑↓] case   [1-6] bâtir   [D] démolir   [W] / [Échap] fermer"
+        "[←→↑↓] case   [1-6] bâtir   [D] démolir   [B] / [Échap] fermer"
     };
     let footer = if long.chars().count() <= inner.width as usize {
         long

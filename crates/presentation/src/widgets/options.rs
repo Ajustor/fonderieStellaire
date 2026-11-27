@@ -1,4 +1,4 @@
-//! Options (touche R) : images par seconde, effets réduits, emplacement de la
+//! Options (touche O dans la fonderie) : images par seconde, effets réduits, emplacement de la
 //! sauvegarde, et « Recommencer une nouvelle partie » (double confirmation).
 //! Plus l'animation d'effacement qui suit la confirmation.
 
@@ -191,7 +191,7 @@ pub fn render(
         draw::text(buf, inner.x + 1, y, l, theme::fg(theme::GREY), right);
         y += 1;
     }
-    let long = "[↑↓] choisir   [Entrée] changer   [R] / [Échap] fermer";
+    let long = "[↑↓] choisir   [Entrée] changer   [Échap] fermer";
     let footer = if long.chars().count() <= inner.width as usize {
         long
     } else {

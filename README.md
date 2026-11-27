@@ -153,33 +153,43 @@ cargo run --release -- --reset
 | Touche | Action |
 |---|---|
 | `Espace` | Récolter à la main (à maintenir une fois « Récolte continue » achetée) |
-| `↑` `↓` / `k` `j` | Déplacer la sélection |
-| `Tab` / `←` `→` | Changer de panneau (Générateurs ↔ Améliorations) |
-| `Entrée` / `B` | Acheter l'élément sélectionné |
+| `↑` `↓` | Déplacer la sélection |
+| `←` `→` | Changer de panneau (Générateurs ↔ Améliorations) |
+| `Entrée` | Acheter l'élément sélectionné |
 | `1` – `9` | Achat rapide du générateur n° N |
 | `M` | Mode d'achat ×1 / ×10 / ×25 / PALIER (jusqu'au prochain bonus) / MAX |
+| `A` | Acheter toutes les améliorations abordables |
 | `C` | Capturer la comète qui passe |
+| `T` | Activer / arrêter l'automate (une fois acheté à l'Atelier) |
 | `P` | Supernova (confirmation `O` / `N` / `Échap`) |
+| `K` | Big Crunch (après 15 Supernovas) |
+| `Tab` / `Maj+Tab` | Écran suivant / précédent de la barre d'onglets |
+| `Échap` | Fermer l'écran ouvert ; dans la fonderie, **menu** de tous les écrans |
+| `?` / `F1` | **Aide** : toutes les touches que tu as découvertes |
 | `S` | Sauvegarder maintenant |
 | `F` | Effets complets / effets réduits |
-| `A` | Acheter toutes les améliorations abordables |
+| `PgUp` / `PgDn` | Remonter / redescendre dans le journal |
+| `F3` | Overlay de debug (FPS, particules, temps de rendu) |
+| `Q` | Sauvegarder et quitter |
+
+Les écrans s'ouvrent aussi par leur lettre, affichée dans la **barre
+d'onglets** (sous le titre) et dans le menu. N'y figurent que ceux que tu as
+débloqués :
+
+| Lettre | Écran |
+|---|---|
 | `E` | Atelier stellaire : bonus permanents payés en fragments |
 | `D` | Défis : un cycle avec contrainte, contre une récompense permanente |
-| `U` | Big Crunch (après 15 Supernovas) |
 | `L` | Laboratoire de matière noire (après 10 Big Crunch) |
 | `V` | Univers parallèles et leurs Clés (après 10 Big Crunch) |
 | `G` | Cosmogonie : Big Bang, forge primordiale, Grand Attracteur (après 10 Big Crunch) |
-| `X` | Carte stellaire : expéditions (Acte III, après l'éveil du Grand Attracteur) |
-| `H` | Reliques : collection, emplacements et ensembles (Acte III) |
+| `X` | Carte stellaire : expéditions (Acte III) |
+| `R` | Reliques : collection, emplacements et ensembles (Acte III) |
 | `Z` | Revenir à l'événement cosmique en attente (Acte III) |
-| `W` | Mégastructures : bâtir sur la grille (Acte IV) |
-| `Y` | Défi du jour : dix minutes dans un univers de poche (Acte IV) |
-| `R` | Options : couleurs (daltonien, contraste élevé), images par seconde, effets réduits, recommencer une partie |
-| `T` | Activer / arrêter l'automate (une fois acheté à l'Atelier) |
-| `I` | Infos : progression, succès et fonctionnement de chaque mécanique |
-| `PgUp` / `PgDn` | Remonter / redescendre dans le journal |
-| `F3` | Overlay de debug (FPS, particules, temps de rendu) |
-| `Q` / `Échap` | Sauvegarder et quitter |
+| `B` | Mégastructures : bâtir sur la grille (Acte IV) |
+| `J` | Défi du jour : dix minutes dans un univers de poche (Acte IV) |
+| `I` | Infos : progression, production, succès et fonctionnement de chaque mécanique |
+| `O` | Options : couleurs, images par seconde, effets réduits, synchronisation, classement, recommencer |
 
 Majuscules et minuscules sont acceptées.
 
@@ -211,7 +221,7 @@ Majuscules et minuscules sont acceptées.
 - **Défis** (`D`, dès la 1re Supernova) : rejoue un cycle avec une contrainte
   (sans clic, sans amélioration, 3 générateurs, sans comète, ou contre la
   montre) pour gagner une récompense permanente.
-- **Big Crunch** (`U`, après 15 Supernovas) : tout le niveau Supernova
+- **Big Crunch** (`K`, après 15 Supernovas) : tout le niveau Supernova
   (fragments, Atelier, Constellations, Défis) repart de zéro contre de la
   *matière noire* : production ×2, ×3, ×4… et +25 % de fragments par Crunch.
 - **Laboratoire** (`L`, après 10 Big Crunch) : la matière noire finance des
@@ -278,7 +288,7 @@ L'écriture est atomique (fichier `.tmp` puis renommage). La sauvegarde est
 Une sauvegarde corrompue ou modifiée est renommée en `save.json.bak` et une
 nouvelle partie démarre.
 
-- **Recommencer** : touche `R` (Options) → « Recommencer une nouvelle
+- **Recommencer** : touche `O` (Options) → « Recommencer une nouvelle
   partie », ou `fonderie-stellaire --reset` (l'ancienne passe en `.bak`).
 - **Changer d'ordinateur** : `fonderie-stellaire --export ma-partie.json`, puis
   sur l'autre machine `fonderie-stellaire --import ma-partie.json`.
@@ -288,7 +298,7 @@ nouvelle partie démarre.
 La même partie sur ton ordinateur et ton téléphone, **sans compte** : un code
 de lien suffit.
 
-1. Sur l'ordinateur : `R` (Options) → **Synchronisation** → `Entrée` pour créer
+1. Sur l'ordinateur : `O` (Options) → **Synchronisation** → `Entrée` pour créer
    un lien. Un **QR code** et un code de 25 caractères s'affichent.
 2. Sur le téléphone : onglet *Plus* → *Sauver* → **Synchroniser entre
    appareils** → *Scanner* (ou *Taper un code*).
@@ -320,7 +330,7 @@ sur chaque ligne.
 C'est **facultatif** : il faut une partie synchronisée et un **pseudo** (3 à 16
 caractères, unique).
 
-- Ordinateur : Options (`R`) → **Synchronisation** → `N` pour choisir le
+- Ordinateur : Options (`O`) → **Synchronisation** → `N` pour choisir le
   pseudo ; Options → **Classement** pour voir le top 20 (`←` / `→` : général
   ou du jour).
 - Android : *Plus* → *Sauver* : le classement en haut, *Choisir un pseudo*,

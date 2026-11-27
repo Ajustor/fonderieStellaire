@@ -7,6 +7,7 @@ use application::GameSnapshot;
 
 use crate::draw;
 use crate::fx::Rgb;
+use crate::nav::ScreenId;
 use crate::theme;
 
 struct Item {
@@ -19,12 +20,25 @@ struct Item {
 /// Touches utiles maintenant : seules les actions possibles sont proposées
 /// (la comète quand elle passe, la Supernova quand elle rapporte…). Les autres
 /// touches marchent toujours, elles ne sont simplement pas rappelées.
-fn items(snap: &GameSnapshot) -> Vec<Item> {
+fn items(snap: &GameSnapshot, open: Option<(ScreenId, ScreenId)>) -> Vec<Item> {
     let it = |key, label: &str, priority| Item {
         key,
         label: label.to_string(),
         priority,
     };
+    // Un écran est ouvert : comment en sortir ou passer au suivant.
+    if let Some((_, next)) = open.filter(|(c, _)| *c != ScreenId::Foundry) {
+        return vec![
+            Item {
+                key: "Tab",
+                label: format!("› {}", next.name()),
+                priority: 0,
+            },
+            it("Maj+Tab", "‹", 2),
+            it("Échap", "Fermer", 0),
+            it("?", "Aide", 1),
+        ];
+    }
     let mut v = vec![it(
         "Espace",
         if snap.hold_harvest {
@@ -45,7 +59,7 @@ fn items(snap: &GameSnapshot) -> Vec<Item> {
         v.push(it("P", "Nova", 2));
     }
     if snap.crunch_available {
-        v.push(it("U", "Crunch", 2));
+        v.push(it("K", "Crunch", 2));
     }
     if snap.upgrades.iter().any(|u| u.affordable) {
         v.push(it("A", "Tout", 3));
@@ -53,35 +67,17 @@ fn items(snap: &GameSnapshot) -> Vec<Item> {
     if snap.generators.iter().any(|g| g.owned > 0) {
         v.push(it("M", snap.buy_mode.label(), 6));
     }
-    v.push(it("Tab", "Panneau", 9));
-    if snap.supernovas > 0 || snap.fragments > 0.0 || snap.crunches > 0 {
-        v.push(it("E", "Atelier", 7));
-    }
-    if snap.challenges.iter().any(|c| c.unlocked) {
-        v.push(it("D", "Défis", 8));
-    }
-    if snap.lab_unlocked {
-        v.push(it("L", "Labo", 8));
-        v.push(it("G", "Cosmos", 8));
-    }
-    if snap.universes_unlocked {
-        v.push(it("V", "Univers", 9));
-    }
     if snap.daily.is_some() {
-        v.push(it("Y", "Défi en cours !", 0));
-    } else if snap.daily_unlocked {
-        v.push(it("Y", "Défi du jour", 6));
+        v.push(it("J", "Défi en cours !", 0));
     }
-    if snap.megastructures_unlocked {
-        v.push(it("W", "Méga", 6));
+    // Les écrans ont leur lettre dans la barre d'onglets : ici, comment s'y
+    // rendre.
+    if crate::nav::available(snap).len() > 1 {
+        v.push(it("Tab", "Écrans", 5));
     }
-    if snap.starmap_unlocked {
-        v.push(it("X", "Carte", 7));
-        v.push(it("H", "Reliques", 8));
-    }
-    v.push(it("I", "Infos", 5));
-    v.push(it("R", "Options", 4));
-    v.push(it("Q", "Quitter", 4));
+    v.push(it("Échap", "Menu", 4));
+    v.push(it("?", "Aide", 4));
+    v.push(it("Q", "Quitter", 6));
     v
 }
 
@@ -98,6 +94,7 @@ pub fn render(
     buf: &mut Buffer,
     area: Rect,
     snap: &GameSnapshot,
+    open: Option<(ScreenId, ScreenId)>,
     seen: &mut Vec<(&'static str, f64)>,
     mode_flash: f64,
     now: f64,
@@ -105,7 +102,7 @@ pub fn render(
     if area.is_empty() {
         return;
     }
-    let all = items(snap);
+    let all = items(snap, open);
     // Choisit les éléments par priorité jusqu'à remplir la largeur.
     let mut order: Vec<usize> = (0..all.len()).collect();
     order.sort_by_key(|&i| all[i].priority);

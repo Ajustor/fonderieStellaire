@@ -362,7 +362,7 @@ pub(crate) fn detail_lines(
     } else {
         (
             format!(
-                "Il faut {} ✶ de matière noire libre : déclenche des Big Crunch [U].",
+                "Il faut {} ✶ de matière noire libre : déclenche des Big Crunch [K].",
                 def.cost
             ),
             theme::GREY,

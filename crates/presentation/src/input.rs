@@ -15,6 +15,11 @@ pub enum Intent {
     Down,
     NextPanel,
     PrevPanel,
+    /// `Tab` / `Maj+Tab` : écran suivant / précédent de la barre d'onglets.
+    NextScreen,
+    PrevScreen,
+    /// `?` ou `F1` : panneau d'aide (toutes les touches découvertes).
+    Help,
     Buy,
     /// Achat rapide du générateur n° N (0 = premier).
     QuickBuy(usize),
@@ -30,7 +35,7 @@ pub enum Intent {
     Shop,
     /// `D` : Défis.
     Challenges,
-    /// `U` : Big Crunch (confirmation).
+    /// `K` : Big Crunch (confirmation).
     BigCrunch,
     /// `L` : Laboratoire de matière noire.
     Lab,
@@ -38,17 +43,17 @@ pub enum Intent {
     Universes,
     /// `G` : Cosmogonie (Big Bang, forge primordiale, Grand Attracteur).
     Cosmos,
-    /// `R` : Options (réglages, recommencer une partie).
+    /// `O` (dans la fonderie) : Options (réglages, recommencer une partie).
     Options,
     /// `X` : Carte stellaire (Acte III).
     StarMap,
-    /// `H` : Reliques (Acte III).
+    /// `R` : Reliques (Acte III).
     Relics,
     /// `Z` : revenir à l'événement cosmique en attente.
     Event,
-    /// `W` : Mégastructures (Acte IV).
+    /// `B` : Mégastructures (Acte IV).
     Megastructures,
-    /// `Y` : Défi du jour (Acte IV).
+    /// `J` : Défi du jour (Acte IV).
     Daily,
     /// `T` : activer / arrêter l'automate.
     ToggleAuto,
@@ -62,7 +67,7 @@ pub enum Intent {
     Yes,
     /// `N` dans une popup.
     No,
-    /// `Échap` : ferme une popup, sinon quitte.
+    /// `Échap` : ferme l'écran ouvert, sinon ouvre le menu.
     Escape,
     /// Toute autre touche (sert à « appuie sur une touche »).
     Other,
@@ -169,17 +174,18 @@ pub fn map_key(key: &KeyEvent) -> Option<Intent> {
         KeyCode::Char(' ') => Intent::Harvest,
         KeyCode::Up => Intent::Up,
         KeyCode::Down => Intent::Down,
-        KeyCode::Tab | KeyCode::Right => Intent::NextPanel,
-        KeyCode::BackTab | KeyCode::Left => Intent::PrevPanel,
+        KeyCode::Right => Intent::NextPanel,
+        KeyCode::Left => Intent::PrevPanel,
+        KeyCode::Tab => Intent::NextScreen,
+        KeyCode::BackTab => Intent::PrevScreen,
+        KeyCode::F(1) => Intent::Help,
         KeyCode::Enter => Intent::Buy,
         KeyCode::Esc => Intent::Escape,
         KeyCode::F(3) => Intent::ToggleDebug,
         KeyCode::PageUp => Intent::JournalUp,
         KeyCode::PageDown => Intent::JournalDown,
+        KeyCode::Char('?') => Intent::Help,
         KeyCode::Char(c) => match c.to_ascii_lowercase() {
-            'k' => Intent::Up,
-            'j' => Intent::Down,
-            'b' => Intent::Buy,
             'm' => Intent::CycleMode,
             'c' => Intent::CatchComet,
             'p' => Intent::Supernova,
@@ -190,18 +196,18 @@ pub fn map_key(key: &KeyEvent) -> Option<Intent> {
             'a' => Intent::BuyAll,
             'e' => Intent::Shop,
             'd' => Intent::Challenges,
-            'u' => Intent::BigCrunch,
+            'k' => Intent::BigCrunch,
             'l' => Intent::Lab,
             'v' => Intent::Universes,
             'g' => Intent::Cosmos,
-            'r' => Intent::Options,
             'x' => Intent::StarMap,
-            'h' => Intent::Relics,
+            'r' => Intent::Relics,
             'z' => Intent::Event,
-            'w' => Intent::Megastructures,
+            'b' => Intent::Megastructures,
             't' => Intent::ToggleAuto,
+            // « Oui » dans une confirmation, Options dans la fonderie.
             'o' => Intent::Yes,
-            'y' => Intent::Daily,
+            'j' => Intent::Daily,
             'n' => Intent::No,
             d @ '1'..='9' => Intent::QuickBuy((d as u8 - b'1') as usize),
             _ => Intent::Other,

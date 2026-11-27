@@ -33,6 +33,9 @@ pub struct GameView<'a> {
     pub journal: &'a Journal,
     pub toasts: &'a Toasts,
     pub spark_scratch: &'a mut Vec<u64>,
+    /// Écran de la barre ouvert, et celui qu'ouvrirait `Tab`.
+    pub screen: crate::nav::ScreenId,
+    pub next_screen: crate::nav::ScreenId,
 }
 
 pub fn render(
@@ -55,6 +58,7 @@ pub fn render(
     ui.layout = layout;
 
     header::render(buf, layout.header, ctx, vis);
+    crate::widgets::nav::render_tabs(buf, layout.header, ctx.snap, view.screen);
     generators::render(buf, layout.generators, ctx, vis, ui);
     sky::render(buf, layout.sky, ctx, vis);
     upgrades::render(buf, layout.upgrades, ctx, vis, ui);
@@ -70,6 +74,7 @@ pub fn render(
         buf,
         layout.help,
         ctx.snap,
+        Some((view.screen, view.next_screen)),
         &mut vis.help_seen,
         vis.mode_flash,
         ctx.now,
@@ -172,6 +177,13 @@ pub fn render(
     // Les portails recouvrent tout l'écran.
     if let Some(portal) = ui.portal {
         portals::render(buf, area, ctx, &portal, &vis.stars);
+    }
+    // Menu central et aide, par-dessus tout.
+    if let Some(menu) = ui.menu {
+        crate::widgets::nav::render_menu(buf, area, ctx, &menu, ui.menu_sel);
+    }
+    if let Some(help) = ui.help {
+        crate::widgets::nav::render_help(buf, area, ctx, &help, &mut ui.help_scroll);
     }
 }
 

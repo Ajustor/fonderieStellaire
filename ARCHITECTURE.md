@@ -144,6 +144,8 @@ presentation/src/
 │                   Atelier), défilement du journal
 ├── visuals.rs      état des effets de l'écran de jeu
 ├── draw.rs         wrap / paragraph / fit / truncate (textes non coupés)
+├── nav.rs          navigation du terminal : écrans de la barre d'onglets
+│                   (`ScreenId`, débloqués seulement), `Tab`, menu, aide
 ├── leaderboard.rs  classement côté App : envoi de la fiche, pseudo (saisie
 │                   au clavier), fenêtre, réactions aux réponses du relais
 ├── cells.rs        Buffer → octets (grille de cellules pour Android)
@@ -153,7 +155,7 @@ presentation/src/
 │                   help_bar, toast, modal, codex (Infos), shop (Atelier,
 │                   Constellations), options, challenges, lab, portals,
 │                   cosmos (Cosmogonie), starmap, relics, event, ceremony,
-│                   mega, daily, sync, leaderboard
+│                   mega, daily, sync, leaderboard, nav (onglets, menu, aide)
 ├── mobile/         mode mobile (Android), jamais utilisé par le terminal
 │   ├── mod.rs      Tab, Page, Hit, Detail, Confirm, Tip, Request, MobileUi
 │   ├── screens.rs  onglets Fonderie / Usines / Améliorer / Cosmos / Plus,

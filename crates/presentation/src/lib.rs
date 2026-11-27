@@ -14,6 +14,7 @@ pub mod input;
 pub mod layout;
 pub mod leaderboard;
 pub mod mobile;
+pub mod nav;
 pub mod screens;
 #[cfg(feature = "terminal")]
 pub mod terminal;

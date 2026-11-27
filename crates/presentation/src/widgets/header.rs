@@ -110,7 +110,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
                 .daily
                 .map(|d| {
                     format!(
-                        " ✧ DÉFI {} · {} ✦ [Y] ·",
+                        " ✧ DÉFI {} · {} ✦ [J] ·",
                         fmt::countdown(d.left),
                         fmt::short(d.score)
                     )
@@ -122,7 +122,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals) {
                 ""
             };
             let exotic = if snap.megastructures_unlocked {
-                format!(" ◈ {} [W] ·", fmt::short(snap.exotic))
+                format!(" ◈ {} [B] ·", fmt::short(snap.exotic))
             } else {
                 String::new()
             };

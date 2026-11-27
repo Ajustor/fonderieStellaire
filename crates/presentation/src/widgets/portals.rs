@@ -208,7 +208,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, state: &PortalState, star
             format!("Big Crunch n°{n} · production ×{prod} · règles valables tout le cycle")
         }
     } else {
-        format!("Clés obtenues : {keys}/{keys_total} · le choix se fait au Big Crunch [U]")
+        format!("Clés obtenues : {keys}/{keys_total} · le choix se fait au Big Crunch [K]")
     };
     centered_line(
         buf,

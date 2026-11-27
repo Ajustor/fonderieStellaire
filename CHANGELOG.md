@@ -1,5 +1,29 @@
 # Journal des versions
 
+## v0.19.0 — Navigation
+
+### Nouveautés (ordinateur)
+- **Barre d'onglets** sous le titre : Fonderie │ Prestige │ Cosmos │ Plus, avec
+  la lettre de chaque écran et l'écran ouvert en doré. **`Tab`** /
+  **`Maj+Tab`** passent à l'écran suivant / précédent.
+- **Menu** sur **`Échap`** dans la fonderie : tous les écrans débloqués avec une
+  ligne d'explication, l'aide et Quitter (`Q` quitte toujours directement).
+- **Aide** sur **`?`** ou **`F1`** : toutes les touches, groupées. Rien de ce
+  que tu n'as pas encore découvert n'y apparaît (ni dans la barre, ni dans le
+  menu).
+- La barre d'aide du bas s'adapte : écran ouvert, elle indique l'écran suivant
+  et comment fermer.
+- **Touches renommées**, plus faciles à retenir : Big Crunch **`K`** (au lieu
+  de U), Reliques **`R`** (H), Options **`O`** (R ; « Oui » reste `O` dans les
+  confirmations), Mégastructures **`B`** (bâtir, au lieu de W), Défi du jour
+  **`J`** (jour, au lieu de Y). `←` / `→` changent de panneau (plus `Tab`) ;
+  `j` / `k` ne sont plus des flèches et `b` n'achète plus.
+
+### Corrections
+- **Pendant ton absence** : après avoir repris la partie d'un autre appareil
+  (synchronisation), la carte de l'écran titre parlait de l'absence de cet
+  appareil ; elle donne maintenant l'absence de la partie reprise.
+
 ## v0.18.2 — Détail de la production
 
 ### Nouveautés

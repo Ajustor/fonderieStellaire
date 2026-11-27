@@ -1,4 +1,4 @@
-//! Défi du jour (touche Y, Acte IV) : la fenêtre du défi, la transition vers
+//! Défi du jour (touche J, Acte IV) : la fenêtre du défi, la transition vers
 //! l'univers de poche (un iris qui s'ouvre), et la carte du résultat.
 
 use ratatui::buffer::Buffer;
@@ -126,7 +126,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, today: u64
         }
         draw::text(buf, inner.x + 1, y, l, *st, inner.right());
     }
-    let footer = "[Entrée] valider   [Y] / [Échap] fermer";
+    let footer = "[Entrée] valider   [J] / [Échap] fermer";
     let fw = footer.chars().count() as u16;
     draw::text(
         buf,

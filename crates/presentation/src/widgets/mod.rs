@@ -15,6 +15,7 @@ pub mod lab;
 pub mod leaderboard;
 pub mod mega;
 pub mod modal;
+pub mod nav;
 pub mod options;
 pub mod portals;
 pub mod relics;

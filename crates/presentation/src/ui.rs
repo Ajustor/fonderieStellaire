@@ -69,19 +69,19 @@ pub struct Ui {
     /// Laboratoire (touche L) et sa sélection.
     pub lab: Option<Popup>,
     pub lab_sel: usize,
-    /// Défi du jour (touche Y).
+    /// Défi du jour (touche J).
     pub daily: Option<Popup>,
-    /// Mégastructures (touche W) et case visée.
+    /// Mégastructures (touche B) et case visée.
     pub mega: Option<Popup>,
     pub mega_sel: usize,
     /// Événement cosmique affiché (touche Z pour y revenir).
     pub event: Option<crate::widgets::event::EventPopup>,
-    /// Reliques (touche H) et sélection.
+    /// Reliques (touche R) et sélection.
     pub relics: Option<Popup>,
     pub relics_sel: usize,
     /// Carte stellaire (touche X).
     pub starmap: Option<crate::widgets::starmap::StarMapState>,
-    /// Options (touche R), sélection, et confirmation armée de l'effacement.
+    /// Options (touche O), sélection, et confirmation armée de l'effacement.
     pub options: Option<Popup>,
     pub options_sel: usize,
     pub options_armed: bool,
@@ -100,6 +100,12 @@ pub struct Ui {
     pub cosmos_armed: bool,
     /// Écran des portails (choix d'univers au Big Crunch, ou consultation).
     pub portal: Option<crate::widgets::portals::PortalState>,
+    /// Menu central (`Échap` dans la fonderie) et ligne choisie.
+    pub menu: Option<Popup>,
+    pub menu_sel: usize,
+    /// Panneau d'aide (`?` / `F1`) et son défilement.
+    pub help: Option<Popup>,
+    pub help_scroll: u16,
     /// Lignes remontées dans le journal (0 = dernières entrées).
     pub journal_scroll: usize,
     pub debug: bool,
