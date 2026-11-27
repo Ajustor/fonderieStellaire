@@ -1082,7 +1082,7 @@ fn confirm_text(ctx: &Ctx, c: Confirm) -> (String, Vec<(String, Rgb)>, &'static 
         }
         Confirm::Crunch => {
             let next = snap.crunches + 1;
-            let prod_after = 1.0 + domain::catalog::balance::CRUNCH_PRODUCTION * next as f64;
+            let prod_after = snap.crunch_production_next;
             (
                 "✶ BIG CRUNCH".into(),
                 vec![

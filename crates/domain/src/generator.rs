@@ -81,6 +81,11 @@ pub fn milestones_reached(owned: u64) -> u32 {
     MILESTONES.iter().filter(|&&m| owned >= m).count() as u32
 }
 
+/// Prochain palier au-dessus de `owned` (aucun au-delà de 500).
+pub fn next_milestone(owned: u64) -> Option<u64> {
+    MILESTONES.into_iter().find(|&m| m > owned)
+}
+
 /// Paliers franchis en passant de `before` à `after` exemplaires.
 pub fn milestones_crossed(before: u64, after: u64) -> impl Iterator<Item = u64> {
     MILESTONES
@@ -88,13 +93,16 @@ pub fn milestones_crossed(before: u64, after: u64) -> impl Iterator<Item = u64> 
         .filter(move |&m| before < m && after >= m)
 }
 
-/// Mode d'achat : ×1 → ×10 → ×25 → MAX.
+/// Mode d'achat : ×1 → ×10 → ×25 → Palier → MAX.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum BuyMode {
     #[default]
     One,
     Ten,
     TwentyFive,
+    /// Jusqu'au prochain palier de bonus (25, 50, 100… 500 exemplaires) ;
+    /// au-delà du dernier, un par un.
+    NextMilestone,
     Max,
 }
 
@@ -103,7 +111,8 @@ impl BuyMode {
         match self {
             BuyMode::One => BuyMode::Ten,
             BuyMode::Ten => BuyMode::TwentyFive,
-            BuyMode::TwentyFive => BuyMode::Max,
+            BuyMode::TwentyFive => BuyMode::NextMilestone,
+            BuyMode::NextMilestone => BuyMode::Max,
             BuyMode::Max => BuyMode::One,
         }
     }
@@ -113,7 +122,16 @@ impl BuyMode {
             BuyMode::One => "×1",
             BuyMode::Ten => "×10",
             BuyMode::TwentyFive => "×25",
+            BuyMode::NextMilestone => "PALIER",
             BuyMode::Max => "MAX",
+        }
+    }
+
+    /// Étiquette courte (boutons étroits du mode mobile).
+    pub fn short_label(self) -> &'static str {
+        match self {
+            BuyMode::NextMilestone => "PAL.",
+            other => other.label(),
         }
     }
 
@@ -123,6 +141,7 @@ impl BuyMode {
             BuyMode::One => 1,
             BuyMode::Ten => 10,
             BuyMode::TwentyFive => 25,
+            BuyMode::NextMilestone => next_milestone(owned).map_or(1, |m| m - owned),
             BuyMode::Max => def.max_affordable(owned, stardust).max(1),
         }
     }
@@ -194,11 +213,24 @@ mod tests {
     fn buy_mode_cycles() {
         let mut m = BuyMode::One;
         let mut labels = Vec::new();
-        for _ in 0..5 {
+        for _ in 0..6 {
             labels.push(m.label());
             m = m.next();
         }
-        assert_eq!(labels, ["×1", "×10", "×25", "MAX", "×1"]);
+        assert_eq!(labels, ["×1", "×10", "×25", "PALIER", "MAX", "×1"]);
+    }
+
+    #[test]
+    fn next_milestone_mode_fills_up_to_the_bonus() {
+        let g = probe();
+        let q = |owned| BuyMode::NextMilestone.quantity(&g, owned, 0.0);
+        assert_eq!(q(0), 25);
+        assert_eq!(q(24), 1);
+        assert_eq!(q(25), 25, "25 → 50");
+        assert_eq!(q(130), 70, "130 → 200");
+        assert_eq!(q(499), 1);
+        assert_eq!(q(500), 1, "plus de palier : un par un");
+        assert_eq!(next_milestone(500), None);
     }
 
     #[test]

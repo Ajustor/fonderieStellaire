@@ -1251,11 +1251,17 @@ impl GameState {
     /// Multiplicateur de production de la matière noire : ×(1 + crunches),
     /// renforcé par le Cœur de superamas du Grand Attracteur.
     pub fn crunch_production(&self, catalog: &Catalog) -> f64 {
+        self.crunch_production_with(catalog, self.crunches)
+    }
+
+    /// Multiplicateur de production avec `crunches` Big Crunch (aperçu du
+    /// prochain), Cœur de superamas compris.
+    pub fn crunch_production_with(&self, catalog: &Catalog, crunches: u32) -> f64 {
         let boost = self.attractor_product(catalog, |e| match e {
             AttractorEffect::DarkMatter(f) => Some(f),
             _ => None,
         });
-        1.0 + CRUNCH_PRODUCTION * boost * self.crunches as f64
+        1.0 + CRUNCH_PRODUCTION * boost * crunches as f64
     }
 
     /// Multiplicateur de fragments de la matière noire.
@@ -3712,6 +3718,8 @@ mod tests {
         assert_eq!(s.crunch_production(&c), 1.0, "aucun Crunch : ×1");
         s.crunches = 3;
         assert_eq!(s.crunch_production(&c), 7.0, "matière noire ×2 : 1 + 2×3");
+        // L'aperçu du prochain Big Crunch compte aussi le Cœur de superamas.
+        assert_eq!(s.crunch_production_with(&c, s.crunches + 1), 9.0);
         assert_eq!(s.offline_terms(&c).0, 1.0);
         assert!(s.has_achievement(c.achievement_by_key("attractor").unwrap()));
     }

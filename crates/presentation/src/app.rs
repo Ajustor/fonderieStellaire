@@ -2013,7 +2013,7 @@ impl App {
     pub(crate) fn start_crunch_into(&mut self, universe: domain::UniverseId) {
         let crunches = self.snap.crunches + 1;
         let before = self.snap.crunch_production;
-        let after = 1.0 + domain::catalog::balance::CRUNCH_PRODUCTION * crunches as f64;
+        let after = self.snap.crunch_production_next;
         let name = if self.snap.universes_unlocked {
             self.service
                 .catalog()

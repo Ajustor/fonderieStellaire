@@ -11,7 +11,14 @@
   › Sauver*, toucher la ligne de la version ouvre sa page pour télécharger
   l'APK. La version du Play Store reste mise à jour par le Play Store.
 
+- **Mode d'achat PALIER** (`M`, ou le sélecteur des Usines sur Android) :
+  achète juste ce qu'il faut pour atteindre le prochain palier de bonus (25,
+  50, 100, 200… 500 exemplaires) ; ×1 → ×10 → ×25 → PALIER → MAX.
+
 ### Corrections
+- **Big Crunch** : l'aperçu « Production ×… → ×… » (et l'animation) oubliait
+  le Cœur de superamas (bonus de matière noire ×2) et annonçait un
+  multiplicateur plus bas qu'en réalité. La production, elle, était juste.
 - **Nouvelle partie** sur un appareil synchronisé : elle remplace la partie du
   relais et **tous les appareils liés** la reprennent à leur prochaine
   synchronisation (l'ancienne partie reste en `.bak`). Avant, l'appareil

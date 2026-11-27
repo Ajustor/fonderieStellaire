@@ -107,7 +107,7 @@ pub fn render_crunch(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup) {
     }
     let snap = ctx.snap;
     let next = snap.crunches + 1;
-    let prod_after = 1.0 + domain::catalog::balance::CRUNCH_PRODUCTION * next as f64;
+    let prod_after = snap.crunch_production_next;
     let frag_after = 1.0 + domain::catalog::balance::CRUNCH_FRAGMENTS * next as f64;
     let lines: [(String, ratatui::style::Style); 9] = [
         (

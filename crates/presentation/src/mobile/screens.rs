@@ -758,10 +758,11 @@ fn render_factories(
         domain::BuyMode::One,
         domain::BuyMode::Ten,
         domain::BuyMode::TwentyFive,
+        domain::BuyMode::NextMilestone,
         domain::BuyMode::Max,
     ];
-    let auto_w = if snap.autobuy_unlocked { 11 } else { 0 };
-    let mode_w = (area.width.saturating_sub(auto_w)) / 4;
+    let auto_w = if snap.autobuy_unlocked { 10 } else { 0 };
+    let mode_w = (area.width.saturating_sub(auto_w)) / modes.len() as u16;
     for (i, mode) in modes.iter().enumerate() {
         let r = Rect::new(area.x + i as u16 * mode_w, area.y, mode_w, BUTTON_H);
         let color = if snap.buy_mode == *mode {
@@ -775,7 +776,11 @@ fn render_factories(
             m.press,
             r,
             "",
-            mode.label(),
+            if mode.label().chars().count() + 2 > mode_w as usize {
+                mode.short_label()
+            } else {
+                mode.label()
+            },
             color,
             Some(Hit::SetBuyMode(*mode)),
         );

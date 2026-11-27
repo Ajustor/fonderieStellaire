@@ -540,7 +540,7 @@ fn click_value_and_constant_bar_width() {
                 "barres de tailles différentes {widths:?} (mode {mode_presses}) :\n{text}"
             );
         }
-        app.on_intent(Intent::CycleMode); // ×1 → ×10 → ×25 → MAX
+        app.on_intent(Intent::CycleMode); // ×1 → ×10 → ×25 → PALIER → MAX
         app.update(0.033);
     }
 }

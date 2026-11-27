@@ -263,6 +263,8 @@ pub struct GameSnapshot {
     pub crunch_needed: u32,
     /// Multiplicateurs actuels de la matière noire (production, fragments).
     pub crunch_production: f64,
+    /// Multiplicateur après le prochain Big Crunch.
+    pub crunch_production_next: f64,
     pub crunch_fragments: f64,
     /// Laboratoire de matière noire.
     pub lab_unlocked: bool,

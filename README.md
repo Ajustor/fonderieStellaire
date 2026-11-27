@@ -157,7 +157,7 @@ cargo run --release -- --reset
 | `Tab` / `←` `→` | Changer de panneau (Générateurs ↔ Améliorations) |
 | `Entrée` / `B` | Acheter l'élément sélectionné |
 | `1` – `9` | Achat rapide du générateur n° N |
-| `M` | Mode d'achat ×1 / ×10 / ×25 / MAX |
+| `M` | Mode d'achat ×1 / ×10 / ×25 / PALIER (jusqu'au prochain bonus) / MAX |
 | `C` | Capturer la comète qui passe |
 | `P` | Supernova (confirmation `O` / `N` / `Échap`) |
 | `S` | Sauvegarder maintenant |
