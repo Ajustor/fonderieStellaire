@@ -162,7 +162,7 @@ cargo run --release -- --reset
 | `C` | Capturer la comète qui passe |
 | `T` | Activer / arrêter l'automate (une fois acheté à l'Atelier) |
 | `P` | Supernova (confirmation `O` / `N` / `Échap`) |
-| `K` | Big Crunch (après 15 Supernovas) |
+| `K` | Big Crunch (après 15 Supernovas, puis 10) |
 | `Tab` / `Maj+Tab` | Écran suivant / précédent de la barre d'onglets |
 | `Échap` | Fermer l'écran ouvert ; dans la fonderie, **menu** de tous les écrans |
 | `?` / `F1` | **Aide** : toutes les touches que tu as découvertes |
@@ -180,7 +180,7 @@ débloqués :
 |---|---|
 | `E` | Atelier stellaire : bonus permanents payés en fragments |
 | `D` | Défis : un cycle avec contrainte, contre une récompense permanente |
-| `L` | Laboratoire de matière noire (après 10 Big Crunch) |
+| `L` | Laboratoire de matière noire (dès le premier Big Crunch) |
 | `V` | Univers parallèles et leurs Clés (après 10 Big Crunch) |
 | `G` | Cosmogonie : Big Bang, forge primordiale, Grand Attracteur (après 10 Big Crunch) |
 | `X` | Carte stellaire : expéditions (Acte III) |
@@ -221,10 +221,10 @@ Majuscules et minuscules sont acceptées.
 - **Défis** (`D`, dès la 1re Supernova) : rejoue un cycle avec une contrainte
   (sans clic, sans amélioration, 3 générateurs, sans comète, ou contre la
   montre) pour gagner une récompense permanente.
-- **Big Crunch** (`K`, après 15 Supernovas) : tout le niveau Supernova
+- **Big Crunch** (`K`, après 15 Supernovas, puis 10 pour les suivants) : tout le niveau Supernova
   (fragments, Atelier, Constellations, Défis) repart de zéro contre de la
   *matière noire* : production ×2, ×4, ×8… et +25 % de fragments par Crunch.
-- **Laboratoire** (`L`, après 10 Big Crunch) : la matière noire finance des
+- **Laboratoire** (`L`, dès le premier Big Crunch) : la matière noire finance des
   recherches qui durent un temps réel (de 1 h à 12 h), une à la fois, même jeu
   fermé : automatismes (Supernova, Constellations, comètes), conservation au Big
   Crunch, et bonus de puissance.

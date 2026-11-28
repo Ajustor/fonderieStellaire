@@ -3,8 +3,9 @@
 use crate::achievement::{AchievementContext, AchievementId};
 use crate::catalog::balance::{
     BIGBANG_CRUNCHES, CRUNCH_FRAGMENTS, CRUNCH_PRODUCTION, CRUNCH_SUPERNOVAS,
-    HOLD_HARVEST_INTERVAL, LAB_UNLOCK_CRUNCHES, OFFLINE_CAP_SECS, OFFLINE_RATE,
-    PARTICLES_PER_CRUNCHES, PARTICLE_FRAGMENTS, REVEAL_RATIO, UNIVERSES_UNLOCK_CRUNCHES,
+    CRUNCH_SUPERNOVAS_AGAIN, HOLD_HARVEST_INTERVAL, LAB_UNLOCK_CRUNCHES, OFFLINE_CAP_SECS,
+    OFFLINE_RATE, PARTICLES_PER_CRUNCHES, PARTICLE_FRAGMENTS, REVEAL_RATIO,
+    UNIVERSES_UNLOCK_CRUNCHES,
 };
 use crate::catalog::Catalog;
 use crate::challenge::{ChallengeId, ChallengeReward, Restriction};
@@ -1285,9 +1286,19 @@ impl GameState {
         1.0 + CRUNCH_FRAGMENTS * self.crunches as f64
     }
 
-    /// Le Big Crunch est-il possible ? (15 Supernovas, aucun Défi en cours)
+    /// Supernovas nécessaires pour le prochain Big Crunch : 15 pour le tout
+    /// premier, 10 ensuite.
+    pub fn crunch_supernovas_needed(&self) -> u32 {
+        if self.crunches == 0 && self.big_bangs == 0 {
+            CRUNCH_SUPERNOVAS
+        } else {
+            CRUNCH_SUPERNOVAS_AGAIN
+        }
+    }
+
+    /// Le Big Crunch est-il possible ? (assez de Supernovas, aucun Défi en cours)
     pub fn can_big_crunch(&self) -> bool {
-        self.supernovas >= CRUNCH_SUPERNOVAS && self.challenge.is_none()
+        self.supernovas >= self.crunch_supernovas_needed() && self.challenge.is_none()
     }
 
     /// Big Crunch : remet à zéro tout le niveau Supernova (fragments, Atelier,
@@ -1302,7 +1313,7 @@ impl GameState {
         if !self.can_big_crunch() {
             events.push(DomainEvent::BigCrunchUnavailable {
                 supernovas: self.supernovas,
-                needed: CRUNCH_SUPERNOVAS,
+                needed: self.crunch_supernovas_needed(),
             });
             return;
         }
@@ -1365,7 +1376,7 @@ impl GameState {
         self.check_achievements(catalog, events);
     }
 
-    /// Le Laboratoire est-il ouvert ? (10 Big Crunch, ou déjà un Big Bang)
+    /// Le Laboratoire est-il ouvert ? (dès le premier Big Crunch, ou déjà un Big Bang)
     pub fn lab_unlocked(&self) -> bool {
         self.crunches >= LAB_UNLOCK_CRUNCHES || self.big_bangs > 0
     }
@@ -3236,6 +3247,34 @@ mod tests {
     }
 
     #[test]
+    fn only_the_first_big_crunch_needs_15_supernovas() {
+        let (c, mut s, mut ev) = setup();
+        assert_eq!(s.crunch_supernovas_needed(), 15);
+        s.supernovas = 15;
+        s.big_crunch(&c, UniverseId::ORIGIN, &mut ev);
+        assert_eq!(s.crunches, 1);
+        assert_eq!(s.crunch_supernovas_needed(), 10);
+
+        ev.clear();
+        s.supernovas = 9;
+        s.big_crunch(&c, UniverseId::ORIGIN, &mut ev);
+        assert_eq!(
+            ev,
+            [DomainEvent::BigCrunchUnavailable {
+                supernovas: 9,
+                needed: 10
+            }]
+        );
+        s.supernovas = 10;
+        assert!(s.can_big_crunch());
+
+        // Après un Big Bang, les Big Crunch repartent de zéro mais restent à 10.
+        s.crunches = 0;
+        s.big_bangs = 1;
+        assert_eq!(s.crunch_supernovas_needed(), 10);
+    }
+
+    #[test]
     fn big_crunch_resets_the_supernova_layer() {
         let (c, mut s, mut ev) = setup();
         s.supernovas = 14;
@@ -3322,11 +3361,11 @@ mod tests {
     fn laboratory_research_takes_real_time() {
         let (c, mut s, mut ev) = setup();
         let prod1 = lab(&c, "lab_prod1");
-        s.crunches = 9;
+        s.crunches = 0;
         s.start_research(&c, prod1, &mut ev);
         assert!(
             matches!(ev[0], DomainEvent::PurchaseFailed { .. }),
-            "fermé avant 10 Big Crunch"
+            "fermé avant le premier Big Crunch"
         );
         ev.clear();
         s.crunches = 10;

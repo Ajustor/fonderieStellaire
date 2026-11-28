@@ -153,7 +153,7 @@ pub(crate) fn detail(ctx: &Ctx, item: CosmosItem, armed: bool) -> Vec<(String, R
             } else if snap.bigbang_available {
                 (
                     format!(
-                        "[Entrée] déclencher : +{} particule{} (une par tranche de 10 Big Crunch).",
+                        "[Entrée] déclencher : +{} particule{} (une par tranche de 5 Big Crunch).",
                         snap.particles_available,
                         plural(snap.particles_available)
                     ),
@@ -162,7 +162,7 @@ pub(crate) fn detail(ctx: &Ctx, item: CosmosItem, armed: bool) -> Vec<(String, R
             } else {
                 (
                     format!(
-                        "Il faut {} Big Crunch ({}/{}) : une particule par tranche de 10.",
+                        "Il faut {} Big Crunch ({}/{}) : une particule par tranche de 5.",
                         snap.bigbang_needed, snap.crunches, snap.bigbang_needed
                     ),
                     theme::GREY,

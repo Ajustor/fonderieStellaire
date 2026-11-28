@@ -593,7 +593,7 @@ impl GameService {
         );
         snap.crunches = st.crunches;
         snap.crunch_available = st.can_big_crunch();
-        snap.crunch_needed = domain::catalog::balance::CRUNCH_SUPERNOVAS;
+        snap.crunch_needed = st.crunch_supernovas_needed();
         snap.crunch_production = st.crunch_production(c);
         snap.crunch_production_next = st.crunch_production_with(c, st.crunches + 1);
         snap.crunch_fragments = st.crunch_fragments();

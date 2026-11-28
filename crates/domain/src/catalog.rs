@@ -27,15 +27,19 @@ pub mod balance {
     /// … puis en racine cubique (v0.9 : la racine carrée montait trop haut,
     /// +7 900 % à 120 000 fragments contre +1 450 % désormais).
     pub const FRAGMENT_EXPONENT: f64 = 1.0 / 3.0;
-    /// Supernovas nécessaires pour un Big Crunch.
+    /// Supernovas nécessaires pour le tout premier Big Crunch.
     pub const CRUNCH_SUPERNOVAS: u32 = 15;
+    /// … puis pour chacun des suivants (Big Bang compris) : la boucle se
+    /// répète, elle doit rester courte.
+    pub const CRUNCH_SUPERNOVAS_AGAIN: u32 = 10;
     /// Chaque Big Crunch double la production (×2, ×4, ×8…) : la base de la
     /// puissance est 1 + cette valeur.
     pub const CRUNCH_PRODUCTION: f64 = 1.0;
     /// Chaque Big Crunch ajoute +25 % de fragments par Supernova.
     pub const CRUNCH_FRAGMENTS: f64 = 0.25;
-    /// Big Crunch nécessaires pour ouvrir le Laboratoire de matière noire.
-    pub const LAB_UNLOCK_CRUNCHES: u32 = 10;
+    /// Big Crunch nécessaires pour ouvrir le Laboratoire de matière noire : dès
+    /// le premier, la matière noire gagnée sert tout de suite.
+    pub const LAB_UNLOCK_CRUNCHES: u32 = 1;
     /// Big Crunch nécessaires pour choisir son univers.
     pub const UNIVERSES_UNLOCK_CRUNCHES: u32 = 10;
     /// Big Crunch nécessaires pour un Big Bang.

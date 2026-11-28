@@ -705,12 +705,12 @@ fn v0_6_big_crunch_end_to_end() {
 
 #[test]
 fn v0_7_laboratory() {
-    // Avant 10 Big Crunch : fermé.
+    // Avant le premier Big Crunch : fermé.
     let mut app = game_app();
     app.on_intent(Intent::Lab);
     app.set_time(103.0);
     let text = render(&mut app, 100, 30);
-    assert!(text.contains("S'ouvre au 10e Big Crunch (0/10)"), "{text}");
+    assert!(text.contains("S'ouvre au premier Big Crunch"), "{text}");
 
     // 10 Big Crunch : 10 matières noires à dépenser.
     let mut save = advanced_save();
@@ -1676,4 +1676,32 @@ fn audio_output_pauses_after_silence_and_resumes_on_sound() {
         [false, true],
         "remise en marche au son suivant"
     );
+}
+
+#[test]
+fn laboratory_opens_at_the_first_big_crunch_but_not_the_cosmogony() {
+    let mut save = advanced_save();
+    save.crunches = 1;
+    let mut app = app_with(Some(save));
+    app.set_time(100.0);
+    app.enter_game_now();
+    app.update(0.033);
+    let _ = render(&mut app, 100, 30);
+    app.on_intent(Intent::Lab);
+    app.set_time(101.0);
+    let text = render(&mut app, 100, 30);
+    assert!(text.contains("LABORATOIRE DE MATIÈRE NOIRE"), "{text}");
+    assert!(text.contains("Matière noire libre : 1 sur 1"), "{text}");
+
+    let mut save = advanced_save();
+    save.crunches = 1;
+    let mut app = app_with(Some(save));
+    app.set_time(100.0);
+    app.enter_game_now();
+    app.update(0.033);
+    app.on_intent(Intent::Cosmos);
+    app.set_time(103.0);
+    let text = render(&mut app, 100, 30);
+    assert!(text.contains("S'ouvre au 10e Big Crunch (1/10)"), "{text}");
+    assert!(!text.contains("COSMOGONIE"), "{text}");
 }

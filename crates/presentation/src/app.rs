@@ -1607,7 +1607,7 @@ impl App {
                 self.ui.options_sync = false;
             }
             Intent::Cosmos => {
-                if self.snap.lab_unlocked {
+                if self.snap.universes_unlocked {
                     self.ui.cosmos = Some(Popup {
                         opened_at: now,
                         closing_at: None,
@@ -1638,7 +1638,11 @@ impl App {
                         now,
                         theme::GREY,
                         "Laboratoire",
-                        format!("S'ouvre au {need}e Big Crunch ({have}/{need})"),
+                        if need <= 1 {
+                            "S'ouvre au premier Big Crunch : déclenche-le avec [K]".to_string()
+                        } else {
+                            format!("S'ouvre au {need}e Big Crunch ({have}/{need})")
+                        },
                     );
                 }
             }
