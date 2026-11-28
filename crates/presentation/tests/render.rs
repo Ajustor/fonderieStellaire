@@ -917,10 +917,10 @@ fn v0_9_big_bang_forge_attractor_and_ending() {
     assert!(seen_title, "l'annonce des particules est affichée");
     let snap = app.snapshot();
     assert_eq!((snap.big_bangs, snap.particles, snap.crunches), (1, 3, 0));
-    assert_eq!(snap.particle_production, 4.0);
+    assert_eq!(snap.particle_production, 1000.0);
     let text = render(&mut app, 120, 36);
     assert!(
-        text.contains("✷ 3 (×4)"),
+        text.contains("✷ 3 (×1.00k)"),
         "particules dans l'en-tête :\n{text}"
     );
 

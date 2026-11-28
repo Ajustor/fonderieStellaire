@@ -1761,7 +1761,7 @@ impl App {
                     self.ui.shop = None;
                     let gained = self.snap.particles_available;
                     let total = self.snap.particles + gained;
-                    let prod = 1.0 + domain::catalog::balance::PARTICLE_PRODUCTION * total as f64;
+                    let prod = domain::cosmos::particle_production_for(total);
                     self.vis.bang = Some(BangSequence::new(now, gained, total, prod));
                 } else {
                     self.ui.cosmos_armed = true;

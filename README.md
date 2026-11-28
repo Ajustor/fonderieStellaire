@@ -233,7 +233,7 @@ Majuscules et minuscules sont acceptées.
   Temps dilaté, Nuée, Désert, Entropie). Atteindre l'objectif d'un univers
   rapporte sa **Clé**, un bonus permanent.
 - **Big Bang** (30 Big Crunch) : les Big Crunch repartent de zéro contre des
-  particules primordiales (+100 % de production, +25 % de fragments chacune).
+  particules primordiales (production ×10, +25 % de fragments chacune).
   Elles servent à forger 3 générateurs primordiaux et à bâtir le **Grand
   Attracteur**, étape par étape et en temps réel. Sa dernière étape clôt
   l'Acte II.

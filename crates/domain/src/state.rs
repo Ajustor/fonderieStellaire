@@ -4,8 +4,7 @@ use crate::achievement::{AchievementContext, AchievementId};
 use crate::catalog::balance::{
     BIGBANG_CRUNCHES, CRUNCH_FRAGMENTS, CRUNCH_PRODUCTION, CRUNCH_SUPERNOVAS,
     HOLD_HARVEST_INTERVAL, LAB_UNLOCK_CRUNCHES, OFFLINE_CAP_SECS, OFFLINE_RATE,
-    PARTICLES_PER_CRUNCHES, PARTICLE_FRAGMENTS, PARTICLE_PRODUCTION, REVEAL_RATIO,
-    UNIVERSES_UNLOCK_CRUNCHES,
+    PARTICLES_PER_CRUNCHES, PARTICLE_FRAGMENTS, REVEAL_RATIO, UNIVERSES_UNLOCK_CRUNCHES,
 };
 use crate::catalog::Catalog;
 use crate::challenge::{ChallengeId, ChallengeReward, Restriction};
@@ -1380,9 +1379,9 @@ impl GameState {
     // Big Bang, générateurs primordiaux, Grand Attracteur
     // ------------------------------------------------------------------
 
-    /// Multiplicateur de production des particules : ×(1 + particules).
+    /// Multiplicateur de production des particules : ×10 par particule.
     pub fn particle_production(&self) -> f64 {
-        1.0 + PARTICLE_PRODUCTION * self.particles as f64
+        crate::cosmos::particle_production_for(self.particles)
     }
 
     /// Multiplicateur de fragments des particules : +25 % par particule.
@@ -3727,7 +3726,7 @@ mod tests {
         assert!(s.lab[0], "le Laboratoire est gardé");
         assert!(s.universe_keys[1], "les Clés sont gardées");
         assert!(s.lab_unlocked() && s.universes_unlocked());
-        assert_eq!(s.particle_production(), 4.0);
+        assert_eq!(s.particle_production(), 1000.0);
         assert_eq!(s.particle_fragments(), 1.75);
         assert!(economy::permanent_multiplier(&c, &s) < prod_before);
         assert!(s.has_achievement(c.achievement_by_key("bang1").unwrap()));
@@ -3746,7 +3745,7 @@ mod tests {
         assert!(s.is_forged(neutron));
         assert!(s.is_visible(&c, neutron));
         assert_eq!(s.particles_spendable(), 2);
-        assert_eq!(s.particle_production(), 4.0, "le bonus reste entier");
+        assert_eq!(s.particle_production(), 1000.0, "le bonus reste entier");
         s.forge(&c, reality, &mut ev);
         assert_eq!(s.particles_spendable(), 0);
         s.forge(&c, gen(&c, 14), &mut ev);
