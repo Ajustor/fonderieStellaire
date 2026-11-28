@@ -59,7 +59,7 @@ checksum = "2cb931c189b85683d69a5cfad41d4d418671e1ac413dd209f3f2fc31e3cfd902"
 
 [[package]]
 name = "application"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "domain",
 ]
@@ -530,7 +530,7 @@ dependencies = [
 
 [[package]]
 name = "domain"
-version = "0.23.0"
+version = "0.24.0"
 
 [[package]]
 name = "either"
@@ -585,7 +585,7 @@ checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 
 [[package]]
 name = "fonderie-android"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "application",
  "domain",
@@ -596,7 +596,7 @@ dependencies = [
 
 [[package]]
 name = "fonderie-relay"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -606,7 +606,7 @@ dependencies = [
 
 [[package]]
 name = "fonderie-stellaire"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "application",
  "domain",
@@ -865,7 +865,7 @@ dependencies = [
 
 [[package]]
 name = "infrastructure"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "application",
  "cpal",
@@ -1261,7 +1261,7 @@ dependencies = [
 
 [[package]]
 name = "presentation"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "application",
  "crossterm",
@@ -1915,7 +1915,7 @@ dependencies = [
 
 [[package]]
 name = "uniffi-bindgen"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "uniffi",
 ]
