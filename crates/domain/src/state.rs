@@ -2176,6 +2176,17 @@ impl GameState {
         rarity: u8,
         events: &mut Vec<DomainEvent>,
     ) {
+        // Collection incomplète : la trouvaille est toujours une relique
+        // manquante, la première à partir de celle tirée (en boucle).
+        let n = self.relics.len();
+        let id = if self.relics.get(id.index()).is_some_and(|r| r.is_some()) {
+            (1..n)
+                .map(|k| (id.index() + k) % n)
+                .find(|&i| self.relics[i].is_none())
+                .map_or(id, RelicId)
+        } else {
+            id
+        };
         let Some(slot) = self.relics.get_mut(id.index()) else {
             return;
         };
@@ -4067,6 +4078,10 @@ mod tests {
                 ..
             }
         )));
+        // Collection complète : les doublons deviennent des Éclats.
+        for r in s.relics.iter_mut().skip(1) {
+            *r = Some(0);
+        }
         s.gain_relic(&c, RelicId(0), 0, &mut ev);
         assert_eq!(s.shards, 1, "doublon → Éclat");
         s.gain_relic(&c, RelicId(0), 3, &mut ev);
@@ -4094,6 +4109,31 @@ mod tests {
         // Ranger libère un emplacement.
         s.toggle_relic(&c, RelicId(0), &mut ev);
         assert_eq!(s.equipped.len(), 2);
+    }
+
+    #[test]
+    fn a_missing_relic_comes_before_any_duplicate() {
+        let c = Catalog::standard();
+        let (mut s, mut ev) = act_three(&c);
+        s.gain_relic(&c, RelicId(0), 1, &mut ev);
+        s.relics[2] = Some(0);
+        // La 0 est déjà là, la 1 manque : c'est elle qui arrive.
+        s.gain_relic(&c, RelicId(0), 3, &mut ev);
+        assert_eq!(s.relic_rarity(RelicId(1)), Some(3), "la manquante suivante");
+        assert_eq!(
+            s.relic_rarity(RelicId(0)),
+            Some(1),
+            "pas d'amélioration avant"
+        );
+        assert_eq!(s.shards, 0, "pas d'Éclat tant qu'il en manque");
+        // La 2 est là aussi : on saute à la 3.
+        s.gain_relic(&c, RelicId(2), 0, &mut ev);
+        assert_eq!(s.relic_rarity(RelicId(3)), Some(0));
+        // En boucle : depuis la dernière, retour au début.
+        let last = c.relics.len() - 1;
+        s.relics[last] = Some(0);
+        s.gain_relic(&c, RelicId(last), 0, &mut ev);
+        assert_eq!(s.relic_rarity(RelicId(4)), Some(0));
     }
 
     #[test]

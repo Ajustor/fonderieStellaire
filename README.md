@@ -243,7 +243,8 @@ Majuscules et minuscules sont acceptées.
   rapporte (production, fragments, hors-ligne, comètes, flottes, gains
   immédiats).
 - **Reliques** (Acte III) : 16 reliques en 4 ensembles et 4 raretés,
-  rapportées par les expéditions et les prospections. On en équipe 3 à 5 ;
+  rapportées par les expéditions et les prospections (tant que la collection
+  est incomplète, chaque trouvaille est une relique manquante). On en équipe 3 à 5 ;
   3 reliques d'un même ensemble donnent un bonus d'ensemble.
 - **Événements cosmiques** (Acte III) : des dilemmes toutes les 2 à 4 h de
   jeu, aux conséquences parfois risquées.
