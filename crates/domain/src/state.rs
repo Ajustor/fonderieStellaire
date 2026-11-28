@@ -2509,6 +2509,17 @@ impl GameState {
                 self.supernova(catalog, events);
             }
         }
+        // Big Bang avant Big Crunch : à 15 Big Crunch, le Big Bang passe en premier.
+        if self.lab_active(catalog, LabEffect::AutoBigBang)
+            && self.big_bangs > 0
+            && self.can_big_bang()
+        {
+            self.big_bang(catalog, events);
+        }
+        if self.lab_active(catalog, LabEffect::AutoCrunch) && self.can_big_crunch() {
+            let universe = self.universe;
+            self.big_crunch(catalog, universe, events);
+        }
     }
 
     /// Contrainte du Défi en cours.
@@ -3350,6 +3361,43 @@ mod tests {
 
     fn lab(c: &Catalog, key: &str) -> LabId {
         c.lab_by_key(key).unwrap()
+    }
+
+    #[test]
+    fn auto_crunch_triggers_when_possible_but_not_during_a_challenge() {
+        let (c, mut s, mut ev) = setup();
+        s.lab[lab(&c, "lab_autocrunch").index()] = true;
+        s.crunches = 11;
+        s.universe = UniverseId(1);
+        s.supernovas = 9;
+        s.tick(&c, 2.0, 0.5, &mut ev);
+        assert_eq!(s.crunches, 11, "pas assez de Supernovas");
+        s.supernovas = 10;
+        s.challenge = Some(c.challenges[0].id);
+        s.tick(&c, 2.0, 0.5, &mut ev);
+        assert_eq!(s.crunches, 11, "jamais pendant un Défi");
+        s.challenge = None;
+        s.tick(&c, 2.0, 0.5, &mut ev);
+        assert_eq!(s.crunches, 12, "Big Crunch automatique");
+        assert_eq!(s.universe, UniverseId(1), "univers en cours conservé");
+        // En pause : plus rien.
+        s.toggle_lab(&c, lab(&c, "lab_autocrunch"), &mut ev);
+        s.supernovas = 10;
+        s.tick(&c, 2.0, 0.5, &mut ev);
+        assert_eq!(s.crunches, 12);
+    }
+
+    #[test]
+    fn auto_big_bang_needs_a_first_manual_one() {
+        let (c, mut s, mut ev) = setup();
+        s.lab[lab(&c, "lab_autobang").index()] = true;
+        s.crunches = 15;
+        s.tick(&c, 2.0, 0.5, &mut ev);
+        assert_eq!(s.big_bangs, 0, "le premier Big Bang reste manuel");
+        s.big_bangs = 1;
+        s.tick(&c, 2.0, 0.5, &mut ev);
+        assert_eq!(s.big_bangs, 2, "Big Bang automatique");
+        assert_eq!(s.crunches, 0);
     }
 
     /// Termine immédiatement la recherche en cours (en faisant passer le temps).

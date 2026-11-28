@@ -731,9 +731,10 @@ fn v0_7_laboratory() {
     assert!(text.contains("AUTOMATISMES"));
     assert!(text.contains("Filet à comètes"));
     assert!(text.contains("1 ✶ · 1h 00m"));
+    let tall = render(&mut app, 100, 40);
     assert!(
-        text.contains("Densité II"),
-        "toutes les recherches sont visibles"
+        tall.contains("Densité II") && tall.contains("Big Bang automatique"),
+        "toutes les recherches sont visibles sur un terminal assez haut :\n{tall}"
     );
 
     // Lancer la première recherche (Filet à comètes, 1 h).

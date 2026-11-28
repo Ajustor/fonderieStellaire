@@ -20,6 +20,12 @@ pub enum LabEffect {
     AutoConstellations,
     /// Capture les comètes normales. Activable.
     CometNet,
+    /// Déclenche le Big Crunch dès qu'il est possible, dans l'univers en
+    /// cours (jamais pendant un Défi). Activable.
+    AutoCrunch,
+    /// Déclenche le Big Bang dès qu'il est possible, une fois le premier fait
+    /// à la main. Activable.
+    AutoBigBang,
     /// L'Atelier est conservé après un Big Crunch.
     KeepAtelier,
     /// Les Défis réussis sont conservés après un Big Crunch.
@@ -43,7 +49,11 @@ impl LabEffect {
     pub fn is_toggleable(self) -> bool {
         matches!(
             self,
-            LabEffect::AutoSupernova | LabEffect::AutoConstellations | LabEffect::CometNet
+            LabEffect::AutoSupernova
+                | LabEffect::AutoConstellations
+                | LabEffect::CometNet
+                | LabEffect::AutoCrunch
+                | LabEffect::AutoBigBang
         )
     }
 }

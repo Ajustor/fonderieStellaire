@@ -835,9 +835,9 @@ fn universes() -> Vec<UniverseDef> {
 const H: f64 = 3600.0;
 
 /// Laboratoire : (clé, nom, description, symbole, coût en matière noire,
-/// durée de recherche, prérequis, effet). Durée totale : 68 h.
+/// durée de recherche, prérequis, effet). Durée totale : 82 h.
 #[allow(clippy::type_complexity)]
-const LAB: [(&str, &str, &str, char, u32, f64, Option<&str>, LabEffect); 12] = [
+const LAB: [(&str, &str, &str, char, u32, f64, Option<&str>, LabEffect); 14] = [
     (
         "lab_comet_net",
         "Filet à comètes",
@@ -960,6 +960,26 @@ const LAB: [(&str, &str, &str, char, u32, f64, Option<&str>, LabEffect); 12] = [
         12.0 * H,
         Some("lab_prod1"),
         LabEffect::Production(3.0),
+    ),
+    (
+        "lab_autocrunch",
+        "Effondrement automatique",
+        "Déclenche le Big Crunch dès qu'il est possible, dans l'univers en cours (jamais pendant un Défi)",
+        '✶',
+        3,
+        6.0 * H,
+        None,
+        LabEffect::AutoCrunch,
+    ),
+    (
+        "lab_autobang",
+        "Big Bang automatique",
+        "Déclenche le Big Bang dès qu'il est possible, une fois le premier fait à la main",
+        '✷',
+        4,
+        8.0 * H,
+        Some("lab_autocrunch"),
+        LabEffect::AutoBigBang,
     ),
 ];
 
@@ -1555,11 +1575,11 @@ mod tests {
                 .count(),
             5
         );
-        assert_eq!(c.lab.len(), 12);
+        assert_eq!(c.lab.len(), 14);
         let hours: f64 = c.lab.iter().map(|l| l.research_secs).sum::<f64>() / 3600.0;
-        assert_eq!(hours, 68.0, "≈ 3 jours de recherches");
+        assert_eq!(hours, 82.0, "≈ 3,5 jours de recherches");
         let cost: u32 = c.lab.iter().map(|l| l.cost).sum();
-        assert_eq!(cost, 21);
+        assert_eq!(cost, 28);
         assert_eq!(c.challenges.len(), 5);
         assert_eq!(c.constellations.len(), 6);
         assert_eq!(c.generators[11].unlock_supernovas, 15);
