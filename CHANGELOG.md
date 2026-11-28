@@ -1,5 +1,30 @@
 # Journal des versions
 
+## v0.22.0 — Big Crunch plus fluides, moins de batterie
+
+### Équilibrage
+- **Big Crunch** : le premier demande toujours 15 Supernovas, les suivants
+  (après un Big Bang aussi) n'en demandent plus que 10. Du 1er au 10e Big
+  Crunch : environ 7 h de jeu continu au lieu de 11 h 30.
+- **Laboratoire de matière noire** : ouvert dès le premier Big Crunch (au lieu
+  du 10e), la matière noire sert tout de suite. La Cosmogonie (Big Bang) s'ouvre
+  toujours au 10e Big Crunch, avec les univers parallèles.
+
+### Améliorations
+- **Batterie (Android)** : au repos, le jeu passe à 10 images par seconde après
+  5 s sans geste (hors grandes séquences) et la sortie audio se met en pause
+  après 2 s de silence ; une image identique à la précédente n'est plus
+  redessinée.
+- **Ordinateur** : même cadence au repos et même pause de la sortie audio. Au
+  repos, le jeu consomme environ 3,5 fois moins de processeur.
+- **Site** : page d'accueil pour installer le jeu (Android, Windows, Linux,
+  macOS, Docker) avec des captures ; le classement a sa propre page.
+
+### Corrections
+- **Site** : la page du classement restait bloquée sur « Chargement… ».
+- **Cosmogonie** : l'écran annonçait une particule par tranche de 10 Big Crunch
+  au lieu de 5.
+
 ## v0.21.0 — Prestiges rééquilibrés
 
 ### Équilibrage
