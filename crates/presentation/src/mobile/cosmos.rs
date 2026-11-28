@@ -491,7 +491,8 @@ fn lab_rows(ctx: &Ctx, area: Rect) -> Vec<Row> {
                 continue;
             }
             let toggleable = def.effect.is_toggleable();
-            let (status, color) = lab::status(snap, v, def.cost, def.research_secs, toggleable);
+            let (status, color) =
+                lab::status(snap, v, def.cost, snap.wait(def.research_secs), toggleable);
             let lines: Vec<(String, Style)> = clean(lab::detail_lines(ctx, &order, pos, 400), w)
                 .into_iter()
                 .take(4)
@@ -1186,7 +1187,10 @@ fn confirm_text(ctx: &Ctx, c: Confirm) -> (String, Vec<(String, Rgb)>, &'static 
         Confirm::Awakening => (
             "✶ ÉVEIL DU COSMOS".into(),
             vec![(
-                "72 h, même jeu fermé : la fin de l'Acte IV.".into(),
+                format!(
+                    "{}, même jeu fermé : la fin de l'Acte IV.",
+                    fmt::duration(snap.wait(domain::megastructure::AWAKENING_SECS))
+                ),
                 theme::TEXT,
             )],
             "glisser pour éveiller",

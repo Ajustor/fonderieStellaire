@@ -227,7 +227,7 @@ pub fn simulate(catalog: &Catalog, cfg: &SimConfig, mut progress: impl FnMut(f64
             build_megastructures(catalog, &mut s, &mut ev);
         }
         if s.awakening_ready() {
-            s.start_awakening(&mut ev);
+            s.start_awakening(catalog, &mut ev);
         }
 
         // Reliques : on équipe les plus rares, en privilégiant la production.

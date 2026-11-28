@@ -2883,7 +2883,7 @@ impl App {
                     .service
                     .catalog()
                     .lab_node(node)
-                    .map(|l| l.research_secs)
+                    .map(|l| self.snap.wait(l.research_secs))
                     .unwrap_or(0.0);
                 self.log(
                     Kind::Info,
@@ -3012,7 +3012,7 @@ impl App {
                     .service
                     .catalog()
                     .attractor_stage(stage)
-                    .map(|s| (s.name, s.build_secs))
+                    .map(|s| (s.name, self.snap.wait(s.build_secs)))
                     .unwrap_or(("?", 0.0));
                 self.log(
                     Kind::Purchase,
@@ -3237,15 +3237,16 @@ impl App {
                 self.log(Kind::Info, format!("✹ {title} : l'occasion est passée"));
             }
             DomainEvent::ConvergenceStarted => {
+                let d = fmt::duration(self.snap.wait(domain::cosmic::CONVERGENCE_SECS));
                 self.log(
                     Kind::Achievement,
-                    "✶ La Convergence commence : tous les secteurs se relient à la fonderie (48 h)",
+                    format!("✶ La Convergence commence : tous les secteurs se relient à la fonderie ({d})"),
                 );
                 self.toasts.push(
                     now,
                     theme::GOLD,
                     "✶ Convergence lancée",
-                    "Les routes se relient à la fonderie (48 h, même jeu fermé)",
+                    format!("Les routes se relient à la fonderie ({d}, même jeu fermé)"),
                 );
                 self.vis.fireworks(now);
                 self.vis.fireworks(now + 0.6);
@@ -3300,15 +3301,16 @@ impl App {
                 }
             }
             DomainEvent::AwakeningStarted => {
+                let d = fmt::duration(self.snap.wait(domain::megastructure::AWAKENING_SECS));
                 self.log(
                     Kind::Achievement,
-                    "✶ L'Éveil du Cosmos commence : la grille s'illumine (72 h)",
+                    format!("✶ L'Éveil du Cosmos commence : la grille s'illumine ({d})"),
                 );
                 self.toasts.push(
                     now,
                     theme::GOLD,
                     "✶ Éveil du Cosmos",
-                    "La grille s'illumine (72 h, même jeu fermé)",
+                    format!("La grille s'illumine ({d}, même jeu fermé)"),
                 );
                 self.vis.fireworks(now);
                 self.vis.fireworks(now + 0.5);

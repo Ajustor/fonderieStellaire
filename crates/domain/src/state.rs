@@ -1591,6 +1591,27 @@ impl GameState {
             .clamp(0.30, 0.95)
     }
 
+    /// Facteur de toutes les attentes en temps réel (Horloge du vide), appliqué
+    /// quand une attente commence.
+    pub fn wait_factor(&self, catalog: &Catalog) -> f64 {
+        self.lab_effects(catalog)
+            .filter_map(|e| match e {
+                LabEffect::WaitFactor(f) => Some(f),
+                _ => None,
+            })
+            .product()
+    }
+
+    /// Durée de la Convergence à son lancement.
+    pub fn convergence_duration(&self, catalog: &Catalog) -> f64 {
+        CONVERGENCE_SECS * self.wait_factor(catalog)
+    }
+
+    /// Durée de l'Éveil du Cosmos à son lancement.
+    pub fn awakening_duration(&self, catalog: &Catalog) -> f64 {
+        megastructure::AWAKENING_SECS * self.wait_factor(catalog)
+    }
+
     /// Durée d'une expédition (reliques et prospection comprises).
     pub fn expedition_duration(&self, catalog: &Catalog, system: usize) -> f64 {
         let Some(sys) = self.map.systems.get(system) else {
@@ -1608,7 +1629,12 @@ impl GameState {
         } else {
             1.0
         };
-        sys.duration() * prospect * speed * set * (1.0 - self.grid_effects().expedition_speed)
+        sys.duration()
+            * prospect
+            * speed
+            * set
+            * (1.0 - self.grid_effects().expedition_speed)
+            * self.wait_factor(catalog)
     }
 
     /// Une flotte peut partir : vers un système à portée pas encore exploré,
@@ -1783,7 +1809,7 @@ impl GameState {
             });
             return;
         }
-        self.convergence = Some(CONVERGENCE_SECS);
+        self.convergence = Some(self.convergence_duration(catalog));
         events.push(DomainEvent::ConvergenceStarted);
     }
 
@@ -1899,14 +1925,14 @@ impl GameState {
                 .all(|&k| self.structure_count(k) > 0)
     }
 
-    pub fn start_awakening(&mut self, events: &mut Vec<DomainEvent>) {
+    pub fn start_awakening(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
         if !self.awakening_ready() {
             events.push(DomainEvent::PurchaseFailed {
                 target: PurchaseTarget::Awakening,
             });
             return;
         }
-        self.awakening = Some(megastructure::AWAKENING_SECS);
+        self.awakening = Some(self.awakening_duration(catalog));
         events.push(DomainEvent::AwakeningStarted);
     }
 
@@ -2176,6 +2202,17 @@ impl GameState {
         rarity: u8,
         events: &mut Vec<DomainEvent>,
     ) {
+        // Collection incomplète : la trouvaille est toujours une relique
+        // manquante, la première à partir de celle tirée (en boucle).
+        let n = self.relics.len();
+        let id = if self.relics.get(id.index()).is_some_and(|r| r.is_some()) {
+            (1..n)
+                .map(|k| (id.index() + k) % n)
+                .find(|&i| self.relics[i].is_none())
+                .map_or(id, RelicId)
+        } else {
+            id
+        };
         let Some(slot) = self.relics.get_mut(id.index()) else {
             return;
         };
@@ -2340,7 +2377,7 @@ impl GameState {
             return;
         };
         self.particles_spent += stage.cost;
-        self.attractor_build = Some(stage.build_secs);
+        self.attractor_build = Some(stage.build_secs * self.wait_factor(catalog));
         events.push(DomainEvent::AttractorStageStarted {
             stage: self.attractor,
         });
@@ -2446,7 +2483,7 @@ impl GameState {
             return;
         };
         self.dark_matter_spent += def.cost;
-        self.research = Some((id, def.research_secs));
+        self.research = Some((id, def.research_secs * self.wait_factor(catalog)));
         events.push(DomainEvent::LabResearchStarted { node: id });
     }
 
@@ -2508,6 +2545,17 @@ impl GameState {
             if gain >= 5.0f64.max(self.fragments) {
                 self.supernova(catalog, events);
             }
+        }
+        // Big Bang avant Big Crunch : à 15 Big Crunch, le Big Bang passe en premier.
+        if self.lab_active(catalog, LabEffect::AutoBigBang)
+            && self.big_bangs > 0
+            && self.can_big_bang()
+        {
+            self.big_bang(catalog, events);
+        }
+        if self.lab_active(catalog, LabEffect::AutoCrunch) && self.can_big_crunch() {
+            let universe = self.universe;
+            self.big_crunch(catalog, universe, events);
         }
     }
 
@@ -2660,6 +2708,24 @@ impl GameState {
     /// poussière dépensée, par lots du mode d'achat du joueur (×10 : attend
     /// d'avoir de quoi en prendre 10), au plus 10 achats par passage.
     fn run_autobuyer(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
+        // Améliorations abordables d'abord, de la moins chère à la plus chère :
+        // après une Supernova, le cycle repart sans [A].
+        if !self.upgrades_forbidden(catalog) {
+            let factor = self.upgrade_cost_factor(catalog);
+            let mut affordable: Vec<(UpgradeId, f64)> = catalog
+                .upgrades
+                .iter()
+                .filter(|u| self.is_upgrade_available(catalog, u.id))
+                .map(|u| (u.id, u.cost * factor))
+                .collect();
+            affordable.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+            for (id, cost) in affordable {
+                if !self.stardust.can_afford(cost) {
+                    break;
+                }
+                self.buy_upgrade(catalog, id, events);
+            }
+        }
         let mode = self.autobuy_mode;
         for _ in 0..AUTOBUY_MAX_PER_TICK {
             let best = catalog
@@ -3352,6 +3418,96 @@ mod tests {
         c.lab_by_key(key).unwrap()
     }
 
+    fn autobuying_state(c: &Catalog) -> GameState {
+        let mut s = GameState::new(c);
+        let perk = c
+            .perks
+            .iter()
+            .position(|p| matches!(p.effect, PerkEffect::AutoBuyer))
+            .unwrap();
+        s.perks[perk] = true;
+        s.autobuy = true;
+        s.owned[0] = 30;
+        s.owned[1] = 30;
+        s.total_run = 1e6;
+        s
+    }
+
+    #[test]
+    fn autobuyer_also_buys_affordable_upgrades_cheapest_first() {
+        let c = Catalog::standard();
+        let mut s = autobuying_state(&c);
+        let mut ev = Vec::new();
+        let mut available: Vec<_> = c
+            .upgrades
+            .iter()
+            .filter(|u| s.is_upgrade_available(&c, u.id))
+            .collect();
+        assert!(available.len() >= 2, "plusieurs améliorations disponibles");
+        available.sort_by(|a, b| a.cost.partial_cmp(&b.cost).unwrap());
+        // Juste de quoi payer la moins chère.
+        s.stardust = Stardust::new(available[0].cost * s.upgrade_cost_factor(&c) * 1.01);
+        s.tick(&c, 1.1, 0.5, &mut ev);
+        assert!(s.has_upgrade(available[0].id), "la moins chère d'abord");
+        assert!(!s.has_upgrade(available.last().unwrap().id));
+    }
+
+    #[test]
+    fn autobuyer_buys_no_upgrade_when_they_are_forbidden() {
+        let c = Catalog::standard();
+        let mut s = autobuying_state(&c);
+        let mut ev = Vec::new();
+        let no_upgrades = c
+            .challenges
+            .iter()
+            .find(|ch| ch.restriction == Restriction::NoUpgrades)
+            .unwrap();
+        s.challenge = Some(no_upgrades.id);
+        s.stardust = Stardust::new(1e15);
+        s.tick(&c, 1.1, 0.5, &mut ev);
+        assert!(c
+            .upgrades
+            .iter()
+            .all(|u| !s.has_upgrade(u.id) || u.effect == Effect::HoldHarvest));
+    }
+
+    #[test]
+    fn auto_crunch_triggers_when_possible_but_not_during_a_challenge() {
+        let (c, mut s, mut ev) = setup();
+        s.lab[lab(&c, "lab_autocrunch").index()] = true;
+        s.crunches = 11;
+        s.universe = UniverseId(1);
+        s.supernovas = 9;
+        s.tick(&c, 2.0, 0.5, &mut ev);
+        assert_eq!(s.crunches, 11, "pas assez de Supernovas");
+        s.supernovas = 10;
+        s.challenge = Some(c.challenges[0].id);
+        s.tick(&c, 2.0, 0.5, &mut ev);
+        assert_eq!(s.crunches, 11, "jamais pendant un Défi");
+        s.challenge = None;
+        s.tick(&c, 2.0, 0.5, &mut ev);
+        assert_eq!(s.crunches, 12, "Big Crunch automatique");
+        assert_eq!(s.universe, UniverseId(1), "univers en cours conservé");
+        // En pause : plus rien.
+        s.toggle_lab(&c, lab(&c, "lab_autocrunch"), &mut ev);
+        s.supernovas = 10;
+        s.tick(&c, 2.0, 0.5, &mut ev);
+        assert_eq!(s.crunches, 12);
+    }
+
+    #[test]
+    fn auto_big_bang_needs_a_first_manual_one() {
+        let (c, mut s, mut ev) = setup();
+        s.lab[lab(&c, "lab_autobang").index()] = true;
+        s.crunches = 15;
+        s.tick(&c, 2.0, 0.5, &mut ev);
+        assert_eq!(s.big_bangs, 0, "le premier Big Bang reste manuel");
+        s.big_bangs = 1;
+        s.tick(&c, 2.0, 0.5, &mut ev);
+        assert_eq!(s.big_bangs, 2, "Big Bang automatique");
+        assert_eq!(s.crunches, 0);
+    }
+
     /// Termine immédiatement la recherche en cours (en faisant passer le temps).
     fn finish_research(c: &Catalog, s: &mut GameState, ev: &mut Vec<DomainEvent>) {
         s.tick(c, 100.0 * 3600.0, 0.5, ev);
@@ -3798,6 +3954,49 @@ mod tests {
     }
 
     #[test]
+    fn waits_are_halved_and_the_time_clock_shortens_them_all() {
+        let c = Catalog::standard();
+        let h = 3600.0;
+        let total: f64 = c.attractor.iter().map(|st| st.build_secs).sum();
+        assert_eq!(total, 54.0 * h, "Grand Attracteur : 54 h");
+        assert_eq!(crate::cosmic::CONVERGENCE_SECS, 24.0 * h);
+        assert_eq!(crate::megastructure::AWAKENING_SECS, 36.0 * h);
+
+        let (mut s, mut ev) = act_three(&c);
+        let expedition = s.expedition_duration(&c, 1);
+        assert_eq!(s.wait_factor(&c), 1.0);
+        s.lab[lab(&c, "lab_time").index()] = true;
+        assert!((s.wait_factor(&c) - 0.7).abs() < 1e-12);
+        assert!((s.expedition_duration(&c, 1) - 0.7 * expedition).abs() < 1e-6);
+        assert!((s.convergence_duration(&c) - 0.7 * 24.0 * h).abs() < 1e-6);
+        assert!((s.awakening_duration(&c) - 0.7 * 36.0 * h).abs() < 1e-6);
+
+        let (_, mut s, _) = setup();
+        s.lab[lab(&c, "lab_time").index()] = true;
+        s.crunches = 10;
+        let prod1 = lab(&c, "lab_prod1");
+        s.start_research(&c, prod1, &mut ev);
+        let (_, left) = s.research.unwrap();
+        assert!((left - 0.7 * 3.0 * h).abs() < 1e-6, "recherche : {left}");
+        s.particles = 30;
+        s.big_bangs = 1;
+        s.build_attractor(&c, &mut ev);
+        assert!((s.attractor_build.unwrap() - 0.7 * 1.5 * h).abs() < 1e-6);
+    }
+
+    #[test]
+    fn waits_already_running_keep_their_length() {
+        let (c, mut s, mut ev) = setup();
+        s.particles = 30;
+        s.big_bangs = 1;
+        s.build_attractor(&c, &mut ev);
+        let left = s.attractor_build.unwrap();
+        s.lab[lab(&c, "lab_time").index()] = true;
+        s.tick(&c, 0.5, 0.5, &mut ev);
+        assert!((s.attractor_build.unwrap() - (left - 0.5)).abs() < 1e-6);
+    }
+
+    #[test]
     fn attractor_is_built_in_real_time_and_awakens() {
         let (c, mut s, mut ev) = setup();
         s.particles = 30;
@@ -3805,7 +4004,7 @@ mod tests {
         assert!(s.attractor_build.is_none(), "il faut un Big Bang");
         s.big_bangs = 1;
         s.build_attractor(&c, &mut ev);
-        assert_eq!(s.attractor_build, Some(3.0 * 3600.0));
+        assert_eq!(s.attractor_build, Some(1.5 * 3600.0));
         assert_eq!(s.particles_spendable(), 28);
         s.build_attractor(&c, &mut ev);
         assert_eq!(s.particles_spendable(), 28, "une étape à la fois");
@@ -3948,6 +4147,10 @@ mod tests {
                 ..
             }
         )));
+        // Collection complète : les doublons deviennent des Éclats.
+        for r in s.relics.iter_mut().skip(1) {
+            *r = Some(0);
+        }
         s.gain_relic(&c, RelicId(0), 0, &mut ev);
         assert_eq!(s.shards, 1, "doublon → Éclat");
         s.gain_relic(&c, RelicId(0), 3, &mut ev);
@@ -3975,6 +4178,31 @@ mod tests {
         // Ranger libère un emplacement.
         s.toggle_relic(&c, RelicId(0), &mut ev);
         assert_eq!(s.equipped.len(), 2);
+    }
+
+    #[test]
+    fn a_missing_relic_comes_before_any_duplicate() {
+        let c = Catalog::standard();
+        let (mut s, mut ev) = act_three(&c);
+        s.gain_relic(&c, RelicId(0), 1, &mut ev);
+        s.relics[2] = Some(0);
+        // La 0 est déjà là, la 1 manque : c'est elle qui arrive.
+        s.gain_relic(&c, RelicId(0), 3, &mut ev);
+        assert_eq!(s.relic_rarity(RelicId(1)), Some(3), "la manquante suivante");
+        assert_eq!(
+            s.relic_rarity(RelicId(0)),
+            Some(1),
+            "pas d'amélioration avant"
+        );
+        assert_eq!(s.shards, 0, "pas d'Éclat tant qu'il en manque");
+        // La 2 est là aussi : on saute à la 3.
+        s.gain_relic(&c, RelicId(2), 0, &mut ev);
+        assert_eq!(s.relic_rarity(RelicId(3)), Some(0));
+        // En boucle : depuis la dernière, retour au début.
+        let last = c.relics.len() - 1;
+        s.relics[last] = Some(0);
+        s.gain_relic(&c, RelicId(last), 0, &mut ev);
+        assert_eq!(s.relic_rarity(RelicId(4)), Some(0));
     }
 
     #[test]
@@ -4167,7 +4395,7 @@ mod tests {
         s.grid[40] = Some(StructureKind::Core);
         assert!(s.awakening_ready());
         let before = economy::permanent_multiplier(&c, &s);
-        s.start_awakening(&mut ev);
+        s.start_awakening(&c, &mut ev);
         s.demolish(0, &mut ev);
         assert!(s.grid[0].is_some(), "on ne démolit pas pendant l'Éveil");
         ev.clear();

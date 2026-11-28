@@ -92,8 +92,10 @@ pub(crate) fn detail_lines(ctx: &Ctx, sel: usize, width: usize) -> Vec<(String, 
             );
         } else if snap.awakening_ready {
             push(
-                "[Entrée] lancer l'Éveil du Cosmos (72 h, même jeu fermé) : la fin de l'Acte IV."
-                    .into(),
+                format!(
+                    "[Entrée] lancer l'Éveil du Cosmos ({}, même jeu fermé) : la fin de l'Acte IV.",
+                    fmt::duration(snap.wait(domain::megastructure::AWAKENING_SECS))
+                ),
                 theme::bold(theme::GOLD),
             );
         } else {

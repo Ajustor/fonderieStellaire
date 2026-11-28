@@ -1,5 +1,29 @@
 # Journal des versions
 
+## v0.24.0 — Moins de répétition, moins d'attente
+
+### Nouveautés
+- **Laboratoire** : trois nouvelles recherches.
+  - **Effondrement automatique** (3 ✶) : le Big Crunch se déclenche dès qu'il
+    est possible, dans l'univers en cours (jamais pendant un Défi).
+  - **Big Bang automatique** (4 ✶) : le Big Bang se déclenche à 15 Big Crunch,
+    une fois le premier fait à la main.
+  - **Horloge du vide** (2 ✶) : toutes les attentes en temps réel −30 %
+    (recherches, Grand Attracteur, expéditions, Convergence, Éveil).
+
+### Équilibrage
+- **Attentes divisées par deux** : Grand Attracteur 54 h au total (au lieu de
+  108 h), Convergence 24 h (au lieu de 48 h), Éveil du Cosmos 36 h (au lieu de
+  72 h). Une partie complète passe d'environ 17 à 10 jours de jeu continu, et
+  de 53 à 37 jours à 2 h par jour.
+
+### Améliorations
+- **Achat automatique** (Atelier) : il achète aussi les améliorations
+  abordables, la moins chère d'abord. Après une Supernova, le cycle repart
+  sans appuyer sur [A].
+- **Reliques** : tant que la collection est incomplète, chaque trouvaille est
+  une relique manquante. Plus de doublons qui font attendre la dernière.
+
 ## v0.23.0 — De vrais onglets sur ordinateur
 
 ### Améliorations

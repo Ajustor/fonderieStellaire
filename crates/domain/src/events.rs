@@ -210,7 +210,7 @@ pub enum DomainEvent {
     CosmicEventExpired {
         event: usize,
     },
-    /// La Convergence commence (48 h).
+    /// La Convergence commence (24 h, moins avec l'Horloge du vide).
     ConvergenceStarted,
     /// Fin de l'Acte III.
     ConvergenceDone,
@@ -221,7 +221,7 @@ pub enum DomainEvent {
         cell: usize,
         kind: crate::megastructure::StructureKind,
     },
-    /// L'Éveil du Cosmos commence (72 h).
+    /// L'Éveil du Cosmos commence (36 h, moins avec l'Horloge du vide).
     AwakeningStarted,
     /// Fin de l'Acte IV : le Cosmos est vivant.
     CosmosAwakened,

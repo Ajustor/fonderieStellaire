@@ -226,8 +226,9 @@ Majuscules et minuscules sont acceptées.
   *matière noire* : production ×2, ×4, ×8… et +25 % de fragments par Crunch.
 - **Laboratoire** (`L`, dès le premier Big Crunch) : la matière noire finance des
   recherches qui durent un temps réel (de 1 h à 12 h), une à la fois, même jeu
-  fermé : automatismes (Supernova, Constellations, comètes), conservation au Big
-  Crunch, et bonus de puissance.
+  fermé : automatismes (Supernova, Constellations, comètes, Big Crunch, Big
+  Bang), conservation au Big Crunch, bonus de puissance, et l'**Horloge du
+  vide** qui raccourcit de 30 % toutes les attentes en temps réel.
 - **Univers parallèles** (après 10 Big Crunch) : chaque Big Crunch ouvre un
   écran de portails pour choisir les règles du cycle suivant (Gravité forte,
   Temps dilaté, Nuée, Désert, Entropie). Atteindre l'objectif d'un univers
@@ -243,11 +244,12 @@ Majuscules et minuscules sont acceptées.
   rapporte (production, fragments, hors-ligne, comètes, flottes, gains
   immédiats).
 - **Reliques** (Acte III) : 16 reliques en 4 ensembles et 4 raretés,
-  rapportées par les expéditions et les prospections. On en équipe 3 à 5 ;
+  rapportées par les expéditions et les prospections (tant que la collection
+  est incomplète, chaque trouvaille est une relique manquante). On en équipe 3 à 5 ;
   3 reliques d'un même ensemble donnent un bonus d'ensemble.
 - **Événements cosmiques** (Acte III) : des dilemmes toutes les 2 à 4 h de
   jeu, aux conséquences parfois risquées.
-- **Convergence** : carte complète et 16 reliques réunies, 48 h de temps réel
+- **Convergence** : carte complète et 16 reliques réunies, 24 h de temps réel
   pour terminer l'Acte III.
 - **Succès** : 51 succès, **+1 %** de production chacun.
 - **Progression** : le pourcentage dans l'en-tête et l'écran `I` indiquent où tu

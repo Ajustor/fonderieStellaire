@@ -116,7 +116,7 @@ pub(crate) fn describe(ctx: &Ctx, item: CosmosItem) -> (char, String, String, Rg
                     format!(
                         "{} {PARTICLE} · {}",
                         stage.cost,
-                        fmt::duration(stage.build_secs)
+                        fmt::duration(ctx.snap.wait(stage.build_secs))
                     ),
                     color,
                 )
@@ -251,7 +251,7 @@ pub(crate) fn detail(ctx: &Ctx, item: CosmosItem, armed: bool) -> Vec<(String, R
                     format!(
                         "[Entrée] lancer : {} {PARTICLE}, {} de construction (avance même jeu fermé).",
                         stage.cost,
-                        fmt::duration(stage.build_secs)
+                        fmt::duration(ctx.snap.wait(stage.build_secs))
                     ),
                     theme::GOLD,
                 )

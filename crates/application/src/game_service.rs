@@ -366,7 +366,7 @@ impl GameService {
             }
             Command::Demolish(cell) => self.state.demolish(cell, &mut ev),
             Command::StartDaily => out.push(self.start_daily()),
-            Command::StartAwakening => self.state.start_awakening(&mut ev),
+            Command::StartAwakening => self.state.start_awakening(&self.catalog, &mut ev),
             Command::EndDaily => {
                 if self.daily.is_some() {
                     out.push(self.end_daily());
@@ -643,12 +643,16 @@ impl GameService {
                 }),
         );
         snap.attractor_stages = st.attractor;
+        // Horloge du vide : durées réduites ; une attente lancée avant garde
+        // sa longueur (le total ne descend jamais sous ce qui reste).
+        let wait = st.wait_factor(c);
+        snap.wait_factor = wait;
         snap.attractor_build = st.attractor_build.and_then(|left| {
             let stage = c.attractor_stage(st.attractor)?;
             Some(ResearchBuildView {
                 stage: st.attractor,
                 remaining: left,
-                total: stage.build_secs,
+                total: (stage.build_secs * wait).max(left),
             })
         });
         snap.attractor_buildable = st.can_build_attractor(c);
@@ -699,7 +703,7 @@ impl GameService {
         snap.convergence_ready = st.convergence_ready(c);
         snap.convergence = st
             .convergence
-            .map(|left| (left, domain::cosmic::CONVERGENCE_SECS));
+            .map(|left| (left, st.convergence_duration(c).max(left)));
         snap.converged = st.converged;
         snap.auto_fleets = st.auto_fleets;
         snap.auto_fleets_unlocked = st.auto_fleets_unlocked();
@@ -728,9 +732,7 @@ impl GameService {
         snap.grid_effects = st.grid_effects();
         snap.structure_costs = domain::StructureKind::ALL.map(|k| st.structure_cost(k));
         snap.awakening_ready = st.awakening_ready();
-        snap.awakening = st
-            .awakening
-            .map(|l| (l, domain::megastructure::AWAKENING_SECS));
+        snap.awakening = st.awakening.map(|l| (l, st.awakening_duration(c).max(l)));
         snap.awakened = st.awakened;
         snap.relic_sets = domain::RelicSet::ALL
             .iter()
@@ -748,7 +750,7 @@ impl GameService {
             Some(ResearchView {
                 id,
                 remaining: left,
-                total: def.research_secs,
+                total: (def.research_secs * wait).max(left),
             })
         });
         let forbidden = st.upgrades_forbidden(c);
