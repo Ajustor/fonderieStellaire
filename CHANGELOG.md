@@ -1,5 +1,26 @@
 # Journal des versions
 
+## v0.21.0 — Prestiges rééquilibrés
+
+### Équilibrage
+- **Big Crunch** : la matière noire double la production à chaque Big Crunch
+  (×2, ×4, ×8…) au lieu d'ajouter +100 % (×2, ×3, ×4…). Avec le Cœur de
+  superamas, elle la triple (×3, ×9, ×27…).
+- **Big Bang** : possible dès 15 Big Crunch (au lieu de 30). Il rapporte une
+  particule primordiale par tranche de 5 Big Crunch sacrifiés (15 → 3, 20 → 4,
+  30 → 6), et chaque particule multiplie la production par 10 (au lieu de
+  +100 %). Le Big Bang reste une quasi remise à zéro, sans chute brutale.
+
+### Améliorations
+- **Défis** : pendant un Défi « sans amélioration » (et dans l'univers Désert
+  ou un défi du jour qui les exclut), les améliorations ne sont plus affichées ;
+  la liste indique « Interdites par la règle en cours ».
+
+### Corrections
+- **Classement** : les prestiges passent avant la collection. À acte égal, le
+  classement compare les Big Bang, puis les Big Crunch, puis les Supernovas ; la
+  collection et la poussière ne font que départager.
+
 ## v0.20.1 — Sons au volume multimédia
 
 ### Corrections
