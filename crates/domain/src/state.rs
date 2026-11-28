@@ -1393,7 +1393,7 @@ impl GameState {
         self.particles.saturating_sub(self.particles_spent)
     }
 
-    /// Le Big Bang est-il possible ? (30 Big Crunch, aucun Défi en cours)
+    /// Le Big Bang est-il possible ? (15 Big Crunch, aucun Défi en cours)
     pub fn can_big_bang(&self) -> bool {
         self.crunches >= BIGBANG_CRUNCHES && self.challenge.is_none()
     }
@@ -3693,15 +3693,20 @@ mod tests {
     }
 
     #[test]
-    fn big_bang_needs_30_crunches_and_resets_the_crunch_layer() {
+    fn big_bang_needs_15_crunches_and_resets_the_crunch_layer() {
         let (c, mut s, mut ev) = setup();
-        s.crunches = 29;
+        s.crunches = 14;
         s.big_bang(&c, &mut ev);
         assert!(matches!(
             ev.last(),
-            Some(DomainEvent::BigBangUnavailable { crunches: 29, .. })
+            Some(DomainEvent::BigBangUnavailable { crunches: 14, .. })
         ));
-        s.crunches = 34;
+        // Une particule par tranche de 5 Big Crunch sacrifiés.
+        for (crunches, particles) in [(15, 3), (19, 3), (20, 4), (30, 6)] {
+            s.crunches = crunches;
+            assert_eq!(s.particles_available(), particles, "{crunches} Big Crunch");
+        }
+        s.crunches = 17;
         s.dark_matter_spent = 20;
         s.supernovas = 15;
         s.fragments = 1e4;

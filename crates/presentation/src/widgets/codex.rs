@@ -173,7 +173,7 @@ pub fn lines(ctx: &Ctx) -> Vec<(String, Style)> {
         "✶ Big Crunch [K] (15 Supernovas) : tout le niveau Supernova repart de zéro contre de la matière noire : production ×2, ×4, ×8… et fragments +25 % par Crunch.".into(),
         "✶ Laboratoire [L] (10 Big Crunch) : recherches en temps réel, une à la fois, qui avancent même jeu fermé : automatismes, conservation, puissance.".into(),
         "◎ Univers parallèles [V] (10 Big Crunch) : choisis les règles de chaque cycle au Big Crunch ; atteins leur objectif pour gagner leur Clé (bonus permanent).".into(),
-        "✷ Big Bang [G] (30 Big Crunch) : les Big Crunch repartent de zéro contre des particules primordiales (production ×10 et +25 % de fragments chacune). Le Laboratoire, les Clés et le Grand Attracteur restent.".into(),
+        "✷ Big Bang [G] (15 Big Crunch) : les Big Crunch repartent de zéro contre des particules primordiales, une par tranche de 5 Big Crunch (production ×10 et +25 % de fragments chacune). Le Laboratoire, les Clés et le Grand Attracteur restent.".into(),
         "▼ Forge primordiale [G] : des particules pour forger 3 générateurs de fin de jeu, présents dans tous les cycles.".into(),
         "◆ Grand Attracteur [G] : 7 étapes payées en particules et construites en temps réel, même jeu fermé. La dernière clôt l'Acte II.".into(),
         "▸ Carte stellaire [X] (Acte III, après l'éveil du Grand Attracteur) : envoie des flottes explorer des systèmes, en temps réel. Plus un système est dangereux, plus l'expédition est longue et risquée, et plus elle rapporte : production, fragments, hors-ligne, comètes, flottes en plus ou un gros gain immédiat.".into(),

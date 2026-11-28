@@ -39,12 +39,13 @@ pub mod balance {
     /// Big Crunch nécessaires pour choisir son univers.
     pub const UNIVERSES_UNLOCK_CRUNCHES: u32 = 10;
     /// Big Crunch nécessaires pour un Big Bang.
-    pub const BIGBANG_CRUNCHES: u32 = 30;
-    /// Un Big Bang rapporte une particule primordiale par tranche de 10 Big Crunch.
-    pub const PARTICLES_PER_CRUNCHES: u32 = 10;
+    pub const BIGBANG_CRUNCHES: u32 = 15;
+    /// Un Big Bang rapporte une particule primordiale par tranche de 5 Big
+    /// Crunch sacrifiés (15 → 3, 20 → 4, 30 → 6).
+    pub const PARTICLES_PER_CRUNCHES: u32 = 5;
     /// Chaque particule primordiale multiplie la production par 10 (×10,
-    /// ×100, ×1 000…) : le Big Bang (30 Big Crunch, 3 particules) rend ×1 000
-    /// contre ×2³⁰ perdus, soit l'équivalent d'une dizaine de Big Crunch.
+    /// ×100, ×1 000…) : un Big Bang à 15 Big Crunch (3 particules) rend ×1 000
+    /// contre ×2¹⁵ perdus, soit l'équivalent d'une dizaine de Big Crunch.
     pub const PARTICLE_PRODUCTION: f64 = 10.0;
     /// Chaque particule primordiale ajoute +25 % de fragments.
     pub const PARTICLE_FRAGMENTS: f64 = 0.25;

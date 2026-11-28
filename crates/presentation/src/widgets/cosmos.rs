@@ -139,7 +139,8 @@ pub(crate) fn detail(ctx: &Ctx, item: CosmosItem, armed: bool) -> Vec<(String, R
             out.push((
                 format!(
                     "Remet à zéro les Big Crunch et tout le niveau Supernova contre des particules \
-                     primordiales {PARTICLE} : production ×10 et +25 % de fragments chacune, \
+                     primordiales {PARTICLE}, une par tranche de 5 Big Crunch : production ×10 et +25 % de \
+                     fragments chacune, \
                      pour toujours. Laboratoire, Clés d'univers, forges et Grand Attracteur sont conservés."
                 ),
                 theme::CYAN,
