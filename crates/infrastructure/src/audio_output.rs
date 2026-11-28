@@ -36,10 +36,7 @@ impl AudioOutput {
             other => return Err(format!("format audio non géré : {other}")),
         }?;
         stream.play().map_err(|e| format!("sortie audio : {e}"))?;
-        Ok(AudioOutput {
-            stream,
-            rate,
-        })
+        Ok(AudioOutput { stream, rate })
     }
 
     pub fn sample_rate(&self) -> u32 {
