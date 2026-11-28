@@ -796,6 +796,13 @@ impl GameState {
             || self.total_run >= def.base_cost * REVEAL_RATIO
     }
 
+    /// Améliorations interdites : Défi « sans amélioration », univers ou défi
+    /// du jour qui les exclut.
+    pub fn upgrades_forbidden(&self, catalog: &Catalog) -> bool {
+        self.active_restriction(catalog) == Some(Restriction::NoUpgrades)
+            || self.rules(catalog).no_upgrades
+    }
+
     /// Une amélioration est proposée si elle est débloquée et pas encore achetée.
     pub fn is_upgrade_available(&self, catalog: &Catalog, id: UpgradeId) -> bool {
         match catalog.upgrade(id) {
@@ -948,13 +955,7 @@ impl GameState {
             events.push(fail);
             return;
         };
-        if self.active_restriction(catalog) == Some(Restriction::NoUpgrades) {
-            events.push(DomainEvent::ChallengeBlocked {
-                restriction: Restriction::NoUpgrades,
-            });
-            return;
-        }
-        if self.rules(catalog).no_upgrades {
+        if self.upgrades_forbidden(catalog) {
             events.push(DomainEvent::ChallengeBlocked {
                 restriction: Restriction::NoUpgrades,
             });
@@ -1230,13 +1231,7 @@ impl GameState {
 
     /// Achète toutes les améliorations abordables, de la moins chère à la plus chère.
     pub fn buy_all_upgrades(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
-        if self.active_restriction(catalog) == Some(Restriction::NoUpgrades) {
-            events.push(DomainEvent::ChallengeBlocked {
-                restriction: Restriction::NoUpgrades,
-            });
-            return;
-        }
-        if self.rules(catalog).no_upgrades {
+        if self.upgrades_forbidden(catalog) {
             events.push(DomainEvent::ChallengeBlocked {
                 restriction: Restriction::NoUpgrades,
             });

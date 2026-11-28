@@ -751,20 +751,25 @@ impl GameService {
                 total: def.research_secs,
             })
         });
-        snap.next_upgrade = st.next_locked_upgrade(c).and_then(|id| {
-            let def = c.upgrade(id)?;
-            let (current, needed) = match def.requirement {
-                Requirement::GeneratorOwned { generator, count } => {
-                    (st.owned_of(generator) as f64, count as f64)
-                }
-                Requirement::TotalRun(r) => (st.total_run, r),
-            };
-            Some(NextUpgradeView {
-                id,
-                current,
-                needed,
-            })
-        });
+        let forbidden = st.upgrades_forbidden(c);
+        snap.upgrades_forbidden = forbidden;
+        snap.next_upgrade = st
+            .next_locked_upgrade(c)
+            .filter(|_| !forbidden)
+            .and_then(|id| {
+                let def = c.upgrade(id)?;
+                let (current, needed) = match def.requirement {
+                    Requirement::GeneratorOwned { generator, count } => {
+                        (st.owned_of(generator) as f64, count as f64)
+                    }
+                    Requirement::TotalRun(r) => (st.total_run, r),
+                };
+                Some(NextUpgradeView {
+                    id,
+                    current,
+                    needed,
+                })
+            });
         let generators_found = st.owned.iter().filter(|&&o| o > 0).count();
         let perks_owned = st.perks_owned();
         let achievements = st.achievements_unlocked();
@@ -834,7 +839,8 @@ impl GameService {
 
         snap.upgrades.clear();
         let upgrade_factor = st.upgrade_cost_factor(c);
-        for u in &c.upgrades {
+        // Interdites par la règle en cours : rien à proposer.
+        for u in c.upgrades.iter().filter(|_| !st.upgrades_forbidden(c)) {
             if st.is_upgrade_available(c, u.id) {
                 snap.upgrades.push(UpgradeView {
                     id: u.id,
@@ -1152,6 +1158,36 @@ mod tests {
         assert_eq!(s.snapshot().active_challenge.map(|a| a.id), Some(noclick));
         s.handle(Command::AbandonChallenge);
         assert_eq!(s.snapshot().active_challenge, None);
+    }
+
+    #[test]
+    fn forbidden_upgrades_are_not_shown_during_a_challenge() {
+        let repo = InMemoryRepository::default();
+        let clock = FakeClock(Rc::new(Cell::new(1_000)));
+        let mut s = service(&repo, &clock, vec![0.5]);
+        let rich = |s: &GameService| {
+            let mut data = SaveData::from_state(s.state(), s.catalog(), 0, false);
+            data.supernovas = 3;
+            data.total_run = 1e12;
+            data.total_all = 1e12;
+            data.stardust = 1e12;
+            data
+        };
+        *repo.slot.borrow_mut() = Some(rich(&s));
+        s.load().unwrap();
+        let snap = s.snapshot();
+        assert!(!snap.upgrades.is_empty());
+        assert!(!snap.upgrades_forbidden);
+
+        let noupgrade = s.catalog().challenge_by_key("ch_noupgrade").unwrap();
+        s.handle(Command::StartChallenge(noupgrade));
+        *repo.slot.borrow_mut() = Some(rich(&s));
+        s.load().unwrap();
+        let snap = s.snapshot();
+        assert_eq!(snap.active_challenge.map(|a| a.id), Some(noupgrade));
+        assert!(snap.upgrades_forbidden);
+        assert!(snap.upgrades.is_empty(), "rien d'interdit à l'écran");
+        assert_eq!(snap.next_upgrade, None);
     }
 
     #[test]

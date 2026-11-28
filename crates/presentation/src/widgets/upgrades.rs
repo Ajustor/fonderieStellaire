@@ -18,6 +18,17 @@ use crate::ui::{keep_visible, Panel, Ui};
 use crate::visuals::Visuals;
 
 pub const EMPTY_TEXT: &str = "Rien pour l'instant… continue de récolter ✦";
+/// Liste vide parce que la règle en cours interdit les améliorations.
+pub const FORBIDDEN_TEXT: &str = "Interdites par la règle en cours";
+
+/// Texte affiché quand aucune amélioration n'est proposée.
+pub fn empty_text(snap: &GameSnapshot) -> &'static str {
+    if snap.upgrades_forbidden {
+        FORBIDDEN_TEXT
+    } else {
+        EMPTY_TEXT
+    }
+}
 
 pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &mut Ui) {
     let focused = ui.focus == Panel::Upgrades;
@@ -37,7 +48,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, vis: &mut Visuals, ui: &m
         let pulse = 0.5 + 0.5 * (now * 1.2).sin();
         let c = theme::MUTED.lerp(theme::GREY, pulse * 0.6);
         let max = inner.width.saturating_sub(2) as usize;
-        let txt = draw::truncate(EMPTY_TEXT, max);
+        let txt = draw::truncate(empty_text(snap), max);
         let y = inner.y + inner.height.saturating_sub(3) / 2;
         draw::text(buf, inner.x + 1, y, &txt, theme::fg(c), inner.right());
         if let Some(next) = snap.next_upgrade {

@@ -228,6 +228,9 @@ pub struct GameSnapshot {
     pub teaser: Option<TeaserView>,
     /// Améliorations débloquées et non achetées, triées par coût croissant.
     pub upgrades: Vec<UpgradeView>,
+    /// Améliorations interdites par la règle en cours (Défi, univers, défi du
+    /// jour) : la liste reste vide.
+    pub upgrades_forbidden: bool,
     /// Exemplaires possédés de chaque générateur (visibles ou non).
     pub owned: Vec<u64>,
     /// Production par seconde échantillonnée chaque seconde (la plus ancienne d'abord).
