@@ -1191,7 +1191,7 @@ const PERKS: [(&str, &str, &str, char, f64, PerkEffect); 8] = [
     (
         "perk_auto",
         "Automate",
-        "Achète chaque seconde le générateur le plus rentable, par lots du mode d'achat ([T] pour l'arrêter)",
+        "Achète chaque seconde les améliorations abordables et le générateur le plus rentable, par lots du mode d'achat ([T] pour l'arrêter)",
         '▲',
         5.0,
         PerkEffect::AutoBuyer,

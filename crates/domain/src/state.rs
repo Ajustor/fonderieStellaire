@@ -2671,6 +2671,24 @@ impl GameState {
     /// poussière dépensée, par lots du mode d'achat du joueur (×10 : attend
     /// d'avoir de quoi en prendre 10), au plus 10 achats par passage.
     fn run_autobuyer(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
+        // Améliorations abordables d'abord, de la moins chère à la plus chère :
+        // après une Supernova, le cycle repart sans [A].
+        if !self.upgrades_forbidden(catalog) {
+            let factor = self.upgrade_cost_factor(catalog);
+            let mut affordable: Vec<(UpgradeId, f64)> = catalog
+                .upgrades
+                .iter()
+                .filter(|u| self.is_upgrade_available(catalog, u.id))
+                .map(|u| (u.id, u.cost * factor))
+                .collect();
+            affordable.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+            for (id, cost) in affordable {
+                if !self.stardust.can_afford(cost) {
+                    break;
+                }
+                self.buy_upgrade(catalog, id, events);
+            }
+        }
         let mode = self.autobuy_mode;
         for _ in 0..AUTOBUY_MAX_PER_TICK {
             let best = catalog
@@ -3361,6 +3379,59 @@ mod tests {
 
     fn lab(c: &Catalog, key: &str) -> LabId {
         c.lab_by_key(key).unwrap()
+    }
+
+    fn autobuying_state(c: &Catalog) -> GameState {
+        let mut s = GameState::new(c);
+        let perk = c
+            .perks
+            .iter()
+            .position(|p| matches!(p.effect, PerkEffect::AutoBuyer))
+            .unwrap();
+        s.perks[perk] = true;
+        s.autobuy = true;
+        s.owned[0] = 30;
+        s.owned[1] = 30;
+        s.total_run = 1e6;
+        s
+    }
+
+    #[test]
+    fn autobuyer_also_buys_affordable_upgrades_cheapest_first() {
+        let c = Catalog::standard();
+        let mut s = autobuying_state(&c);
+        let mut ev = Vec::new();
+        let mut available: Vec<_> = c
+            .upgrades
+            .iter()
+            .filter(|u| s.is_upgrade_available(&c, u.id))
+            .collect();
+        assert!(available.len() >= 2, "plusieurs améliorations disponibles");
+        available.sort_by(|a, b| a.cost.partial_cmp(&b.cost).unwrap());
+        // Juste de quoi payer la moins chère.
+        s.stardust = Stardust::new(available[0].cost * s.upgrade_cost_factor(&c) * 1.01);
+        s.tick(&c, 1.1, 0.5, &mut ev);
+        assert!(s.has_upgrade(available[0].id), "la moins chère d'abord");
+        assert!(!s.has_upgrade(available.last().unwrap().id));
+    }
+
+    #[test]
+    fn autobuyer_buys_no_upgrade_when_they_are_forbidden() {
+        let c = Catalog::standard();
+        let mut s = autobuying_state(&c);
+        let mut ev = Vec::new();
+        let no_upgrades = c
+            .challenges
+            .iter()
+            .find(|ch| ch.restriction == Restriction::NoUpgrades)
+            .unwrap();
+        s.challenge = Some(no_upgrades.id);
+        s.stardust = Stardust::new(1e15);
+        s.tick(&c, 1.1, 0.5, &mut ev);
+        assert!(c
+            .upgrades
+            .iter()
+            .all(|u| !s.has_upgrade(u.id) || u.effect == Effect::HoldHarvest));
     }
 
     #[test]
