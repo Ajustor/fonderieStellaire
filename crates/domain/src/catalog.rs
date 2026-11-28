@@ -985,7 +985,7 @@ const LAB: [(&str, &str, &str, char, u32, f64, Option<&str>, LabEffect); 15] = [
         "lab_time",
         "Horloge du vide",
         "Toutes les attentes en temps réel −30 % : recherches, Grand Attracteur, expéditions, Convergence, Éveil",
-        '◷',
+        '∞',
         2,
         4.0 * H,
         None,
