@@ -394,7 +394,7 @@ impl LeaderboardBackend for RelayLeaderboard {
     }
 
     fn site_url(&self) -> String {
-        format!("{}/", self.url)
+        format!("{}/classement", self.url)
     }
 }
 
