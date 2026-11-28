@@ -93,18 +93,16 @@ pub(crate) fn lines(ctx: &Ctx, width: usize, today: u64) -> Vec<(String, Style)>
 }
 
 pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, today: u64) {
-    let s = ease_out_cubic(popup.scale(ctx.now));
-    if s <= 0.0 {
-        return;
-    }
-    effects::fade(buf, area, 0.6 * s);
-    let width = area.width.saturating_sub(4).min(80);
-    let content = lines(ctx, width.saturating_sub(4) as usize, today);
+    let width = ctx.frame.width(area, 80);
+    let content = lines(ctx, width.min(80).saturating_sub(4) as usize, today);
     let height = (content.len() as u16 + 3).min(area.height.saturating_sub(2));
-    let w = ((width as f64 * s).round() as u16).max(2);
-    let h = ((height as f64 * s).round() as u16).max(2);
-    let rect = centered(area, w, h);
-    Clear.render(rect, buf);
+    let height = ctx.frame.height(area, height);
+    let Some((rect, ready)) =
+        ctx.frame
+            .place_faded(buf, area, ctx.now, popup, (width, height), 0.6)
+    else {
+        return;
+    };
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
@@ -114,7 +112,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, today: u64
         .title(Line::from(Span::styled(" ✧ DÉFI DU JOUR ✧ ", theme::bold(theme::GOLD))).centered());
     let inner = block.inner(rect);
     block.render(rect, buf);
-    if s < 0.95 || inner.height < 4 {
+    if !ready || inner.height < 4 {
         return;
     }
     let footer_y = inner.bottom() - 1;

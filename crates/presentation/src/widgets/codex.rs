@@ -4,15 +4,13 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Clear, Widget};
+use ratatui::widgets::{Block, BorderType, Borders, Widget};
 
 use domain::catalog::balance::{ACHIEVEMENT_BONUS, FRAGMENT_BONUS};
 
 use super::Ctx;
 use crate::draw;
 use crate::fmt;
-use crate::fx::easing::ease_out_cubic;
-use crate::fx::effects;
 use crate::layout::centered;
 use crate::theme;
 use crate::ui::Popup;
@@ -313,16 +311,11 @@ fn rect(area: Rect) -> Rect {
 }
 
 pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, scroll: &mut usize) {
-    let s = ease_out_cubic(popup.scale(ctx.now));
-    if s <= 0.0 {
+    let width = ctx.frame.width(area, 90);
+    let height = ctx.frame.height(area, area.height);
+    let Some((r, ready)) = ctx.frame.place(buf, area, ctx.now, popup, width, height) else {
         return;
-    }
-    effects::fade(buf, area, 0.6 * s);
-    let full = rect(area);
-    let w = ((full.width as f64 * s).round() as u16).max(2);
-    let h = ((full.height as f64 * s).round() as u16).max(2);
-    let r = centered(area, w, h);
-    Clear.render(r, buf);
+    };
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
@@ -330,10 +323,11 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, scroll: &m
         .title(Line::from(Span::styled(" ✦ INFOS ✦ ", theme::bold(theme::GOLD))).centered());
     let inner = block.inner(r);
     block.render(r, buf);
-    if s < 0.95 || inner.height < 3 {
+    if !ready || inner.height < 3 {
         return;
     }
-    let width = inner.width.saturating_sub(2) as usize;
+    // Texte à une largeur de lecture raisonnable, même en onglet.
+    let width = inner.width.saturating_sub(2).min(86) as usize;
     // Renvoi à la ligne avec retrait sous le texte (après le symbole).
     let content: Vec<(String, Style)> = lines(ctx)
         .into_iter()

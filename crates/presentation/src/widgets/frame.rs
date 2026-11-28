@@ -49,13 +49,27 @@ impl Frame {
         width: u16,
         height: u16,
     ) -> Option<(Rect, bool)> {
+        self.place_faded(buf, area, now, popup, (width, height), 0.6)
+    }
+
+    /// Comme [`Frame::place`], avec l'assombrissement du fond propre à la
+    /// fenêtre (`fade` × l'ouverture ; sans effet en onglet).
+    pub fn place_faded(
+        self,
+        buf: &mut Buffer,
+        area: Rect,
+        now: f64,
+        popup: &Popup,
+        (width, height): (u16, u16),
+        fade: f64,
+    ) -> Option<(Rect, bool)> {
         match self {
             Frame::Window => {
                 let s = ease_out_cubic(popup.scale(now));
                 if s <= 0.0 {
                     return None;
                 }
-                effects::fade(buf, area, 0.6 * s);
+                effects::fade(buf, area, fade * s);
                 let w = ((width as f64 * s).round() as u16).max(2);
                 let h = ((height as f64 * s).round() as u16).max(2);
                 let rect = centered(area, w, h);

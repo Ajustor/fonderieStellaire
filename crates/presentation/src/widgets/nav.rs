@@ -48,11 +48,21 @@ fn width(segments: &[(String, Option<ScreenId>)]) -> usize {
 
 /// Barre d'onglets dans la bordure basse de `header` (rien si un seul écran).
 pub fn render_tabs(buf: &mut Buffer, header: Rect, snap: &GameSnapshot, current: ScreenId) {
-    let screens = nav::available(snap);
-    if screens.len() < 2 || header.height < 3 || header.width < 20 {
+    if header.height < 3 {
         return;
     }
-    let y = header.bottom() - 1;
+    let line = Rect::new(header.x, header.bottom() - 1, header.width, 1);
+    render_tabs_on(buf, line, snap, current);
+}
+
+/// Barre d'onglets sur une ligne de bordure (`line`, une ligne de haut).
+pub fn render_tabs_on(buf: &mut Buffer, line: Rect, snap: &GameSnapshot, current: ScreenId) {
+    let header = line;
+    let screens = nav::available(snap);
+    if screens.len() < 2 || header.width < 20 || header.height == 0 {
+        return;
+    }
+    let y = header.y;
     let room = header.width.saturating_sub(6) as usize;
     let hint = " Tab › ";
     let segments = (0..3)

@@ -1711,13 +1711,32 @@ fn laboratory_opens_at_the_first_big_crunch_but_not_the_cosmogony() {
 // ---------------------------------------------------------------------------
 
 fn assert_tab(text: &str, title: &str) {
-    assert!(text.contains("FONDERIE STELLAIRE"), "en-tête :\n{text}");
+    let lines: Vec<&str> = text.lines().collect();
+    // Terminal bas (< 30 lignes) : en-tête d'une ligne, sinon l'en-tête complet.
+    let compact = lines.len() < 30;
+    if compact {
+        assert!(
+            lines[0].contains("/s") && lines[0].contains('✦'),
+            "en-tête compact (poussière, production) :\n{text}"
+        );
+    } else {
+        assert!(text.contains("FONDERIE STELLAIRE"), "en-tête :\n{text}");
+    }
     assert!(text.contains(title), "titre de l'onglet :\n{text}");
     assert!(
         !text.contains("╭ Générateurs"),
         "panneaux de la fonderie masqués :\n{text}"
     );
     assert!(!text.contains("╭ Journal"), "journal masqué :\n{text}");
+    // Pleine largeur : le cadre commence au bord gauche, juste sous l'en-tête.
+    let first = lines
+        .get(if compact { 1 } else { 5 })
+        .copied()
+        .unwrap_or("");
+    assert!(
+        first.starts_with('╭') && first.ends_with('╮'),
+        "onglet pleine largeur sous l'en-tête :\n{text}"
+    );
 }
 
 /// Partie au premier Big Crunch, fonderie affichée.
@@ -1793,4 +1812,51 @@ fn laboratory_stays_a_window_on_android() {
         "╭",
         "fenêtre centrée, pas collée au bord :\n{text}"
     );
+}
+
+#[test]
+fn every_bar_screen_is_a_tab_on_desktop() {
+    fn late(save: &mut SaveData) {
+        save.big_bangs = 1;
+        save.attractor = 7;
+        save.map_seed = 42;
+        save.converged = true;
+        save.exotic = 200.0;
+        save.relics = vec![("r_hammer".into(), 3), ("r_crucible".into(), 0)];
+    }
+    type Setup = fn(&mut SaveData);
+    let screens: [(Setup, Intent, &str); 9] = [
+        (|_| {}, Intent::Shop, "ATELIER STELLAIRE"),
+        (
+            |s| {
+                s.supernovas = 5;
+                s.total_run = 5000.0;
+            },
+            Intent::Challenges,
+            "DÉFIS",
+        ),
+        (|s| s.crunches = 17, Intent::Cosmos, "COSMOGONIE"),
+        (|_| {}, Intent::Options, "OPTIONS"),
+        (late, Intent::Megastructures, "MÉGASTRUCTURES"),
+        (late, Intent::Relics, "RELIQUES"),
+        (late, Intent::Daily, "DÉFI DU JOUR"),
+        (|_| {}, Intent::Info, "INFOS"),
+        // Maj+Tab depuis la fonderie : le dernier onglet, le Classement.
+        (|s| s.supernovas = 1, Intent::PrevScreen, "CLASSEMENT"),
+    ];
+    for (setup, intent, title) in screens {
+        for (w, h) in [(80, 24), (100, 30), (160, 45)] {
+            let mut save = advanced_save();
+            setup(&mut save);
+            let mut app = app_with(Some(save));
+            app.set_time(100.0);
+            app.enter_game_now();
+            app.update(0.033);
+            let _ = render(&mut app, w, h);
+            app.on_intent(intent);
+            app.set_time(101.0);
+            let text = render(&mut app, w, h);
+            assert_tab(&text, title);
+        }
+    }
 }

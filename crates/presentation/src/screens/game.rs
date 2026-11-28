@@ -21,6 +21,9 @@ use crate::widgets::{
     mega, modal, options, portals, relics, shop, sky, sparkline, starmap, upgrades, Ctx,
 };
 
+/// Sous cette hauteur, un onglet ouvert réduit l'en-tête à une ligne.
+pub const TAB_COMPACT_BELOW: u16 = 30;
+
 /// Décalage entre deux panneaux de la cascade.
 pub const CASCADE_STAGGER: f64 = 0.08;
 pub const CASCADE_DURATION: f64 = 0.35;
@@ -62,10 +65,33 @@ pub fn render(
     // Onglet (ordinateur) : l'écran ouvert remplace les panneaux de la
     // fonderie, entre l'en-tête et la barre d'aide.
     let tab = ctx.frame == Frame::Tab && view.screen != ScreenId::Foundry;
-    let screen_area = if tab { layout.body } else { area };
+    // Terminal bas : l'en-tête se réduit à une ligne pour laisser à l'onglet
+    // la hauteur d'une fenêtre plein écran.
+    let compact = tab && area.height < TAB_COMPACT_BELOW;
+    let screen_area = if compact {
+        Rect::new(
+            area.x,
+            area.y + 1,
+            area.width,
+            area.height.saturating_sub(1),
+        )
+    } else if tab {
+        layout.body
+    } else {
+        area
+    };
 
-    header::render(buf, layout.header, ctx, vis);
-    crate::widgets::nav::render_tabs(buf, layout.header, ctx.snap, view.screen);
+    if compact {
+        compact_header(
+            buf,
+            Rect::new(area.x, area.y, area.width, 1),
+            ctx,
+            view.screen,
+        );
+    } else {
+        header::render(buf, layout.header, ctx, vis);
+        crate::widgets::nav::render_tabs(buf, layout.header, ctx.snap, view.screen);
+    }
     if !tab {
         generators::render(buf, layout.generators, ctx, vis, ui);
         sky::render(buf, layout.sky, ctx, vis);
@@ -79,15 +105,17 @@ pub fn render(
             &mut ui.journal_scroll,
         );
     }
-    help_bar::render(
-        buf,
-        layout.help,
-        ctx.snap,
-        Some((view.screen, view.next_screen)),
-        &mut vis.help_seen,
-        vis.mode_flash,
-        ctx.now,
-    );
+    if !compact {
+        help_bar::render(
+            buf,
+            layout.help,
+            ctx.snap,
+            Some((view.screen, view.next_screen)),
+            &mut vis.help_seen,
+            vis.mode_flash,
+            ctx.now,
+        );
+    }
 
     if !tab {
         vis.particles.draw(buf, area);
@@ -267,4 +295,31 @@ fn cascade(buf: &mut Buffer, layout: &GameLayout, now: f64, start: f64) {
         effects::offset(buf, *rect, dx, dy);
         effects::fade(buf, *rect, 1.0 - e);
     }
+}
+
+/// En-tête d'une ligne (onglet ouvert sur un terminal bas) : les onglets à
+/// gauche, la poussière et la production à droite.
+fn compact_header(buf: &mut Buffer, line: Rect, ctx: &Ctx, screen: ScreenId) {
+    let snap = ctx.snap;
+    let border = theme::fg(theme::BORDER);
+    for x in line.left()..line.right() {
+        buf[(x, line.y)].set_symbol("─").set_style(border);
+    }
+    let stats = format!(
+        " ✦ {} · +{} /s ",
+        crate::fmt::short(snap.stardust),
+        crate::fmt::short(snap.production)
+    );
+    let stats_w = stats.chars().count() as u16;
+    let stats_x = line.right().saturating_sub(stats_w + 1);
+    draw::text(
+        buf,
+        stats_x,
+        line.y,
+        &stats,
+        theme::bold(theme::GOLD),
+        line.right(),
+    );
+    let tabs = Rect::new(line.x, line.y, stats_x.saturating_sub(line.x), 1);
+    crate::widgets::nav::render_tabs_on(buf, tabs, snap, screen);
 }
