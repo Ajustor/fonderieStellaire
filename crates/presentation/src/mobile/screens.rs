@@ -986,7 +986,7 @@ fn render_upgrades(buf: &mut Buffer, area: Rect, ctx: &Ctx, ui: &mut Ui, m: &mut
     if snap.upgrades.is_empty() {
         let y = area.y + area.height / 3;
         let pulse = 0.5 + 0.5 * (now * 1.2).sin();
-        for (i, l) in draw::wrap(upgrades::EMPTY_TEXT, area.width as usize - 4)
+        for (i, l) in draw::wrap(upgrades::empty_text(snap), area.width as usize - 4)
             .iter()
             .enumerate()
         {
