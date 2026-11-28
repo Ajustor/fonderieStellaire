@@ -1932,3 +1932,63 @@ fn toasts_sit_at_the_top_of_a_tab() {
         "toast en haut de l'onglet (ligne {row}) :\n{text}"
     );
 }
+
+#[test]
+fn another_tab_letter_switches_tabs() {
+    let mut app = crunched_app();
+    app.on_intent(Intent::Lab);
+    app.set_time(101.0);
+    app.on_intent(Intent::Shop);
+    app.set_time(102.0);
+    assert_eq!(app.current_screen(), presentation::nav::ScreenId::Shop);
+    assert_tab(&render(&mut app, 100, 30), "ATELIER STELLAIRE");
+    app.on_intent(Intent::Info);
+    app.set_time(103.0);
+    assert_eq!(app.current_screen(), presentation::nav::ScreenId::Info);
+}
+
+#[test]
+fn o_opens_the_options_and_never_validates_in_a_tab() {
+    let mut app = crunched_app();
+    app.on_intent(Intent::Shop);
+    app.set_time(101.0);
+    let fragments = app.snapshot().fragments_spendable;
+    // `O` (Intent::Yes) : Options, sans acheter l'élément sélectionné.
+    app.on_intent(Intent::Yes);
+    app.set_time(102.0);
+    assert_eq!(
+        app.snapshot().fragments_spendable,
+        fragments,
+        "rien d'acheté"
+    );
+    assert_eq!(app.current_screen(), presentation::nav::ScreenId::Options);
+    // Dans les Options, `O` les referme sans changer le réglage sélectionné.
+    let colors = app.snapshot().color_mode;
+    app.on_intent(Intent::Yes);
+    app.set_time(103.0);
+    assert_eq!(app.snapshot().color_mode, colors, "réglage inchangé");
+    assert_eq!(app.current_screen(), presentation::nav::ScreenId::Foundry);
+}
+
+#[test]
+fn d_still_demolishes_in_the_megastructures() {
+    let mut save = advanced_save();
+    save.big_bangs = 1;
+    save.attractor = 7;
+    save.map_seed = 42;
+    save.converged = true;
+    save.exotic = 200.0;
+    save.supernovas = 5;
+    let mut app = app_with(Some(save));
+    app.set_time(100.0);
+    app.enter_game_now();
+    app.update(0.033);
+    app.on_intent(Intent::Megastructures);
+    app.set_time(101.0);
+    app.on_intent(Intent::Challenges);
+    assert_eq!(
+        app.current_screen(),
+        presentation::nav::ScreenId::Mega,
+        "[D] démolit, il n'ouvre pas les Défis"
+    );
+}

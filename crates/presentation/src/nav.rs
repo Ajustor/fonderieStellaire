@@ -306,6 +306,44 @@ impl App {
         }
     }
 
+    /// Onglet ouvert (ordinateur) : la lettre d'un autre onglet y passe
+    /// directement, et `O` ouvre les Options (ou les referme) au lieu de
+    /// valider. Les confirmations en cours gardent `O` pour « Oui ». Renvoie
+    /// vrai si la touche a été prise.
+    pub(crate) fn route_tab_key(&mut self, intent: Intent) -> bool {
+        if self.mobile.is_some() || self.nav_blocked() {
+            return false;
+        }
+        let current = self.current_screen();
+        if current == ScreenId::Foundry {
+            return false;
+        }
+        // `O` : la lettre des Options (le « Oui » ne sert qu'aux confirmations).
+        let intent = if intent == Intent::Yes {
+            Intent::Options
+        } else {
+            intent
+        };
+        // Lettres qu'un écran utilise pour lui-même : [D] démolit dans les
+        // Mégastructures.
+        if current == ScreenId::Mega && intent == Intent::Challenges {
+            return false;
+        }
+        let Some(target) = ALL.into_iter().find(|s| s.intent() == Some(intent)) else {
+            return false;
+        };
+        if target == current {
+            // Sa propre lettre la referme.
+            self.close_screens();
+            return true;
+        }
+        if !target.unlocked(&self.snap) {
+            return false;
+        }
+        self.open_screen(target);
+        true
+    }
+
     /// `Tab` / `Maj+Tab` : écran suivant ou précédent de la barre.
     pub(crate) fn cycle_screen(&mut self, step: isize) {
         if self.nav_blocked() {

@@ -1122,6 +1122,9 @@ impl App {
             Intent::Help if !self.nav_blocked() => return self.open_help(),
             _ => {}
         }
+        if self.route_tab_key(intent) {
+            return;
+        }
         if let Some(mut popup) = self.ui.event {
             let count = self
                 .snap
