@@ -111,8 +111,27 @@ impl Reply {
     }
 }
 
+/// Page d'accueil : présentation, installation, captures.
+const HOME: &str = include_str!("accueil.html");
 /// Page du classement (autonome : ni script ni police externes).
-const SITE: &str = include_str!("site.html");
+const BOARD_PAGE: &str = include_str!("classement.html");
+/// Captures du jeu affichées sur la page d'accueil.
+const CAPTURES: [(&str, &[u8]); 5] = [
+    ("titre", include_bytes!("../assets/titre.webp")),
+    ("fonderie", include_bytes!("../assets/fonderie.webp")),
+    ("usines", include_bytes!("../assets/usines.webp")),
+    ("supernova", include_bytes!("../assets/supernova.webp")),
+    ("fragments", include_bytes!("../assets/fragments.webp")),
+];
+
+fn page(html: &str) -> Reply {
+    Reply {
+        status: 200,
+        rev: None,
+        body: html.as_bytes().to_vec(),
+        content_type: "text/html; charset=utf-8",
+    }
+}
 
 fn now_unix() -> u64 {
     SystemTime::now()
@@ -155,12 +174,18 @@ fn handle_leaderboard(board: &mut Board, key: &[u8; 32], req: &LbRequest) -> Opt
         return Some(player_request(board, key, req, path, &id));
     }
     match (req.method, path) {
-        (Method::Get, "/" | "/index.html") => Some(Reply {
-            status: 200,
-            rev: None,
-            body: SITE.as_bytes().to_vec(),
-            content_type: "text/html; charset=utf-8",
-        }),
+        (Method::Get, "/" | "/index.html") => Some(page(HOME)),
+        (Method::Get, "/classement" | "/classement/") => Some(page(BOARD_PAGE)),
+        (Method::Get, p) if p.starts_with("/assets/") => {
+            let name = p.trim_start_matches("/assets/").strip_suffix(".webp")?;
+            let (_, bytes) = CAPTURES.iter().find(|(n, _)| *n == name)?;
+            Some(Reply {
+                status: 200,
+                rev: None,
+                body: bytes.to_vec(),
+                content_type: "image/webp",
+            })
+        }
         (Method::Get, "/v1/leaderboard") => {
             let kind = match query(url, "board") {
                 Some("daily") => BoardKind::Daily,
@@ -402,7 +427,13 @@ fn respond(req: Request, reply: Reply) {
             resp.add_header(h);
         }
     }
-    if let Ok(h) = Header::from_bytes("Cache-Control", "no-store") {
+    // Les captures changent rarement ; le reste (classement, parties) jamais en cache.
+    let cache = if reply.content_type.starts_with("image/") {
+        "public, max-age=86400"
+    } else {
+        "no-store"
+    };
+    if let Ok(h) = Header::from_bytes("Cache-Control", cache) {
         resp.add_header(h);
     }
     if let Ok(h) = Header::from_bytes("Content-Type", reply.content_type) {
@@ -613,9 +644,22 @@ mod tests {
         // Les routes de synchronisation ne sont pas concernées.
         assert!(call(Method::Get, "/v1/save", Some(TOKEN), None, &[]).is_none());
         assert!(call(Method::Get, "/health", None, None, &[]).is_none());
-        let page = call(Method::Get, "/", None, None, &[]).unwrap();
-        assert_eq!(page.status, 200);
-        assert!(page.content_type.starts_with("text/html"));
+        let home = call(Method::Get, "/", None, None, &[]).unwrap();
+        assert_eq!(home.status, 200);
+        assert!(home.content_type.starts_with("text/html"));
+        assert!(String::from_utf8_lossy(&home.body).contains("Installer"));
+        let board_page = call(Method::Get, "/classement", None, None, &[]).unwrap();
+        assert!(String::from_utf8_lossy(&board_page.body).contains("/v1/leaderboard"));
+        // Chaque capture citée par l'accueil est servie.
+        for name in ["titre", "fonderie", "usines", "supernova", "fragments"] {
+            let path = format!("/assets/{name}.webp");
+            assert!(HOME.contains(&path), "{path} citée");
+            let img = call(Method::Get, &path, None, None, &[]).unwrap();
+            assert_eq!((img.status, img.content_type), (200, "image/webp"));
+            assert_eq!(&img.body[8..12], b"WEBP");
+        }
+        assert!(call(Method::Get, "/assets/absente.webp", None, None, &[]).is_none());
+        assert!(call(Method::Get, "/assets/../main.rs", None, None, &[]).is_none());
 
         let status = |r: Option<Reply>| r.map(|r| r.status);
         assert_eq!(

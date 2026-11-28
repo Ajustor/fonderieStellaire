@@ -65,6 +65,11 @@
   .gap td { text-align: center; color: var(--muted); padding: 4px; }
   footer { margin-top: 22px; color: var(--muted); font-size: 13px; text-align: center; }
   footer a { color: var(--cyan); }
+  nav { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 28px; }
+  nav .brand { color: var(--gold); text-decoration: none; letter-spacing: .08em; font-weight: 700; }
+  nav .links { display: flex; gap: 18px; flex-wrap: wrap; }
+  nav .links a { color: var(--muted); text-decoration: none; }
+  nav .links a:hover, nav .links a[aria-current] { color: var(--text); }
   @media (max-width: 640px) {
     .hide-sm { display: none; }
     th, td { padding: 8px; }
@@ -73,6 +78,14 @@
 </head>
 <body>
 <main>
+  <nav>
+    <a class="brand" href="/">✦ FONDERIE STELLAIRE</a>
+    <div class="links">
+      <a href="/#installer">Installer</a>
+      <a href="/#captures">Captures</a>
+      <a href="/classement" aria-current="page">Classement</a>
+    </div>
+  </nav>
   <header>
     <h1>✦ FONDERIE <span>STELLAIRE</span> ✦</h1>
     <p>Classement des fonderies synchronisées</p>
@@ -90,7 +103,8 @@
 
   <footer>
     Pour apparaître ici : dans le jeu, synchronise ta partie et choisis un pseudo
-    (Options › Synchronisation sur ordinateur, Plus › Sauver sur Android).<br>
+    (Options › Synchronisation sur ordinateur, Plus › Sauver sur Android).
+    Pas encore de fonderie ? <a href="/#installer">Installe le jeu</a>.<br>
     Général : acte atteint, puis Big Bang, Big Crunch, Supernovas, collection
     et enfin poussière récoltée.
   </footer>
@@ -162,7 +176,7 @@
       }
       const head = state.board === "daily"
         ? '<th class="num">Score</th>'
-        : '<th>Avancée</th><th class="num">Progression</th><th class="num" title="Supernovas · Big Crunch · Big Bang">✹ · ✶ · ✷</th><th class="num hide-sm" title="Progression × 1000 + 100 par Big Bang + 10 par Big Crunch + 1 par Supernova">Points</th>';
+        : '<th>Avancée</th><th class="num">Progression</th><th class="num" title="Supernovas · Big Crunch · Big Bang">✹ · ✶ · ✷</th><th class="num hide-sm" title="1 000 000 par Big Bang, 10 000 par Big Crunch, 100 par Supernova, jusqu'à 99 pour la progression">Points</th>';
       board.innerHTML = `<table><thead><tr><th>#</th><th>Pseudo</th>${head}
         <th class="num hide-sm">Poussière</th><th class="num hide-sm">Temps de jeu</th></tr></thead>
         <tbody>${data.entries.map((e) => row(e, state.board)).join("")}</tbody></table>`;

@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fonderie Stellaire</title>
+<meta name="description" content="Fonderie Stellaire : un idle game cosmique pour Android et le terminal. Récolte la poussière d'étoile, attrape les comètes, déclenche des Supernovas.">
+<meta property="og:title" content="Fonderie Stellaire">
+<meta property="og:description" content="Un idle game cosmique pour Android et le terminal.">
+<meta property="og:image" content="/assets/fonderie.webp">
+<style>
+  :root {
+    --bg: #07080f;
+    --panel: #0e1120;
+    --line: #1f2540;
+    --text: #d8dcf0;
+    --muted: #7d84a8;
+    --gold: #f5c84c;
+    --cyan: #5fd7ff;
+    --pink: #ff7ad9;
+    --violet: #a970ff;
+    --green: #7ee787;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body {
+    font: 15px/1.55 ui-monospace, "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    min-height: 100vh;
+    background:
+      radial-gradient(ellipse at 20% -10%, #1a1f4a 0%, transparent 55%),
+      radial-gradient(ellipse at 90% 10%, #2a0f3a 0%, transparent 45%),
+      var(--bg);
+  }
+  a { color: var(--cyan); }
+  main { max-width: 1040px; margin: 0 auto; padding: 20px 16px 48px; }
+  nav { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 36px; }
+  nav .brand { color: var(--gold); text-decoration: none; letter-spacing: .08em; font-weight: 700; }
+  nav .links { display: flex; gap: 18px; flex-wrap: wrap; }
+  nav .links a { color: var(--muted); text-decoration: none; }
+  nav .links a:hover, nav .links a[aria-current] { color: var(--text); }
+
+  .hero { display: grid; grid-template-columns: 1.15fr .85fr; gap: 40px; align-items: center; margin-bottom: 64px; }
+  h1 {
+    margin: 0 0 14px; font-size: clamp(30px, 6vw, 54px); line-height: 1.05; letter-spacing: .04em;
+    background: linear-gradient(90deg, var(--pink), var(--gold) 40%, var(--violet) 75%, var(--pink));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .tagline { font-size: 17px; color: var(--text); margin: 0 0 10px; }
+  .pitch { color: var(--muted); margin: 0 0 26px; max-width: 34em; }
+  .cta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; font: inherit; text-decoration: none;
+    padding: 11px 18px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text); cursor: pointer;
+  }
+  .btn.primary { border-color: var(--gold); color: #1a1405; background: var(--gold); font-weight: 700; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn:hover { border-color: var(--muted); }
+  .btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+  .version { color: var(--muted); font-size: 13px; margin-top: 12px; min-height: 1.5em; }
+  .phone {
+    justify-self: center; width: min(300px, 80vw); aspect-ratio: 540 / 1134;
+    border: 1px solid var(--line); border-radius: 26px; padding: 8px; background: #000;
+    box-shadow: 0 0 60px #a970ff33, 0 0 120px #ff7ad91a;
+  }
+  .phone img { width: 100%; height: auto; border-radius: 19px; display: block; }
+
+  h2 { font-size: 20px; color: var(--gold); letter-spacing: .05em; margin: 0 0 6px; }
+  section { margin-bottom: 64px; }
+  .lead { color: var(--muted); margin: 0 0 22px; }
+
+  .install { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+  .card { background: color-mix(in srgb, var(--panel) 92%, transparent); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+  .card.mine { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; }
+  .card h3 { margin: 0; font-size: 16px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .card h3 .tag { font-size: 11px; color: var(--gold); font-weight: normal; letter-spacing: .05em; }
+  .card p { margin: 0; color: var(--muted); font-size: 13px; }
+  .card .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
+  .card .actions .btn { padding: 8px 12px; font-size: 13px; }
+  code, pre { font: inherit; font-size: 12.5px; }
+  pre {
+    margin: 0; padding: 10px 70px 10px 12px; background: #05060c; border: 1px solid var(--line); border-radius: 8px;
+    white-space: pre-wrap; word-break: break-all; color: var(--green); position: relative;
+  }
+  pre .copy {
+    position: absolute; top: 6px; right: 6px; font: inherit; font-size: 11px; padding: 2px 6px;
+    color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 5px; cursor: pointer;
+  }
+  pre .copy:hover { color: var(--text); }
+  .card.wide { grid-column: 1 / -1; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  details[open] summary { margin-bottom: 8px; }
+
+  .gallery {
+    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(180px, 1fr); gap: 16px;
+    overflow-x: auto; padding-bottom: 10px; scroll-snap-type: x mandatory;
+  }
+  .gallery figure { margin: 0; scroll-snap-align: start; }
+  .gallery img {
+    width: 100%; height: auto; display: block;
+    border-radius: 14px; border: 1px solid var(--line); background: #000;
+  }
+  .gallery figcaption { color: var(--muted); font-size: 13px; margin-top: 8px; text-align: center; }
+
+  .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .feature { border-left: 2px solid var(--line); padding: 2px 0 2px 14px; }
+  .feature b { color: var(--text); }
+  .feature p { margin: 4px 0 0; color: var(--muted); font-size: 13.5px; }
+  .s1 { color: var(--gold); } .s2 { color: var(--cyan); } .s3 { color: var(--pink); } .s4 { color: var(--violet); }
+
+  .board-teaser { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+  .podium { display: flex; flex-direction: column; gap: 4px; min-width: 260px; }
+  .podium div { display: flex; gap: 12px; color: var(--muted); }
+  .podium b { color: var(--text); font-weight: 600; }
+  .podium .r1 { color: var(--gold); } .podium .r2 { color: #c9d1e8; } .podium .r3 { color: #e0a36b; }
+
+  footer { color: var(--muted); font-size: 13px; text-align: center; border-top: 1px solid var(--line); padding-top: 22px; }
+
+  @media (max-width: 760px) {
+    .hero { grid-template-columns: 1fr; gap: 28px; margin-bottom: 48px; }
+    .phone { width: min(240px, 70vw); }
+    nav { margin-bottom: 24px; }
+    nav .links { gap: 14px; }
+    nav .links .src { display: none; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .phone { animation: float 6s ease-in-out infinite; }
+    @keyframes float { 50% { transform: translateY(-8px); } }
+  }
+</style>
+</head>
+<body>
+<main>
+  <nav>
+    <a class="brand" href="/">✦ FONDERIE STELLAIRE</a>
+    <div class="links">
+      <a href="#installer">Installer</a>
+      <a href="#captures">Captures</a>
+      <a href="/classement">Classement</a>
+      <a class="src" href="https://github.com/Ajustor/fonderieStellaire">Code source</a>
+    </div>
+  </nav>
+
+  <div class="hero">
+    <div>
+      <h1>FONDERIE<br>STELLAIRE</h1>
+      <p class="tagline">Un idle game cosmique, sur Android et dans ton terminal.</p>
+      <p class="pitch">
+        Récolte la poussière d'étoile, bâtis des sondes, des sphères de Dyson et des
+        usines à nébuleuses, attrape les comètes au vol… puis fais exploser ta fonderie
+        en Supernova pour renaître plus fort.
+      </p>
+      <div class="cta">
+        <a class="btn primary" id="cta" href="#installer">Installer le jeu</a>
+        <a class="btn" href="/classement">Voir le classement</a>
+      </div>
+      <div class="version" id="version"></div>
+    </div>
+    <div class="phone"><img src="/assets/fonderie.webp" alt="Écran principal : le ciel de la fonderie, une comète passe" width="540" height="1134"></div>
+  </div>
+
+  <section id="installer">
+    <h2>Installer</h2>
+    <p class="lead">Gratuit, sans publicité, sans compte. La sauvegarde reste sur ton appareil, et tu peux la synchroniser entre ordinateur et téléphone si tu veux.</p>
+    <div class="install">
+      <div class="card" data-os="android">
+        <h3>Android <span class="tag" hidden>TON APPAREIL</span></h3>
+        <p>Télécharge l'APK puis ouvre-le. Android te demandera d'autoriser l'installation depuis ton navigateur. Le jeu te proposera ensuite lui-même ses mises à jour.</p>
+        <div class="actions">
+          <a class="btn" href="https://github.com/Ajustor/fonderieStellaire/releases/latest/download/fonderie-stellaire.apk">Télécharger l'APK</a>
+        </div>
+      </div>
+      <div class="card" data-os="windows">
+        <h3>Windows <span class="tag" hidden>TON APPAREIL</span></h3>
+        <p>Dans PowerShell, une ligne installe le jeu dans ton PATH :</p>
+        <pre>irm https://raw.githubusercontent.com/Ajustor/fonderieStellaire/master/install.ps1 | iex</pre>
+        <details>
+          <summary>Ou le binaire seul</summary>
+          <p>Le binaire n'est pas signé : si SmartScreen bloque, « Informations complémentaires » puis « Exécuter quand même ». Lance-le dans Windows Terminal.</p>
+        </details>
+        <div class="actions">
+          <a class="btn" href="https://github.com/Ajustor/fonderieStellaire/releases/latest/download/fonderie-stellaire-x86_64-pc-windows-msvc.zip">Archive .zip</a>
+        </div>
+      </div>
+      <div class="card" data-os="linux">
+        <h3>Linux <span class="tag" hidden>TON APPAREIL</span></h3>
+        <p>Une ligne installe le jeu dans <code>~/.local/bin</code> et vérifie sa somme SHA-256 :</p>
+        <pre>curl -fsSL https://raw.githubusercontent.com/Ajustor/fonderieStellaire/master/install.sh | sh</pre>
+        <div class="actions">
+          <a class="btn" href="https://github.com/Ajustor/fonderieStellaire/releases/latest/download/fonderie-stellaire-x86_64-unknown-linux-gnu.tar.gz">Archive x64</a>
+        </div>
+      </div>
+      <div class="card" data-os="mac">
+        <h3>macOS <span class="tag" hidden>TON APPAREIL</span></h3>
+        <p>Décompresse l'archive puis lance <code>./fonderie-stellaire</code> dans le Terminal. Le binaire n'est pas signé : retire la quarantaine une fois.</p>
+        <pre>xattr -d com.apple.quarantine fonderie-stellaire</pre>
+        <div class="actions">
+          <a class="btn" href="https://github.com/Ajustor/fonderieStellaire/releases/latest/download/fonderie-stellaire-aarch64-apple-darwin.tar.gz">Apple Silicon</a>
+          <a class="btn" href="https://github.com/Ajustor/fonderieStellaire/releases/latest/download/fonderie-stellaire-x86_64-apple-darwin.tar.gz">Intel</a>
+        </div>
+      </div>
+      <div class="card wide" data-os="docker">
+        <h3>Docker</h3>
+        <p>Pour jouer dans un conteneur (sans les sons). Le volume garde la sauvegarde.</p>
+        <pre>docker run -it --rm -v fonderie:/data ghcr.io/ajustor/fonderiestellaire:latest</pre>
+        <div class="actions">
+          <a class="btn" href="https://github.com/Ajustor/fonderieStellaire/releases/latest">Toutes les versions</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="captures">
+    <h2>Captures</h2>
+    <p class="lead">Tout est dessiné en caractères, comme dans un terminal, et tout bouge.</p>
+    <div class="gallery">
+      <figure><img src="/assets/titre.webp" alt="Écran titre avec le logo en dégradé" loading="lazy" width="540" height="1134"><figcaption>L'écran titre</figcaption></figure>
+      <figure><img src="/assets/fonderie.webp" alt="Le ciel de la fonderie, une comète à capturer" loading="lazy" width="540" height="1134"><figcaption>Une comète à attraper</figcaption></figure>
+      <figure><img src="/assets/usines.webp" alt="La liste des générateurs avec leur production" loading="lazy" width="540" height="1134"><figcaption>Les usines et leur production</figcaption></figure>
+      <figure><img src="/assets/supernova.webp" alt="L'onde de choc de la Supernova" loading="lazy" width="540" height="1134"><figcaption>L'onde de choc d'une Supernova</figcaption></figure>
+      <figure><img src="/assets/fragments.webp" alt="Les fragments gagnés après la Supernova" loading="lazy" width="540" height="1134"><figcaption>… et ses fragments</figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>Ce qui t'attend</h2>
+    <p class="lead">Quatre actes, de la première sonde à l'éveil du cosmos.</p>
+    <div class="features">
+      <div class="feature"><b class="s1">✦ Récolte et usines</b><p>Quinze générateurs, des améliorations, des paliers qui doublent la production et un automate pour acheter à ta place.</p></div>
+      <div class="feature"><b class="s2">◉ Comètes</b><p>Elles traversent le ciel : touche-les pour une pluie d'étoiles, une tempête solaire ou une frénésie dorée.</p></div>
+      <div class="feature"><b class="s3">✹ Supernova et Défis</b><p>Fais exploser ta fonderie contre des fragments, achète des talents à l'Atelier et relève des Défis aux règles tordues.</p></div>
+      <div class="feature"><b class="s4">✶ Big Crunch et Big Bang</b><p>Matière noire, Laboratoire, univers parallèles, forges primordiales et Grand Attracteur.</p></div>
+      <div class="feature"><b class="s1">☀ Défi du jour</b><p>Le même univers de poche pour tout le monde, une fois par jour, avec son propre classement.</p></div>
+      <div class="feature"><b class="s2">⇄ Partout</b><p>Sauvegarde synchronisée entre ordinateur et téléphone, sons générés par le jeu, retour tactile sur Android.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="board-teaser">
+      <div>
+        <h2>Classement</h2>
+        <p class="lead" style="margin:0">Synchronise ta partie, choisis un pseudo et grimpe parmi les fonderies.</p>
+      </div>
+      <div class="podium" id="podium" aria-live="polite"></div>
+      <a class="btn" href="/classement">Tout le classement →</a>
+    </div>
+  </section>
+
+  <footer>
+    Fonderie Stellaire est un jeu libre, écrit en Rust ·
+    <a href="https://github.com/Ajustor/fonderieStellaire">code source</a> ·
+    <a href="https://github.com/Ajustor/fonderieStellaire/releases">versions</a>
+  </footer>
+</main>
+<script>
+(() => {
+  // Anciens liens vers le classement (« /?p=pseudo », « /?board=daily »).
+  const params = new URLSearchParams(location.search);
+  if (params.has("p") || params.has("board")) {
+    location.replace("/classement" + location.search);
+    return;
+  }
+
+  // Met en avant la carte d'installation de l'appareil du visiteur.
+  const ua = navigator.userAgent;
+  const os = /Android/i.test(ua) ? "android"
+    : /Windows/i.test(ua) ? "windows"
+    : /Mac OS X|Macintosh/i.test(ua) && !/iPhone|iPad/i.test(ua) ? "mac"
+    : /Linux|X11/i.test(ua) ? "linux" : null;
+  // Bouton « copier » sur chaque commande.
+  for (const pre of document.querySelectorAll("pre")) {
+    const text = pre.textContent;
+    const btn = document.createElement("button");
+    btn.className = "copy";
+    btn.type = "button";
+    btn.textContent = "copier";
+    btn.onclick = () => navigator.clipboard?.writeText(text).then(() => {
+      btn.textContent = "copié ✓";
+      setTimeout(() => { btn.textContent = "copier"; }, 1500);
+    });
+    pre.appendChild(btn);
+  }
+
+  const card = os && document.querySelector(`.card[data-os="${os}"]`);
+  if (card) {
+    card.classList.add("mine");
+    card.querySelector(".tag").hidden = false;
+    card.parentElement.prepend(card);
+    if (os === "android") {
+      const cta = document.getElementById("cta");
+      cta.textContent = "Télécharger pour Android";
+      cta.href = card.querySelector(".actions a").href;
+    }
+  }
+
+  // Dernière version publiée.
+  fetch("https://api.github.com/repos/Ajustor/fonderieStellaire/releases/latest")
+    .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+    .then((rel) => {
+      const date = new Date(rel.published_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+      document.getElementById("version").textContent = `Dernière version : ${rel.tag_name}, publiée le ${date}`;
+    })
+    .catch(() => {});
+
+  // Podium du classement général.
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  fetch("/v1/leaderboard?board=general&limit=3", { cache: "no-store" })
+    .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+    .then((data) => {
+      document.getElementById("podium").innerHTML = data.entries.map((e) =>
+        `<div><span class="r${e.rank}">${e.rank}.</span><b>${esc(e.pseudo)}</b><span>✶ ${e.crunches} · ✹ ${e.supernovas}</span></div>`
+      ).join("");
+    })
+    .catch(() => {});
+})();
+</script>
+</body>
+</html>
