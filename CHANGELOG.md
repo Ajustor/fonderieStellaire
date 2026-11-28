@@ -1,5 +1,24 @@
 # Journal des versions
 
+## v0.23.0 — De vrais onglets sur ordinateur
+
+### Améliorations
+- **Onglets (ordinateur)** : les écrans de la barre d'onglets (Atelier, Défis,
+  Laboratoire, Univers, Cosmogonie, Carte stellaire, Reliques, Mégastructures,
+  Défi du jour, Infos, Options, Classement) ne s'ouvrent plus en fenêtre
+  par-dessus la fonderie : ils remplacent ses panneaux, en pleine largeur,
+  entre l'en-tête et la barre d'aide. Les confirmations, événements, menu et
+  aide restent des fenêtres.
+- **Petits terminaux** (moins de 30 lignes) : un onglet ouvert réduit l'en-tête
+  à une ligne (onglets, poussière, production) pour garder toute la place.
+- **Navigation** : depuis un onglet, la lettre d'un autre onglet l'ouvre
+  directement ; la lettre de l'onglet courant ramène à la fonderie.
+- Les notifications s'affichent en haut de l'onglet ouvert.
+
+### Corrections
+- **[O]** ne valide plus comme Entrée dans un écran : il ouvre (ou referme) les
+  Options. Il reste « Oui » dans les confirmations.
+
 ## v0.22.0 — Big Crunch plus fluides, moins de batterie
 
 ### Équilibrage
