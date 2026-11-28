@@ -1415,6 +1415,9 @@ fn cosmos_entries(ctx: &Ctx) -> Vec<CosmosEntry> {
             theme::CYAN,
             Hit::OpenPage(Page::Lab),
         );
+    }
+    // La Cosmogonie (Big Bang) s'ouvre avec les univers, au 10e Big Crunch.
+    if s.universes_unlocked {
         add(
             '◎',
             "Cosmogonie",

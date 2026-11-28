@@ -171,7 +171,7 @@ pub fn lines(ctx: &Ctx) -> Vec<(String, Style)> {
         "◆ Défis [D] : un cycle avec une contrainte, contre une récompense permanente.".into(),
         "● Comètes rares : dorée (×77 pendant 7 s), noire (+1 fragment, ou elle te vole).".into(),
         "✶ Big Crunch [K] (15 Supernovas, puis 10) : tout le niveau Supernova repart de zéro contre de la matière noire : production ×2, ×4, ×8… et fragments +25 % par Crunch.".into(),
-        "✶ Laboratoire [L] (10 Big Crunch) : recherches en temps réel, une à la fois, qui avancent même jeu fermé : automatismes, conservation, puissance.".into(),
+        "✶ Laboratoire [L] (dès le 1er Big Crunch) : recherches en temps réel, une à la fois, qui avancent même jeu fermé : automatismes, conservation, puissance.".into(),
         "◎ Univers parallèles [V] (10 Big Crunch) : choisis les règles de chaque cycle au Big Crunch ; atteins leur objectif pour gagner leur Clé (bonus permanent).".into(),
         "✷ Big Bang [G] (15 Big Crunch) : les Big Crunch repartent de zéro contre des particules primordiales, une par tranche de 5 Big Crunch (production ×10 et +25 % de fragments chacune). Le Laboratoire, les Clés et le Grand Attracteur restent.".into(),
         "▼ Forge primordiale [G] : des particules pour forger 3 générateurs de fin de jeu, présents dans tous les cycles.".into(),

@@ -1376,7 +1376,7 @@ impl GameState {
         self.check_achievements(catalog, events);
     }
 
-    /// Le Laboratoire est-il ouvert ? (10 Big Crunch, ou déjà un Big Bang)
+    /// Le Laboratoire est-il ouvert ? (dès le premier Big Crunch, ou déjà un Big Bang)
     pub fn lab_unlocked(&self) -> bool {
         self.crunches >= LAB_UNLOCK_CRUNCHES || self.big_bangs > 0
     }
@@ -3361,11 +3361,11 @@ mod tests {
     fn laboratory_research_takes_real_time() {
         let (c, mut s, mut ev) = setup();
         let prod1 = lab(&c, "lab_prod1");
-        s.crunches = 9;
+        s.crunches = 0;
         s.start_research(&c, prod1, &mut ev);
         assert!(
             matches!(ev[0], DomainEvent::PurchaseFailed { .. }),
-            "fermé avant 10 Big Crunch"
+            "fermé avant le premier Big Crunch"
         );
         ev.clear();
         s.crunches = 10;

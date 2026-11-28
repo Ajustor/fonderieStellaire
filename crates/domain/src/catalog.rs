@@ -37,8 +37,9 @@ pub mod balance {
     pub const CRUNCH_PRODUCTION: f64 = 1.0;
     /// Chaque Big Crunch ajoute +25 % de fragments par Supernova.
     pub const CRUNCH_FRAGMENTS: f64 = 0.25;
-    /// Big Crunch nécessaires pour ouvrir le Laboratoire de matière noire.
-    pub const LAB_UNLOCK_CRUNCHES: u32 = 10;
+    /// Big Crunch nécessaires pour ouvrir le Laboratoire de matière noire : dès
+    /// le premier, la matière noire gagnée sert tout de suite.
+    pub const LAB_UNLOCK_CRUNCHES: u32 = 1;
     /// Big Crunch nécessaires pour choisir son univers.
     pub const UNIVERSES_UNLOCK_CRUNCHES: u32 = 10;
     /// Big Crunch nécessaires pour un Big Bang.
