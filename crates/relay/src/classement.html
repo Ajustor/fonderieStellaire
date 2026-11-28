@@ -176,7 +176,7 @@
       }
       const head = state.board === "daily"
         ? '<th class="num">Score</th>'
-        : '<th>Avancée</th><th class="num">Progression</th><th class="num" title="Supernovas · Big Crunch · Big Bang">✹ · ✶ · ✷</th><th class="num hide-sm" title="1 000 000 par Big Bang, 10 000 par Big Crunch, 100 par Supernova, jusqu'à 99 pour la progression">Points</th>';
+        : '<th>Avancée</th><th class="num">Progression</th><th class="num" title="Supernovas · Big Crunch · Big Bang">✹ · ✶ · ✷</th><th class="num hide-sm" title="1 000 000 par Big Bang, 10 000 par Big Crunch, 100 par Supernova, jusqu’à 99 pour la progression">Points</th>';
       board.innerHTML = `<table><thead><tr><th>#</th><th>Pseudo</th>${head}
         <th class="num hide-sm">Poussière</th><th class="num hide-sm">Temps de jeu</th></tr></thead>
         <tbody>${data.entries.map((e) => row(e, state.board)).join("")}</tbody></table>`;
