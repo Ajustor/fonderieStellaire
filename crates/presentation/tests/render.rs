@@ -1705,3 +1705,92 @@ fn laboratory_opens_at_the_first_big_crunch_but_not_the_cosmogony() {
     assert!(text.contains("S'ouvre au 10e Big Crunch (1/10)"), "{text}");
     assert!(!text.contains("COSMOGONIE"), "{text}");
 }
+
+// ---------------------------------------------------------------------------
+// Onglets (ordinateur) : l'écran ouvert remplace les panneaux de la fonderie.
+// ---------------------------------------------------------------------------
+
+fn assert_tab(text: &str, title: &str) {
+    assert!(text.contains("FONDERIE STELLAIRE"), "en-tête :\n{text}");
+    assert!(text.contains(title), "titre de l'onglet :\n{text}");
+    assert!(
+        !text.contains("╭ Générateurs"),
+        "panneaux de la fonderie masqués :\n{text}"
+    );
+    assert!(!text.contains("╭ Journal"), "journal masqué :\n{text}");
+}
+
+/// Partie au premier Big Crunch, fonderie affichée.
+fn crunched_app() -> App {
+    let mut save = advanced_save();
+    save.crunches = 1;
+    let mut app = app_with(Some(save));
+    app.set_time(100.0);
+    app.enter_game_now();
+    app.update(0.033);
+    let _ = render(&mut app, 100, 30);
+    app
+}
+
+#[test]
+fn laboratory_is_a_tab_on_desktop() {
+    for (w, h) in [(100, 30), (160, 45)] {
+        let mut app = crunched_app();
+        app.on_intent(Intent::Lab);
+        app.set_time(101.0);
+        let text = render(&mut app, w, h);
+        assert_tab(&text, "LABORATOIRE DE MATIÈRE NOIRE");
+    }
+}
+
+#[test]
+fn escape_on_a_tab_brings_the_foundry_back_at_once() {
+    let mut app = crunched_app();
+    app.on_intent(Intent::Lab);
+    app.set_time(101.0);
+    let _ = render(&mut app, 100, 30);
+    app.on_intent(Intent::Escape);
+    app.set_time(101.01);
+    let text = render(&mut app, 100, 30);
+    assert!(text.contains("╭ Générateurs"), "{text}");
+    assert!(!text.contains("LABORATOIRE DE MATIÈRE NOIRE"), "{text}");
+}
+
+#[test]
+fn help_opens_over_a_tab() {
+    let mut app = crunched_app();
+    app.on_intent(Intent::Lab);
+    app.set_time(101.0);
+    let _ = render(&mut app, 100, 30);
+    app.on_intent(Intent::Help);
+    app.set_time(102.0);
+    let text = render(&mut app, 100, 30);
+    assert!(text.contains("AIDE"), "{text}");
+    assert!(!text.contains("╭ Générateurs"), "{text}");
+}
+
+#[test]
+fn laboratory_stays_a_window_on_android() {
+    let mut app = crunched_app();
+    app.set_mobile(true);
+    app.on_intent(Intent::Lab);
+    app.set_time(101.0);
+    let mut terminal = Terminal::new(TestBackend::new(88, 60)).expect("terminal");
+    terminal.draw(|f| app.render(f)).expect("draw");
+    let buf = terminal.backend().buffer();
+    let text = buffer_text(buf);
+    assert!(text.contains("LABORATOIRE DE MATIÈRE NOIRE"), "{text}");
+    let title_row = (0..buf.area.height)
+        .find(|&y| {
+            (0..buf.area.width)
+                .map(|x| buf[(x, y)].symbol())
+                .collect::<String>()
+                .contains("LABORATOIRE")
+        })
+        .expect("ligne du titre");
+    assert_ne!(
+        buf[(0, title_row)].symbol(),
+        "╭",
+        "fenêtre centrée, pas collée au bord :\n{text}"
+    );
+}

@@ -710,6 +710,15 @@ impl App {
         }
     }
 
+    /// Les écrans de la barre : onglets sur ordinateur, fenêtres sur Android.
+    pub(crate) fn frame(&self) -> crate::widgets::frame::Frame {
+        if self.mobile.is_none() {
+            crate::widgets::frame::Frame::Tab
+        } else {
+            crate::widgets::frame::Frame::Window
+        }
+    }
+
     /// Images par seconde à viser : celles des options, ramenées à
     /// [`IDLE_FPS`] quand le joueur n'a rien touché depuis `idle` secondes.
     /// Les grandes séquences (Supernova, Big Bang…) gardent leur fluidité.
@@ -1787,6 +1796,7 @@ impl App {
                 now: self.now,
                 dt: self.dt,
                 reduced: self.snap.reduced_effects,
+                frame: self.frame(),
             };
             crate::widgets::lab::item_at(&ctx, self.ui.lab_sel)
         };
@@ -1810,6 +1820,7 @@ impl App {
             now: self.now,
             dt: self.dt,
             reduced: self.snap.reduced_effects,
+            frame: self.frame(),
         };
         (
             cosmos::item_count(&ctx),
@@ -3525,6 +3536,7 @@ impl App {
         let sync_view = self.sync_view();
         let leaderboard_view = self.leaderboard_view();
         let legacy = self.legacy_open();
+        let frame = self.frame();
         let nav_screen = self.current_screen();
         let next_screen = crate::nav::neighbour(&crate::nav::available(&self.snap), nav_screen, 1);
         let App {
@@ -3547,6 +3559,7 @@ impl App {
             now,
             dt: *dt,
             reduced: snap.reduced_effects,
+            frame,
         };
         match screen {
             Screen::Title => title.render(buf, area, now, &vis.stars, snap, ctx.reduced),

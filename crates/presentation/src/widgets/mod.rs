@@ -7,6 +7,7 @@ pub mod codex;
 pub mod cosmos;
 pub mod daily;
 pub mod event;
+pub mod frame;
 pub mod generators;
 pub mod header;
 pub mod help_bar;
@@ -40,6 +41,8 @@ pub struct Ctx<'a> {
     /// Durée de la frame précédente.
     pub dt: f64,
     pub reduced: bool,
+    /// Les écrans de la barre s'ouvrent en onglet (ordinateur) ou en fenêtre.
+    pub frame: frame::Frame,
 }
 
 /// Zone intérieure d'un panneau bordé.

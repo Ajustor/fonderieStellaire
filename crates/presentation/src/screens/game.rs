@@ -9,9 +9,11 @@ use crate::fx::easing::ease_out_cubic;
 use crate::fx::effects;
 use crate::fx::Rgb;
 use crate::layout::{game_layout, GameLayout};
+use crate::nav::ScreenId;
 use crate::theme;
 use crate::ui::{Panel, Ui};
 use crate::visuals::Visuals;
+use crate::widgets::frame::Frame;
 use crate::widgets::journal::Journal;
 use crate::widgets::toast::Toasts;
 use crate::widgets::{
@@ -57,19 +59,26 @@ pub fn render(
     let layout = game_layout(area, expand);
     ui.layout = layout;
 
+    // Onglet (ordinateur) : l'écran ouvert remplace les panneaux de la
+    // fonderie, entre l'en-tête et la barre d'aide.
+    let tab = ctx.frame == Frame::Tab && view.screen != ScreenId::Foundry;
+    let screen_area = if tab { layout.body } else { area };
+
     header::render(buf, layout.header, ctx, vis);
     crate::widgets::nav::render_tabs(buf, layout.header, ctx.snap, view.screen);
-    generators::render(buf, layout.generators, ctx, vis, ui);
-    sky::render(buf, layout.sky, ctx, vis);
-    upgrades::render(buf, layout.upgrades, ctx, vis, ui);
-    sparkline::render(buf, layout.production, ctx, view.spark_scratch);
-    journal::render(
-        buf,
-        layout.journal,
-        view.journal,
-        ctx.now,
-        &mut ui.journal_scroll,
-    );
+    if !tab {
+        generators::render(buf, layout.generators, ctx, vis, ui);
+        sky::render(buf, layout.sky, ctx, vis);
+        upgrades::render(buf, layout.upgrades, ctx, vis, ui);
+        sparkline::render(buf, layout.production, ctx, view.spark_scratch);
+        journal::render(
+            buf,
+            layout.journal,
+            view.journal,
+            ctx.now,
+            &mut ui.journal_scroll,
+        );
+    }
     help_bar::render(
         buf,
         layout.help,
@@ -80,10 +89,11 @@ pub fn render(
         ctx.now,
     );
 
-    vis.particles.draw(buf, area);
-
-    animate_borders(buf, &layout, ctx, ui);
-    cascade(buf, &layout, ctx.now, vis.cascade_start);
+    if !tab {
+        vis.particles.draw(buf, area);
+        animate_borders(buf, &layout, ctx, ui);
+        cascade(buf, &layout, ctx.now, vis.cascade_start);
+    }
 
     view.toasts.render(buf, area, layout.sky.y, ctx.now);
 
@@ -102,13 +112,20 @@ pub fn render(
         }
     }
     if let Some(popup) = ui.lab {
-        lab::render(buf, area, ctx, &popup, ui.lab_sel);
+        lab::render(buf, screen_area, ctx, &popup, ui.lab_sel);
     }
     if let Some(popup) = ui.cosmos {
-        cosmos::render(buf, area, ctx, &popup, ui.cosmos_sel, ui.cosmos_armed);
+        cosmos::render(
+            buf,
+            screen_area,
+            ctx,
+            &popup,
+            ui.cosmos_sel,
+            ui.cosmos_armed,
+        );
     }
     if let Some(popup) = ui.options.filter(|_| ui.options_sync) {
-        crate::widgets::sync::render(buf, area, ctx, &popup, ui.options_armed, view.sync);
+        crate::widgets::sync::render(buf, screen_area, ctx, &popup, ui.options_armed, view.sync);
     } else if let Some(popup) = ui.options {
         let leaderboard = view.leaderboard.short();
         let info = options::OptionsInfo {
@@ -119,7 +136,7 @@ pub fn render(
         };
         options::render(
             buf,
-            area,
+            screen_area,
             ctx,
             &popup,
             ui.options_sel,
@@ -128,19 +145,19 @@ pub fn render(
         );
     }
     if let Some(popup) = ui.leaderboard {
-        crate::widgets::leaderboard::render(buf, area, ctx, &popup, view.leaderboard);
+        crate::widgets::leaderboard::render(buf, screen_area, ctx, &popup, view.leaderboard);
     }
     if let Some(popup) = ui.daily {
-        daily::render(buf, area, ctx, &popup, view.today);
+        daily::render(buf, screen_area, ctx, &popup, view.today);
     }
     if let Some(popup) = ui.mega {
-        mega::render(buf, area, ctx, &popup, ui.mega_sel, vis.mega_pop);
+        mega::render(buf, screen_area, ctx, &popup, ui.mega_sel, vis.mega_pop);
     }
     if let Some(popup) = ui.relics {
-        relics::render(buf, area, ctx, &popup, ui.relics_sel);
+        relics::render(buf, screen_area, ctx, &popup, ui.relics_sel);
     }
     if let Some(m) = ui.starmap {
-        starmap::render(buf, area, ctx, &m, &vis.stars, &vis.map_pops);
+        starmap::render(buf, screen_area, ctx, &m, &vis.stars, &vis.map_pops);
     }
     if let Some(popup) = ui.event {
         event::render(buf, area, ctx, &popup);
@@ -161,7 +178,7 @@ pub fn render(
     if let Some(popup) = ui.challenges {
         challenges::render(
             buf,
-            area,
+            screen_area,
             ctx,
             &popup,
             ui.challenges_sel,
@@ -169,10 +186,10 @@ pub fn render(
         );
     }
     if let Some(shop) = ui.shop {
-        shop::render(buf, area, ctx, &shop, ui.shop_sel);
+        shop::render(buf, screen_area, ctx, &shop, ui.shop_sel);
     }
     if let Some(codex) = ui.codex {
-        codex::render(buf, area, ctx, &codex, &mut ui.codex_scroll);
+        codex::render(buf, screen_area, ctx, &codex, &mut ui.codex_scroll);
     }
     // Les portails recouvrent tout l'écran.
     if let Some(portal) = ui.portal {
