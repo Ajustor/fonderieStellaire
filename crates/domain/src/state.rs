@@ -4,8 +4,7 @@ use crate::achievement::{AchievementContext, AchievementId};
 use crate::catalog::balance::{
     BIGBANG_CRUNCHES, CRUNCH_FRAGMENTS, CRUNCH_PRODUCTION, CRUNCH_SUPERNOVAS,
     HOLD_HARVEST_INTERVAL, LAB_UNLOCK_CRUNCHES, OFFLINE_CAP_SECS, OFFLINE_RATE,
-    PARTICLES_PER_CRUNCHES, PARTICLE_FRAGMENTS, PARTICLE_PRODUCTION, REVEAL_RATIO,
-    UNIVERSES_UNLOCK_CRUNCHES,
+    PARTICLES_PER_CRUNCHES, PARTICLE_FRAGMENTS, REVEAL_RATIO, UNIVERSES_UNLOCK_CRUNCHES,
 };
 use crate::catalog::Catalog;
 use crate::challenge::{ChallengeId, ChallengeReward, Restriction};
@@ -1264,8 +1263,9 @@ impl GameState {
         events.push(DomainEvent::BulkUpgrades { count });
     }
 
-    /// Multiplicateur de production de la matière noire : ×(1 + crunches),
-    /// renforcé par le Cœur de superamas du Grand Attracteur.
+    /// Multiplicateur de production de la matière noire : ×2 par Big Crunch
+    /// (2^crunches), ×3 par Big Crunch avec le Cœur de superamas du Grand
+    /// Attracteur.
     pub fn crunch_production(&self, catalog: &Catalog) -> f64 {
         self.crunch_production_with(catalog, self.crunches)
     }
@@ -1277,7 +1277,7 @@ impl GameState {
             AttractorEffect::DarkMatter(f) => Some(f),
             _ => None,
         });
-        1.0 + CRUNCH_PRODUCTION * boost * crunches as f64
+        (1.0 + CRUNCH_PRODUCTION * boost).powi(crunches as i32)
     }
 
     /// Multiplicateur de fragments de la matière noire.
@@ -1374,9 +1374,9 @@ impl GameState {
     // Big Bang, générateurs primordiaux, Grand Attracteur
     // ------------------------------------------------------------------
 
-    /// Multiplicateur de production des particules : ×(1 + particules).
+    /// Multiplicateur de production des particules : ×10 par particule.
     pub fn particle_production(&self) -> f64 {
-        1.0 + PARTICLE_PRODUCTION * self.particles as f64
+        crate::cosmos::particle_production_for(self.particles)
     }
 
     /// Multiplicateur de fragments des particules : +25 % par particule.
@@ -1388,7 +1388,7 @@ impl GameState {
         self.particles.saturating_sub(self.particles_spent)
     }
 
-    /// Le Big Bang est-il possible ? (30 Big Crunch, aucun Défi en cours)
+    /// Le Big Bang est-il possible ? (15 Big Crunch, aucun Défi en cours)
     pub fn can_big_bang(&self) -> bool {
         self.crunches >= BIGBANG_CRUNCHES && self.challenge.is_none()
     }
@@ -3298,7 +3298,7 @@ mod tests {
         let frags = s.fragments_available_with(&c);
         s.crunches = 3;
         let ratio = economy::total_production(&c, &s) / base;
-        assert!((ratio - 4.0).abs() < 1e-9, "×(1 + 3) : {ratio}");
+        assert!((ratio - 8.0).abs() < 1e-9, "×2³ : {ratio}");
         // floor(√100 × 1.75) = 17 au lieu de 10.
         assert_eq!(frags, 10.0);
         assert_eq!(s.fragments_available_with(&c), 17.0);
@@ -3688,15 +3688,20 @@ mod tests {
     }
 
     #[test]
-    fn big_bang_needs_30_crunches_and_resets_the_crunch_layer() {
+    fn big_bang_needs_15_crunches_and_resets_the_crunch_layer() {
         let (c, mut s, mut ev) = setup();
-        s.crunches = 29;
+        s.crunches = 14;
         s.big_bang(&c, &mut ev);
         assert!(matches!(
             ev.last(),
-            Some(DomainEvent::BigBangUnavailable { crunches: 29, .. })
+            Some(DomainEvent::BigBangUnavailable { crunches: 14, .. })
         ));
-        s.crunches = 34;
+        // Une particule par tranche de 5 Big Crunch sacrifiés.
+        for (crunches, particles) in [(15, 3), (19, 3), (20, 4), (30, 6)] {
+            s.crunches = crunches;
+            assert_eq!(s.particles_available(), particles, "{crunches} Big Crunch");
+        }
+        s.crunches = 17;
         s.dark_matter_spent = 20;
         s.supernovas = 15;
         s.fragments = 1e4;
@@ -3721,7 +3726,7 @@ mod tests {
         assert!(s.lab[0], "le Laboratoire est gardé");
         assert!(s.universe_keys[1], "les Clés sont gardées");
         assert!(s.lab_unlocked() && s.universes_unlocked());
-        assert_eq!(s.particle_production(), 4.0);
+        assert_eq!(s.particle_production(), 1000.0);
         assert_eq!(s.particle_fragments(), 1.75);
         assert!(economy::permanent_multiplier(&c, &s) < prod_before);
         assert!(s.has_achievement(c.achievement_by_key("bang1").unwrap()));
@@ -3740,7 +3745,7 @@ mod tests {
         assert!(s.is_forged(neutron));
         assert!(s.is_visible(&c, neutron));
         assert_eq!(s.particles_spendable(), 2);
-        assert_eq!(s.particle_production(), 4.0, "le bonus reste entier");
+        assert_eq!(s.particle_production(), 1000.0, "le bonus reste entier");
         s.forge(&c, reality, &mut ev);
         assert_eq!(s.particles_spendable(), 0);
         s.forge(&c, gen(&c, 14), &mut ev);
@@ -3785,9 +3790,9 @@ mod tests {
         assert_eq!(s.attractor_production(&c), 2.0 * 3.0 * 5.0 * 10.0);
         assert_eq!(s.crunch_production(&c), 1.0, "aucun Crunch : ×1");
         s.crunches = 3;
-        assert_eq!(s.crunch_production(&c), 7.0, "matière noire ×2 : 1 + 2×3");
+        assert_eq!(s.crunch_production(&c), 27.0, "matière noire ×2 : 3³");
         // L'aperçu du prochain Big Crunch compte aussi le Cœur de superamas.
-        assert_eq!(s.crunch_production_with(&c, s.crunches + 1), 9.0);
+        assert_eq!(s.crunch_production_with(&c, s.crunches + 1), 81.0);
         assert_eq!(s.offline_terms(&c).0, 1.0);
         assert!(s.has_achievement(c.achievement_by_key("attractor").unwrap()));
     }

@@ -198,7 +198,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, state: &PortalState, star
         .count();
     let subtitle = if state.crunch {
         let n = snap.crunches + 1;
-        let prod = fmt::short(1.0 + domain::catalog::balance::CRUNCH_PRODUCTION * n as f64);
+        let prod = fmt::short(snap.crunch_production_next);
         let long = format!(
             "Big Crunch n°{n} · production ×{prod} · ses règles s'appliquent jusqu'au prochain Big Crunch"
         );

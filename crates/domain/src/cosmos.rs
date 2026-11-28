@@ -34,6 +34,11 @@ pub struct AttractorStage {
     pub effect: AttractorEffect,
 }
 
+/// Multiplicateur de production de `particles` particules primordiales.
+pub fn particle_production_for(particles: u32) -> f64 {
+    crate::catalog::balance::PARTICLE_PRODUCTION.powi(particles as i32)
+}
+
 /// Particules gagnées par un Big Bang déclenché avec `crunches` Big Crunch.
 pub fn particles_for(crunches: u32, per: u32) -> u32 {
     crunches / per.max(1)

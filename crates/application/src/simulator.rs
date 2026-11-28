@@ -8,7 +8,7 @@
 //! du moins cher au plus cher puis Constellations, Supernova dès qu'elle double
 //! les fragments (5 minimum), Big Crunch dès que possible (après la Clé de
 //! l'univers en cours), recherches du Laboratoire dans l'ordre le moins cher,
-//! Big Bang à 30 Big Crunch, forges et Grand Attracteur dès que possible.
+//! Big Bang à 15 Big Crunch, forges et Grand Attracteur dès que possible.
 //! Les Défis (facultatifs) ne sont pas joués.
 
 use domain::{economy, BuyMode, Catalog, DomainEvent, GameState, GeneratorId, UniverseId};

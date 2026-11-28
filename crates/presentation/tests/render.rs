@@ -877,9 +877,9 @@ fn outdated_save_is_wiped_and_the_player_is_told() {
 
 #[test]
 fn v0_9_big_bang_forge_attractor_and_ending() {
-    // 34 Big Crunch : la Cosmogonie propose un Big Bang à +3 particules.
+    // 17 Big Crunch : la Cosmogonie propose un Big Bang à +3 particules.
     let mut save = advanced_save();
-    save.crunches = 34;
+    save.crunches = 17;
     save.lab = vec!["lab_comet_net".into()];
     let mut app = app_with(Some(save));
     let mut t = 100.0;
@@ -917,10 +917,10 @@ fn v0_9_big_bang_forge_attractor_and_ending() {
     assert!(seen_title, "l'annonce des particules est affichée");
     let snap = app.snapshot();
     assert_eq!((snap.big_bangs, snap.particles, snap.crunches), (1, 3, 0));
-    assert_eq!(snap.particle_production, 4.0);
+    assert_eq!(snap.particle_production, 1000.0);
     let text = render(&mut app, 120, 36);
     assert!(
-        text.contains("✷ 3 (×4)"),
+        text.contains("✷ 3 (×1.00k)"),
         "particules dans l'en-tête :\n{text}"
     );
 
