@@ -10,7 +10,7 @@ pub type Render = Box<dyn FnMut(&mut [f32]) + Send + 'static>;
 
 /// Flux audio ouvert : les sons s'arrêtent quand il est détruit.
 pub struct AudioOutput {
-    _stream: cpal::Stream,
+    stream: cpal::Stream,
     rate: u32,
 }
 
@@ -37,13 +37,23 @@ impl AudioOutput {
         }?;
         stream.play().map_err(|e| format!("sortie audio : {e}"))?;
         Ok(AudioOutput {
-            _stream: stream,
+            stream,
             rate,
         })
     }
 
     pub fn sample_rate(&self) -> u32 {
         self.rate
+    }
+
+    /// Met le flux en marche ou en pause. En pause, la carte son peut se mettre
+    /// en veille ; une erreur (sortie disparue) est ignorée.
+    pub fn set_playing(&self, playing: bool) {
+        if playing {
+            let _ = self.stream.play();
+        } else {
+            let _ = self.stream.pause();
+        }
     }
 }
 

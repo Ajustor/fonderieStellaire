@@ -10,7 +10,7 @@
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use application::{GameService, LeaderboardService, SyncService, UpdateService};
 use infrastructure::relay_sync::{parse_code, RelaySync};
@@ -203,7 +203,7 @@ struct Inner {
     prev: Option<Buffer>,
     out: Vec<u8>,
     last_frame: Option<Instant>,
-    /// Dernier geste du joueur : au-delà de `IDLE_AFTER`, la cadence baisse.
+    /// Dernier geste du joueur : sans geste récent, la cadence baisse.
     last_input: Instant,
 }
 
@@ -322,13 +322,11 @@ impl Game {
         self.input().app.mobile_select_tab(tab.into());
     }
 
-    /// Images par seconde : celles des options (10 à 60), ramenées à
-    /// `IDLE_FPS` quand le joueur ne touche plus l'écran depuis `IDLE_AFTER`
-    /// (hors séquences plein écran, qui gardent leur fluidité).
+    /// Images par seconde : celles des options (10 à 60), réduites quand le
+    /// joueur ne touche plus l'écran (voir `App::paced_frame_rate`).
     pub fn frame_rate(&self) -> u32 {
         let g = self.lock();
-        let chosen = g.app.snapshot().frame_rate.clamp(10, 60);
-        idle_rate(chosen, g.last_input.elapsed(), g.app.mobile_wants_dense())
+        g.app.paced_frame_rate(g.last_input.elapsed().as_secs_f64())
     }
 
     /// Doigt posé sur la cellule (`col`, `row`).
@@ -585,19 +583,6 @@ impl Game {
     }
 }
 
-/// Sans geste depuis ce délai, la cadence descend à `IDLE_FPS`.
-const IDLE_AFTER: Duration = Duration::from_secs(5);
-/// Cadence au repos : les compteurs et les lueurs restent vivants.
-const IDLE_FPS: u32 = 10;
-
-fn idle_rate(chosen: u32, since_input: Duration, sequence: bool) -> u32 {
-    if sequence || since_input < IDLE_AFTER {
-        chosen
-    } else {
-        chosen.min(IDLE_FPS)
-    }
-}
-
 fn clamp_size(cols: u16, rows: u16) -> (u16, u16) {
     let cols = cols.max(1);
     let rows = rows.max(1);
@@ -611,6 +596,7 @@ fn clamp_size(cols: u16, rows: u16) -> (u16, u16) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     #[test]
     fn audio_is_silent_until_started_then_plays_game_sounds() {
@@ -695,20 +681,12 @@ mod tests {
     }
 
     #[test]
-    fn frame_rate_drops_when_the_player_stops_touching() {
-        assert_eq!(idle_rate(30, Duration::from_secs(1), false), 30);
-        assert_eq!(idle_rate(30, IDLE_AFTER, false), IDLE_FPS);
-        assert_eq!(idle_rate(60, Duration::from_secs(60), true), 60, "séquence");
-        assert_eq!(idle_rate(10, Duration::from_secs(60), false), 10);
-
+    fn a_touch_restores_the_chosen_frame_rate() {
         let game = Game::new(temp_dir("idle")).unwrap();
-        game.lock().last_input = Instant::now() - IDLE_AFTER * 2;
+        game.lock().last_input = Instant::now() - Duration::from_secs(60);
         game.touch_down(10, 10);
         game.touch_up(10, 10);
-        assert!(
-            game.lock().last_input.elapsed() < IDLE_AFTER,
-            "un geste compte"
-        );
+        assert!(game.lock().last_input.elapsed() < Duration::from_secs(5));
         assert_eq!(game.frame_rate(), 30, "cadence choisie après un geste");
     }
 

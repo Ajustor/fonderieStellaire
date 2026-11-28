@@ -61,6 +61,14 @@ fn frame_duration(fps: u32) -> Duration {
     Duration::from_millis(1000 / u64::from(fps.clamp(10, 60)))
 }
 
+/// Sans touche ni geste depuis ce délai (secondes), la cadence descend à
+/// [`IDLE_FPS`].
+pub const IDLE_AFTER: f64 = 5.0;
+/// Cadence au repos : les compteurs et les lueurs restent vivants.
+pub const IDLE_FPS: u32 = 10;
+/// Silence (secondes) au bout duquel la sortie audio est mise en pause.
+const AUDIO_IDLE: f64 = 2.0;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Screen {
     Title,
@@ -140,6 +148,13 @@ pub struct App {
     pub(crate) mobile: Option<crate::mobile::MobileUi>,
     /// Mixeur audio, partagé avec le fil de sortie (absent : jeu muet).
     sound: Option<crate::sound::SharedMixer>,
+    /// Met en marche (`true`) ou en pause la sortie audio. Absent : la sortie
+    /// reste ouverte (Android gère sa pause lui-même).
+    audio_power: Option<Box<dyn FnMut(bool)>>,
+    /// La sortie audio est en marche.
+    audio_on: bool,
+    /// Dernier instant où un son jouait.
+    audio_quiet_since: f64,
     /// Dernier déclenchement de chaque son (limite de fréquence).
     sound_last: [f64; crate::sound::Sfx::ALL.len()],
     /// Récolte continue en cours jusqu'à cet instant (son plus aigu).
@@ -200,6 +215,9 @@ impl App {
             restart: false,
             mobile: None,
             sound: None,
+            audio_power: None,
+            audio_on: true,
+            audio_quiet_since: 0.0,
             sound_last: [f64::NEG_INFINITY; crate::sound::Sfx::ALL.len()],
             harvest_held_until: f64::NEG_INFINITY,
             sync: SyncService::disabled(),
@@ -664,6 +682,47 @@ impl App {
         self.sound = Some(mixer);
     }
 
+    /// Commande de la sortie audio : mise en pause après [`AUDIO_IDLE`]
+    /// secondes sans son, remise en marche au son suivant. Une sortie qui
+    /// reçoit du silence en continu empêche la carte son de se mettre en veille.
+    pub fn set_audio_power(&mut self, power: Box<dyn FnMut(bool)>) {
+        self.audio_power = Some(power);
+        self.audio_on = true;
+        self.audio_quiet_since = self.now;
+    }
+
+    fn update_audio_power(&mut self) {
+        let Some(power) = self.audio_power.as_mut() else {
+            return;
+        };
+        if !self.audio_on {
+            return;
+        }
+        let playing = self
+            .sound
+            .as_ref()
+            .is_some_and(|m| m.lock().is_ok_and(|m| m.active() > 0));
+        if playing {
+            self.audio_quiet_since = self.now;
+        } else if self.now - self.audio_quiet_since >= AUDIO_IDLE {
+            power(false);
+            self.audio_on = false;
+        }
+    }
+
+    /// Images par seconde à viser : celles des options, ramenées à
+    /// [`IDLE_FPS`] quand le joueur n'a rien touché depuis `idle` secondes.
+    /// Les grandes séquences (Supernova, Big Bang…) gardent leur fluidité.
+    pub fn paced_frame_rate(&self, idle: f64) -> u32 {
+        let chosen = self.snap.frame_rate.clamp(10, 60);
+        let sequence = self.screen != Screen::Title && self.in_sequence();
+        if sequence || idle < IDLE_AFTER {
+            chosen
+        } else {
+            chosen.min(IDLE_FPS)
+        }
+    }
+
     /// Joue un son, si les sons sont activés et qu'il n'a pas déjà retenti
     /// à l'instant (récolte continue, rafales d'achats).
     pub(crate) fn play(&mut self, sfx: crate::sound::Sfx) {
@@ -684,6 +743,13 @@ impl App {
         if let Ok(mut m) = mixer.lock() {
             m.play(sfx);
         }
+        self.audio_quiet_since = self.now;
+        if !self.audio_on {
+            if let Some(power) = self.audio_power.as_mut() {
+                power(true);
+            }
+            self.audio_on = true;
+        }
     }
 
     pub fn set_mobile(&mut self, mobile: bool) {
@@ -697,6 +763,7 @@ impl App {
     #[cfg(feature = "terminal")]
     pub fn run_loop(&mut self, terminal: &mut Term) -> io::Result<()> {
         let mut last = Instant::now();
+        let mut last_input = Instant::now();
         while !self.quit {
             let frame_start = Instant::now();
             let dt = frame_start.duration_since(last).as_secs_f64();
@@ -712,9 +779,10 @@ impl App {
             })?;
             self.stats.record(dt, render_time, frame_start.elapsed());
 
-            let timeout =
-                frame_duration(self.snap.frame_rate).saturating_sub(frame_start.elapsed());
+            let fps = self.paced_frame_rate(last_input.elapsed().as_secs_f64());
+            let timeout = frame_duration(fps).saturating_sub(frame_start.elapsed());
             if event::poll(timeout)? {
+                last_input = Instant::now();
                 loop {
                     let ev = event::read()?;
                     self.on_terminal_event(&ev);
@@ -773,6 +841,7 @@ impl App {
     pub fn update(&mut self, real_dt: f64) {
         let dt = real_dt.clamp(0.0, 0.25);
         self.dt = dt;
+        self.update_audio_power();
         let now = self.now;
         match self.screen {
             Screen::Title => {
@@ -3719,15 +3788,16 @@ pub fn run(
     updates: UpdateService,
     sync: SyncService,
     leaderboard: LeaderboardService,
-    sound: Option<crate::sound::SharedMixer>,
+    sound: Option<crate::sound::Output>,
 ) -> io::Result<RunOutcome> {
     let mut guard = TerminalGuard::new()?;
     let mut app = App::new(service, startup);
     app.set_updates(updates);
     app.set_sync(sync);
     app.set_leaderboard(leaderboard);
-    if let Some(mixer) = sound {
-        app.set_sound(mixer);
+    if let Some(out) = sound {
+        app.set_sound(out.mixer);
+        app.set_audio_power(out.power);
     }
     let result = app.run_loop(guard.terminal());
     // Sauvegarde finale, envoyée aussi aux autres appareils.

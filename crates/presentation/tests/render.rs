@@ -1637,3 +1637,43 @@ fn the_absence_card_follows_the_save_taken_from_the_cloud() {
         "{text}"
     );
 }
+
+#[test]
+fn frame_rate_drops_when_the_player_is_idle() {
+    let app = game_app();
+    assert_eq!(app.paced_frame_rate(0.0), 30, "cadence choisie");
+    assert_eq!(
+        app.paced_frame_rate(presentation::app::IDLE_AFTER),
+        presentation::app::IDLE_FPS
+    );
+    let title = app_with(Some(advanced_save()));
+    assert_eq!(title.screen(), presentation::Screen::Title);
+    assert_eq!(
+        title.paced_frame_rate(60.0),
+        presentation::app::IDLE_FPS,
+        "titre au repos"
+    );
+}
+
+#[test]
+fn audio_output_pauses_after_silence_and_resumes_on_sound() {
+    let mut app = game_app();
+    let calls = Rc::new(RefCell::new(Vec::new()));
+    let log = calls.clone();
+    app.set_sound(presentation::sound::Mixer::shared(8000));
+    app.set_audio_power(Box::new(move |on| log.borrow_mut().push(on)));
+    app.set_time(101.0);
+    app.update(0.033);
+    assert!(calls.borrow().is_empty(), "silence trop court");
+    app.set_time(103.5);
+    app.update(0.033);
+    assert_eq!(*calls.borrow(), [false], "en pause après 2 s de silence");
+    app.update(0.033);
+    assert_eq!(*calls.borrow(), [false], "une seule pause");
+    app.on_intent(Intent::Harvest);
+    assert_eq!(
+        *calls.borrow(),
+        [false, true],
+        "remise en marche au son suivant"
+    );
+}

@@ -204,6 +204,13 @@ pub struct Mixer {
 
 pub type SharedMixer = Arc<Mutex<Mixer>>;
 
+/// Sortie audio de l'ordinateur : le mixeur et la commande qui met le flux
+/// en marche (`true`) ou en pause.
+pub struct Output {
+    pub mixer: SharedMixer,
+    pub power: Box<dyn FnMut(bool)>,
+}
+
 impl Mixer {
     /// Synthétise tous les sons à `rate` Hz.
     pub fn new(rate: u32) -> Self {
