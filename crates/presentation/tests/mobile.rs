@@ -884,7 +884,7 @@ fn progress_tab_details_every_production_multiplier() {
     println!("{screen}");
     assert!(screen.contains("PRODUCTION"), "{screen}");
     assert!(
-        screen.contains("×3") && screen.contains("Matière noire (Big Crunch)"),
+        screen.contains("×4") && screen.contains("Matière noire (Big Crunch)"),
         "{screen}"
     );
 }

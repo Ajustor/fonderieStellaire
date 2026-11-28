@@ -1269,8 +1269,9 @@ impl GameState {
         events.push(DomainEvent::BulkUpgrades { count });
     }
 
-    /// Multiplicateur de production de la matière noire : ×(1 + crunches),
-    /// renforcé par le Cœur de superamas du Grand Attracteur.
+    /// Multiplicateur de production de la matière noire : ×2 par Big Crunch
+    /// (2^crunches), ×3 par Big Crunch avec le Cœur de superamas du Grand
+    /// Attracteur.
     pub fn crunch_production(&self, catalog: &Catalog) -> f64 {
         self.crunch_production_with(catalog, self.crunches)
     }
@@ -1282,7 +1283,7 @@ impl GameState {
             AttractorEffect::DarkMatter(f) => Some(f),
             _ => None,
         });
-        1.0 + CRUNCH_PRODUCTION * boost * crunches as f64
+        (1.0 + CRUNCH_PRODUCTION * boost).powi(crunches as i32)
     }
 
     /// Multiplicateur de fragments de la matière noire.
@@ -3303,7 +3304,7 @@ mod tests {
         let frags = s.fragments_available_with(&c);
         s.crunches = 3;
         let ratio = economy::total_production(&c, &s) / base;
-        assert!((ratio - 4.0).abs() < 1e-9, "×(1 + 3) : {ratio}");
+        assert!((ratio - 8.0).abs() < 1e-9, "×2³ : {ratio}");
         // floor(√100 × 1.75) = 17 au lieu de 10.
         assert_eq!(frags, 10.0);
         assert_eq!(s.fragments_available_with(&c), 17.0);
@@ -3790,9 +3791,9 @@ mod tests {
         assert_eq!(s.attractor_production(&c), 2.0 * 3.0 * 5.0 * 10.0);
         assert_eq!(s.crunch_production(&c), 1.0, "aucun Crunch : ×1");
         s.crunches = 3;
-        assert_eq!(s.crunch_production(&c), 7.0, "matière noire ×2 : 1 + 2×3");
+        assert_eq!(s.crunch_production(&c), 27.0, "matière noire ×2 : 3³");
         // L'aperçu du prochain Big Crunch compte aussi le Cœur de superamas.
-        assert_eq!(s.crunch_production_with(&c, s.crunches + 1), 9.0);
+        assert_eq!(s.crunch_production_with(&c, s.crunches + 1), 81.0);
         assert_eq!(s.offline_terms(&c).0, 1.0);
         assert!(s.has_achievement(c.achievement_by_key("attractor").unwrap()));
     }

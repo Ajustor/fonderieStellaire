@@ -2770,8 +2770,9 @@ impl App {
                 self.vis.constellation_pop = now;
             }
             DomainEvent::BigCrunch { crunches } => {
-                let prod =
-                    fmt::short(1.0 + domain::catalog::balance::CRUNCH_PRODUCTION * crunches as f64);
+                // Chiffres à jour : le multiplicateur compte ce Crunch.
+                self.service.fill_snapshot(&mut self.snap);
+                let prod = fmt::short(self.snap.crunch_production);
                 self.log(
                     Kind::Supernova,
                     format!("✶ BIG CRUNCH n°{crunches} : production ×{prod} pour toujours"),

@@ -29,7 +29,8 @@ pub mod balance {
     pub const FRAGMENT_EXPONENT: f64 = 1.0 / 3.0;
     /// Supernovas nécessaires pour un Big Crunch.
     pub const CRUNCH_SUPERNOVAS: u32 = 15;
-    /// Chaque Big Crunch ajoute +100 % de production (×2, ×3, ×4…).
+    /// Chaque Big Crunch double la production (×2, ×4, ×8…) : la base de la
+    /// puissance est 1 + cette valeur.
     pub const CRUNCH_PRODUCTION: f64 = 1.0;
     /// Chaque Big Crunch ajoute +25 % de fragments par Supernova.
     pub const CRUNCH_FRAGMENTS: f64 = 0.25;

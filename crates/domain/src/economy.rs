@@ -255,7 +255,7 @@ mod tests {
             .iter()
             .find(|(p, _)| *p == ProductionSource::DarkMatter)
             .unwrap();
-        assert_eq!(dark.1, 3.0, "2 Big Crunch : ×3");
+        assert_eq!(dark.1, 4.0, "2 Big Crunch : ×2²");
     }
 
     fn setup() -> (Catalog, GameState) {

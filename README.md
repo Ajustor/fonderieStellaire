@@ -223,7 +223,7 @@ Majuscules et minuscules sont acceptées.
   montre) pour gagner une récompense permanente.
 - **Big Crunch** (`K`, après 15 Supernovas) : tout le niveau Supernova
   (fragments, Atelier, Constellations, Défis) repart de zéro contre de la
-  *matière noire* : production ×2, ×3, ×4… et +25 % de fragments par Crunch.
+  *matière noire* : production ×2, ×4, ×8… et +25 % de fragments par Crunch.
 - **Laboratoire** (`L`, après 10 Big Crunch) : la matière noire finance des
   recherches qui durent un temps réel (de 1 h à 12 h), une à la fois, même jeu
   fermé : automatismes (Supernova, Constellations, comètes), conservation au Big

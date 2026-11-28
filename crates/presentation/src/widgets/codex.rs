@@ -170,7 +170,7 @@ pub fn lines(ctx: &Ctx) -> Vec<(String, Style)> {
         "★ Constellations [E] : niveaux sans fin pour tes fragments, de plus en plus chers.".into(),
         "◆ Défis [D] : un cycle avec une contrainte, contre une récompense permanente.".into(),
         "● Comètes rares : dorée (×77 pendant 7 s), noire (+1 fragment, ou elle te vole).".into(),
-        "✶ Big Crunch [K] (15 Supernovas) : tout le niveau Supernova repart de zéro contre de la matière noire : production ×2, ×3, ×4… et fragments +25 % par Crunch.".into(),
+        "✶ Big Crunch [K] (15 Supernovas) : tout le niveau Supernova repart de zéro contre de la matière noire : production ×2, ×4, ×8… et fragments +25 % par Crunch.".into(),
         "✶ Laboratoire [L] (10 Big Crunch) : recherches en temps réel, une à la fois, qui avancent même jeu fermé : automatismes, conservation, puissance.".into(),
         "◎ Univers parallèles [V] (10 Big Crunch) : choisis les règles de chaque cycle au Big Crunch ; atteins leur objectif pour gagner leur Clé (bonus permanent).".into(),
         "✷ Big Bang [G] (30 Big Crunch) : les Big Crunch repartent de zéro contre des particules primordiales (+100 % de production, +25 % de fragments chacune). Le Laboratoire, les Clés et le Grand Attracteur restent.".into(),
