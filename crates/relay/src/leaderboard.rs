@@ -200,14 +200,27 @@ pub fn verify(key: &[u8; 32], body: &[u8], sig: Option<&str>) -> bool {
         == 0
 }
 
-/// Points du classement général, entre joueurs du même acte : la
-/// progression (sur 1000) et les prestiges (Big Bang 100, Big Crunch 10,
-/// Supernova 1).
+/// Ordre du classement général : acte, puis Big Bang, Big Crunch,
+/// Supernovas, progression de la collection et enfin poussière récoltée.
+/// Un prestige de plus passe toujours devant : la collection retombe à
+/// chaque Big Crunch (générateurs remis à zéro), elle ne fait que départager.
+fn rank_cmp(a: &Card, b: &Card) -> std::cmp::Ordering {
+    a.act
+        .cmp(&b.act)
+        .then(a.big_bangs.cmp(&b.big_bangs))
+        .then(a.crunches.cmp(&b.crunches))
+        .then(a.supernovas.cmp(&b.supernovas))
+        .then(a.progress.total_cmp(&b.progress))
+        .then(a.total_log.total_cmp(&b.total_log))
+}
+
+/// Points affichés, dans le même ordre que le classement : Big Bang 1 000 000,
+/// Big Crunch 10 000, Supernova 100 (99 au plus), progression jusqu'à 99.
 pub fn rank_points(c: &Card) -> f64 {
-    c.progress * 1000.0
-        + 100.0 * f64::from(c.big_bangs)
-        + 10.0 * f64::from(c.crunches)
-        + f64::from(c.supernovas)
+    1e6 * f64::from(c.big_bangs)
+        + 1e4 * f64::from(c.crunches)
+        + 100.0 * f64::from(c.supernovas.min(99))
+        + (c.progress * 99.0).round()
 }
 
 /// Clé de développement : celle d'une compilation locale du jeu.
@@ -420,19 +433,12 @@ impl Board {
                 .filter_map(|(id, e)| self.players.get(id).map(|p| (id, p, Some(e))))
                 .collect(),
         };
-        let key = |p: &Player| {
-            p.card
-                .as_ref()
-                .map_or((0, 0.0, 0.0), |c| (c.act, rank_points(c), c.total_log))
-        };
         rows.sort_by(|a, b| match kind {
-            BoardKind::General => {
-                let (ka, kb) = (key(a.1), key(b.1));
-                kb.0.cmp(&ka.0)
-                    .then(kb.1.total_cmp(&ka.1))
-                    .then(kb.2.total_cmp(&ka.2))
-                    .then(a.1.pseudo.cmp(&b.1.pseudo))
+            BoardKind::General => match (&a.1.card, &b.1.card) {
+                (Some(ca), Some(cb)) => rank_cmp(cb, ca),
+                (ca, cb) => cb.is_some().cmp(&ca.is_some()),
             }
+            .then(a.1.pseudo.cmp(&b.1.pseudo)),
             BoardKind::Daily => {
                 let (ea, eb) = (a.2.map_or(0.0, |e| e.score), b.2.map_or(0.0, |e| e.score));
                 eb.total_cmp(&ea)
@@ -694,17 +700,25 @@ mod tests {
     }
 
     #[test]
-    fn prestiges_count_in_the_general_ranking() {
+    fn prestiges_come_before_the_collection_in_the_general_ranking() {
         let mut b = Board::load(dir("points"));
-        // Même acte : 0,55 de progression sans Big Crunch (553 points) contre
-        // 0,5 avec 10 Big Crunch (603) et 0,4 avec 2 Big Bang (603 + 3 = 603).
-        let mut ahead = card(2, 0.5, 100_000.0);
-        ahead.crunches = 10;
-        let behind = card(2, 0.55, 100_000.0);
-        let mut bangs = card(2, 0.4, 100_000.0);
-        bangs.big_bangs = 2;
-        bangs.total_log = 99.0;
-        for (id, c) in [("a", ahead), ("b", behind), ("c", bangs)] {
+        // Cas réel : 3 Big Crunch et 41 % de collection passent devant
+        // 2 Big Crunch et 48 %, malgré plus de poussière récoltée.
+        let mut ahead = card(2, 0.41, 100_000.0);
+        ahead.crunches = 3;
+        ahead.supernovas = 5;
+        let mut behind = card(2, 0.48, 100_000.0);
+        behind.crunches = 2;
+        behind.supernovas = 1;
+        behind.total_log = 18.8;
+        let mut bangs = card(2, 0.1, 100_000.0);
+        bangs.big_bangs = 1;
+        // Mêmes prestiges : la collection départage, puis la poussière.
+        let mut tie = card(2, 0.41, 100_000.0);
+        tie.crunches = 3;
+        tie.supernovas = 5;
+        tie.total_log = 1.0;
+        for (id, c) in [("a", ahead), ("b", behind), ("c", bangs), ("t", tie)] {
             b.claim(id, &format!("joueur-{id}"), NOW).unwrap();
             b.submit(id, c, NOW).unwrap();
         }
@@ -715,10 +729,15 @@ mod tests {
             .iter()
             .map(|e| e["pseudo"].as_str().unwrap())
             .collect();
-        // À points égaux, la poussière départage.
-        assert_eq!(names, ["joueur-c", "joueur-a", "joueur-b"]);
-        assert_eq!(g["entries"][1]["points"], 603.0);
-        // L'acte passe avant les points.
+        assert_eq!(names, ["joueur-c", "joueur-a", "joueur-t", "joueur-b"]);
+        let points: Vec<f64> = g["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["points"].as_f64().unwrap())
+            .collect();
+        assert_eq!(points, [1_000_310.0, 30_541.0, 30_541.0, 20_148.0]);
+        // L'acte passe avant tout.
         b.claim("d", "joueur-d", NOW).unwrap();
         b.submit("d", card(3, 0.0, 100_000.0), NOW).unwrap();
         let g = b.standings(BoardKind::General, NOW / 86_400, 1, None);
