@@ -123,7 +123,11 @@ pub fn render(
         cascade(buf, &layout, ctx.now, vis.cascade_start);
     }
 
-    view.toasts.render(buf, area, layout.sky.y, ctx.now);
+    // Notifications : sous les fenêtres, mais au-dessus d'un onglet (voir
+    // plus bas), en haut de son contenu.
+    if !tab {
+        view.toasts.render(buf, area, layout.sky.y, ctx.now);
+    }
 
     // Cérémonie de Clé d'univers, par-dessus le jeu.
     if let Some((start, universe)) = vis.key_ceremony {
@@ -219,9 +223,14 @@ pub fn render(
     if let Some(codex) = ui.codex {
         codex::render(buf, screen_area, ctx, &codex, &mut ui.codex_scroll);
     }
-    // Les portails recouvrent tout l'écran.
+    // Le portail du Big Crunch recouvre tout l'écran ; celui des Univers est
+    // un onglet.
     if let Some(portal) = ui.portal {
-        portals::render(buf, area, ctx, &portal, &vis.stars);
+        let portal_area = if portal.crunch { area } else { screen_area };
+        portals::render(buf, portal_area, ctx, &portal, &vis.stars);
+    }
+    if tab {
+        view.toasts.render(buf, area, screen_area.y, ctx.now);
     }
     // Menu central et aide, par-dessus tout.
     if let Some(menu) = ui.menu {

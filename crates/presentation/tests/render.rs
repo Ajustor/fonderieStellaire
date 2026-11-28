@@ -1710,6 +1710,9 @@ fn laboratory_opens_at_the_first_big_crunch_but_not_the_cosmogony() {
 // Onglets (ordinateur) : l'écran ouvert remplace les panneaux de la fonderie.
 // ---------------------------------------------------------------------------
 
+/// Prépare la sauvegarde qui débloque un écran.
+type Setup = fn(&mut SaveData);
+
 fn assert_tab(text: &str, title: &str) {
     let lines: Vec<&str> = text.lines().collect();
     // Terminal bas (< 30 lignes) : en-tête d'une ligne, sinon l'en-tête complet.
@@ -1824,7 +1827,6 @@ fn every_bar_screen_is_a_tab_on_desktop() {
         save.exotic = 200.0;
         save.relics = vec![("r_hammer".into(), 3), ("r_crucible".into(), 0)];
     }
-    type Setup = fn(&mut SaveData);
     let screens: [(Setup, Intent, &str); 9] = [
         (|_| {}, Intent::Shop, "ATELIER STELLAIRE"),
         (
@@ -1859,4 +1861,74 @@ fn every_bar_screen_is_a_tab_on_desktop() {
             assert_tab(&text, title);
         }
     }
+}
+
+#[test]
+fn star_map_and_universes_are_tabs() {
+    let cases: [(Setup, Intent, &str); 2] = [
+        (
+            |s| {
+                s.big_bangs = 1;
+                s.attractor = 7;
+            },
+            Intent::StarMap,
+            "CARTE STELLAIRE",
+        ),
+        (
+            |s| {
+                s.crunches = 11;
+                s.universe = "gravity".into();
+            },
+            Intent::Universes,
+            "UNIVERS PARALLÈLES",
+        ),
+    ];
+    for (setup, intent, title) in cases {
+        for (w, h) in [(80, 24), (120, 36)] {
+            let mut save = advanced_save();
+            setup(&mut save);
+            let mut app = app_with(Some(save));
+            app.set_time(100.0);
+            app.enter_game_now();
+            app.update(0.033);
+            let _ = render(&mut app, w, h);
+            // Les notifications d'arrivée (Acte III…) ont le temps de partir.
+            app.set_time(160.0);
+            let _ = render(&mut app, w, h);
+            app.on_intent(intent);
+            app.set_time(162.0);
+            let text = render(&mut app, w, h);
+            let lines: Vec<&str> = text.lines().collect();
+            let body_top = if h < 30 { 1 } else { 5 };
+            let title_row = lines
+                .iter()
+                .position(|l| l.contains(title))
+                .unwrap_or_else(|| panic!("{title} absent :\n{text}"));
+            assert!(title_row >= body_top, "{title} sous l'en-tête :\n{text}");
+            assert!(
+                lines[0].contains("FONDERIE STELLAIRE") || lines[0].contains("/s"),
+                "en-tête conservé :\n{text}"
+            );
+            assert!(!text.contains("╭ Générateurs"), "{text}");
+            assert!(!text.contains("╭ Journal"), "{text}");
+        }
+    }
+}
+
+#[test]
+fn toasts_sit_at_the_top_of_a_tab() {
+    let mut app = crunched_app();
+    // Cosmogonie encore fermée : un toast l'explique ; puis on ouvre le Labo.
+    app.on_intent(Intent::Cosmos);
+    app.on_intent(Intent::Lab);
+    app.set_time(102.0);
+    let text = render(&mut app, 120, 36);
+    let row = text
+        .lines()
+        .position(|l| l.contains("S'ouvre au 10e Big Crunch"))
+        .unwrap_or_else(|| panic!("toast absent :\n{text}"));
+    assert!(
+        (5..=8).contains(&row),
+        "toast en haut de l'onglet (ligne {row}) :\n{text}"
+    );
 }
