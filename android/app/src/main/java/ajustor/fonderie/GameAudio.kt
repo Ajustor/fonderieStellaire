@@ -6,13 +6,14 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
 import android.os.Process
+import android.os.SystemClock
 import android.util.Log
 import uniffi.fonderie.Game
 
 /**
  * Sortie des sons du jeu : un fil qui tire le PCM mélangé par Rust
  * (`Game.audioFill`) et l'écrit dans un AudioTrack en faible latence.
- * Arrêtée en arrière-plan. Comme dans les autres jeux, le volume est celui
+ * Arrêtée en arrière-plan, en pause dès que plus rien ne joue. Comme dans les autres jeux, le volume est celui
  * du multimédia : le mode sonnerie (vibreur, silencieux) n'y change rien.
  */
 class GameAudio(context: Context, private val game: Game) {
@@ -72,7 +73,27 @@ class GameAudio(context: Context, private val game: Game) {
         }
         try {
             track.play()
+            var playing = true
+            var silentSince = SystemClock.elapsedRealtime()
             while (running) {
+                val now = SystemClock.elapsedRealtime()
+                if (game.audioActive()) {
+                    silentSince = now
+                    if (!playing) {
+                        track.play()
+                        playing = true
+                    }
+                } else if (playing && now - silentSince >= IDLE_MS) {
+                    // Rien ne joue : sortie en pause, le circuit audio se met
+                    // en veille au lieu de recevoir du silence en continu.
+                    track.pause()
+                    track.flush()
+                    playing = false
+                }
+                if (!playing) {
+                    Thread.sleep(POLL_MS)
+                    continue
+                }
                 val pcm = game.audioFill(burst.toUInt())
                 // Écriture bloquante : elle cadence la boucle sur la sortie.
                 if (track.write(pcm, 0, pcm.size) < 0) break
@@ -87,5 +108,9 @@ class GameAudio(context: Context, private val game: Game) {
 
     companion object {
         private const val TAG = "FonderieAudio"
+        /** Silence au bout duquel la sortie est mise en pause. */
+        private const val IDLE_MS = 2_000L
+        /** Attente entre deux vérifications pendant la pause (latence de reprise). */
+        private const val POLL_MS = 15L
     }
 }

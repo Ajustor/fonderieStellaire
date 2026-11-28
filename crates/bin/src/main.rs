@@ -222,7 +222,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     // Sons : ouverts avant le terminal plein écran (une carte son absente,
     // sur un serveur, laisse simplement le jeu muet).
     #[cfg(feature = "audio")]
-    let (_audio, sound) = start_audio();
+    let sound = start_audio();
     #[cfg(not(feature = "audio"))]
     let sound = None;
     let outcome = presentation::run(service, startup, updates, sync, leaderboard, sound)?;
@@ -239,10 +239,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 /// Ouvre la sortie audio et le mixeur des sons du jeu.
 #[cfg(feature = "audio")]
-fn start_audio() -> (
-    Option<infrastructure::AudioOutput>,
-    Option<presentation::sound::SharedMixer>,
-) {
+fn start_audio() -> Option<presentation::sound::Output> {
     use presentation::sound::Mixer;
     let mut mixer = None;
     let output = infrastructure::AudioOutput::start(|rate| {
@@ -252,11 +249,13 @@ fn start_audio() -> (
             Ok(mut m) => m.render(buf),
             Err(_) => buf.fill(0.0),
         })
-    });
-    match output {
-        Ok(output) => (Some(output), mixer),
-        Err(_) => (None, None),
-    }
+    })
+    .ok()?;
+    Some(presentation::sound::Output {
+        mixer: mixer?,
+        // Le flux vit aussi longtemps que la commande (donc que le jeu).
+        power: Box::new(move |on| output.set_playing(on)),
+    })
 }
 
 fn main() -> ExitCode {
