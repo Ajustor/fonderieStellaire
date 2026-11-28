@@ -53,6 +53,14 @@ jobs:
         run: |
           hits=$(grep -rlE 'serde|std::fs' crates --include='*.rs' --include=Cargo.toml | grep -Ev '^crates/(infrastructure|relay)/' || true)
           if [ -n "$hits" ]; then echo "::error::$hits"; exit 1; fi
+      # Une erreur de syntaxe casse toute la page sans bruit (classement vide).
+      - name: scripts du site sans erreur de syntaxe
+        run: |
+          for page in crates/relay/src/*.html; do
+            js="${RUNNER_TEMP}/$(basename "$page" .html).js"
+            python3 -c "import re,sys; print('\n'.join(re.findall(r'<script>(.*?)</script>', open(sys.argv[1]).read(), re.S)))" "$page" > "$js"
+            node --check "$js" || { echo "::error file=$page::erreur de syntaxe JavaScript"; exit 1; }
+          done
 
   test:
     name: tests (${{ matrix.os }})
