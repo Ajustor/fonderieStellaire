@@ -44,6 +44,8 @@ class CellView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private var bitmap: Bitmap? = null
     private var bitmapCanvas: Canvas? = null
     private var layoutKey = 0L
+    /** La surface est neuve (création, retour au premier plan) : à remplir. */
+    private var needsPost = true
 
     init {
         holder.addCallback(this)
@@ -109,12 +111,16 @@ class CellView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         if (!surfaceReady || width == 0 || height == 0) return
         val off = ensureBitmap()
         val g = grid
+        var changed = needsPost
         for (row in 0 until g.rows) {
             if (g.dirty[row]) {
                 drawRow(off, row)
                 g.dirty[row] = false
+                changed = true
             }
         }
+        // Image identique : la surface garde la précédente, rien à envoyer.
+        if (!changed) return
         val canvas = try {
             holder.lockHardwareCanvas()
         } catch (e: IllegalStateException) {
@@ -125,6 +131,7 @@ class CellView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         } finally {
             holder.unlockCanvasAndPost(canvas)
         }
+        needsPost = false
     }
 
     private fun ensureBitmap(): Canvas {
@@ -235,10 +242,12 @@ class CellView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     override fun surfaceCreated(holder: SurfaceHolder) {
         surfaceReady = true
+        needsPost = true
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
         surfaceReady = true
+        needsPost = true
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
