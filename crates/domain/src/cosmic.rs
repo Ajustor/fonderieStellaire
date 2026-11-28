@@ -75,7 +75,7 @@ pub fn next_event_delay(roll: f64) -> f64 {
 /// Temps laissé pour répondre à un événement.
 pub const EVENT_EXPIRY: f64 = 3600.0;
 /// Durée de la Convergence (temps réel, même jeu fermé).
-pub const CONVERGENCE_SECS: f64 = 48.0 * 3600.0;
+pub const CONVERGENCE_SECS: f64 = 24.0 * 3600.0;
 /// Production après la Convergence.
 pub const CONVERGENCE_PRODUCTION: f64 = 10.0;
 

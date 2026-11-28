@@ -280,49 +280,49 @@ const ATTRACTOR: [(&str, &str, u32, f64, AttractorEffect); 7] = [
         "Ancrage gravitationnel",
         "Production ×2",
         2,
-        3.0,
+        1.5,
         AttractorEffect::Production(2.0),
     ),
     (
         "Anneau d'accrétion",
         "Fragments ×2 à chaque Supernova",
         2,
-        6.0,
+        3.0,
         AttractorEffect::Fragments(2.0),
     ),
     (
         "Lentille cosmique",
         "Hors-ligne à 100 % de la production",
         3,
-        9.0,
+        4.5,
         AttractorEffect::Offline(1.0),
     ),
     (
         "Filaments galactiques",
         "Production ×3",
         3,
-        12.0,
+        6.0,
         AttractorEffect::Production(3.0),
     ),
     (
         "Cœur de superamas",
         "Bonus de matière noire ×2",
         4,
-        18.0,
+        9.0,
         AttractorEffect::DarkMatter(2.0),
     ),
     (
         "Horizon des événements",
         "Production ×5",
         4,
-        24.0,
+        12.0,
         AttractorEffect::Production(5.0),
     ),
     (
         "Éveil du Grand Attracteur",
         "Production ×10 · fin de l'Acte II",
         5,
-        36.0,
+        18.0,
         AttractorEffect::Awakening(10.0),
     ),
 ];
@@ -835,9 +835,9 @@ fn universes() -> Vec<UniverseDef> {
 const H: f64 = 3600.0;
 
 /// Laboratoire : (clé, nom, description, symbole, coût en matière noire,
-/// durée de recherche, prérequis, effet). Durée totale : 82 h.
+/// durée de recherche, prérequis, effet). Durée totale : 86 h.
 #[allow(clippy::type_complexity)]
-const LAB: [(&str, &str, &str, char, u32, f64, Option<&str>, LabEffect); 14] = [
+const LAB: [(&str, &str, &str, char, u32, f64, Option<&str>, LabEffect); 15] = [
     (
         "lab_comet_net",
         "Filet à comètes",
@@ -980,6 +980,16 @@ const LAB: [(&str, &str, &str, char, u32, f64, Option<&str>, LabEffect); 14] = [
         8.0 * H,
         Some("lab_autocrunch"),
         LabEffect::AutoBigBang,
+    ),
+    (
+        "lab_time",
+        "Horloge du vide",
+        "Toutes les attentes en temps réel −30 % : recherches, Grand Attracteur, expéditions, Convergence, Éveil",
+        '◷',
+        2,
+        4.0 * H,
+        None,
+        LabEffect::WaitFactor(0.7),
     ),
 ];
 
@@ -1560,7 +1570,7 @@ mod tests {
         assert_eq!(c.generators.iter().filter(|g| g.is_primordial()).count(), 3);
         assert_eq!(c.attractor.len(), 7);
         let hours: f64 = c.attractor.iter().map(|s| s.build_secs).sum::<f64>() / 3600.0;
-        assert_eq!(hours, 108.0, "≈ 4 jours et demi de construction");
+        assert_eq!(hours, 54.0, "≈ 2 jours et quart de construction");
         let cost: u32 = c.attractor.iter().map(|s| s.cost).sum();
         assert_eq!(cost, 23);
         assert!(c.upgrade_by_key("hold_0").is_some());
@@ -1575,11 +1585,11 @@ mod tests {
                 .count(),
             5
         );
-        assert_eq!(c.lab.len(), 14);
+        assert_eq!(c.lab.len(), 15);
         let hours: f64 = c.lab.iter().map(|l| l.research_secs).sum::<f64>() / 3600.0;
-        assert_eq!(hours, 82.0, "≈ 3,5 jours de recherches");
+        assert_eq!(hours, 86.0, "≈ 3,5 jours de recherches");
         let cost: u32 = c.lab.iter().map(|l| l.cost).sum();
-        assert_eq!(cost, 28);
+        assert_eq!(cost, 30);
         assert_eq!(c.challenges.len(), 5);
         assert_eq!(c.constellations.len(), 6);
         assert_eq!(c.generators[11].unlock_supernovas, 15);

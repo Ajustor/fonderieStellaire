@@ -42,6 +42,9 @@ pub enum LabEffect {
     Click(f64),
     /// Comètes rares plus fréquentes (facteur sur leurs probabilités).
     RareComets(f64),
+    /// Toutes les attentes en temps réel multipliées par ce facteur
+    /// (recherches, Grand Attracteur, expéditions, Convergence, Éveil).
+    WaitFactor(f64),
 }
 
 impl LabEffect {

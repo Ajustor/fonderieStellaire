@@ -189,7 +189,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, selected: 
                     snap,
                     v,
                     def.cost,
-                    def.research_secs,
+                    snap.wait(def.research_secs),
                     def.effect.is_toggleable(),
                 );
                 let mut x = draw::text(
@@ -347,7 +347,7 @@ pub(crate) fn detail_lines(
             format!(
                 "[Entrée] lancer : {} ✶, {} de recherche",
                 def.cost,
-                fmt::duration(def.research_secs)
+                fmt::duration(ctx.snap.wait(def.research_secs))
             ),
             theme::GOLD,
         )

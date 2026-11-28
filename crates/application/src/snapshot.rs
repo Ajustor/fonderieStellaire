@@ -273,6 +273,9 @@ pub struct GameSnapshot {
     pub crunch_available: bool,
     /// Supernovas nécessaires au Big Crunch.
     pub crunch_needed: u32,
+    /// Facteur des attentes en temps réel (Horloge du vide : 0,7) : les durées
+    /// affichées avant de lancer une attente en tiennent compte.
+    pub wait_factor: f64,
     /// Multiplicateurs actuels de la matière noire (production, fragments).
     pub crunch_production: f64,
     /// Multiplicateur après le prochain Big Crunch.
@@ -366,4 +369,16 @@ pub struct GameSnapshot {
     pub awakening_ready: bool,
     pub awakening: Option<(f64, f64)>,
     pub awakened: bool,
+}
+
+impl GameSnapshot {
+    /// Durée d'une attente une fois réduite par l'Horloge du vide (facteur 0 :
+    /// instantané pas encore rempli, durée de base).
+    pub fn wait(&self, secs: f64) -> f64 {
+        if self.wait_factor > 0.0 {
+            secs * self.wait_factor
+        } else {
+            secs
+        }
+    }
 }

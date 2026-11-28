@@ -208,7 +208,10 @@ pub(crate) fn detail_lines(ctx: &Ctx, sel: usize, width: usize) -> Vec<(String, 
             );
         } else if snap.convergence_ready {
             push(
-                "[Entrée] lancer la Convergence : relier tous les secteurs à la fonderie (48 h, même jeu fermé). C'est la fin de l'Acte III.".into(),
+                format!(
+                    "[Entrée] lancer la Convergence : relier tous les secteurs à la fonderie ({}, même jeu fermé). C'est la fin de l'Acte III.",
+                    fmt::duration(snap.wait(domain::cosmic::CONVERGENCE_SECS))
+                ),
                 theme::GOLD,
             );
         } else {

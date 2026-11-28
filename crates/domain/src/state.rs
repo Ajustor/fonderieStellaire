@@ -1591,6 +1591,27 @@ impl GameState {
             .clamp(0.30, 0.95)
     }
 
+    /// Facteur de toutes les attentes en temps réel (Horloge du vide), appliqué
+    /// quand une attente commence.
+    pub fn wait_factor(&self, catalog: &Catalog) -> f64 {
+        self.lab_effects(catalog)
+            .filter_map(|e| match e {
+                LabEffect::WaitFactor(f) => Some(f),
+                _ => None,
+            })
+            .product()
+    }
+
+    /// Durée de la Convergence à son lancement.
+    pub fn convergence_duration(&self, catalog: &Catalog) -> f64 {
+        CONVERGENCE_SECS * self.wait_factor(catalog)
+    }
+
+    /// Durée de l'Éveil du Cosmos à son lancement.
+    pub fn awakening_duration(&self, catalog: &Catalog) -> f64 {
+        megastructure::AWAKENING_SECS * self.wait_factor(catalog)
+    }
+
     /// Durée d'une expédition (reliques et prospection comprises).
     pub fn expedition_duration(&self, catalog: &Catalog, system: usize) -> f64 {
         let Some(sys) = self.map.systems.get(system) else {
@@ -1608,7 +1629,12 @@ impl GameState {
         } else {
             1.0
         };
-        sys.duration() * prospect * speed * set * (1.0 - self.grid_effects().expedition_speed)
+        sys.duration()
+            * prospect
+            * speed
+            * set
+            * (1.0 - self.grid_effects().expedition_speed)
+            * self.wait_factor(catalog)
     }
 
     /// Une flotte peut partir : vers un système à portée pas encore exploré,
@@ -1783,7 +1809,7 @@ impl GameState {
             });
             return;
         }
-        self.convergence = Some(CONVERGENCE_SECS);
+        self.convergence = Some(self.convergence_duration(catalog));
         events.push(DomainEvent::ConvergenceStarted);
     }
 
@@ -1899,14 +1925,14 @@ impl GameState {
                 .all(|&k| self.structure_count(k) > 0)
     }
 
-    pub fn start_awakening(&mut self, events: &mut Vec<DomainEvent>) {
+    pub fn start_awakening(&mut self, catalog: &Catalog, events: &mut Vec<DomainEvent>) {
         if !self.awakening_ready() {
             events.push(DomainEvent::PurchaseFailed {
                 target: PurchaseTarget::Awakening,
             });
             return;
         }
-        self.awakening = Some(megastructure::AWAKENING_SECS);
+        self.awakening = Some(self.awakening_duration(catalog));
         events.push(DomainEvent::AwakeningStarted);
     }
 
@@ -2351,7 +2377,7 @@ impl GameState {
             return;
         };
         self.particles_spent += stage.cost;
-        self.attractor_build = Some(stage.build_secs);
+        self.attractor_build = Some(stage.build_secs * self.wait_factor(catalog));
         events.push(DomainEvent::AttractorStageStarted {
             stage: self.attractor,
         });
@@ -2457,7 +2483,7 @@ impl GameState {
             return;
         };
         self.dark_matter_spent += def.cost;
-        self.research = Some((id, def.research_secs));
+        self.research = Some((id, def.research_secs * self.wait_factor(catalog)));
         events.push(DomainEvent::LabResearchStarted { node: id });
     }
 
@@ -3928,6 +3954,49 @@ mod tests {
     }
 
     #[test]
+    fn waits_are_halved_and_the_time_clock_shortens_them_all() {
+        let c = Catalog::standard();
+        let h = 3600.0;
+        let total: f64 = c.attractor.iter().map(|st| st.build_secs).sum();
+        assert_eq!(total, 54.0 * h, "Grand Attracteur : 54 h");
+        assert_eq!(crate::cosmic::CONVERGENCE_SECS, 24.0 * h);
+        assert_eq!(crate::megastructure::AWAKENING_SECS, 36.0 * h);
+
+        let (mut s, mut ev) = act_three(&c);
+        let expedition = s.expedition_duration(&c, 1);
+        assert_eq!(s.wait_factor(&c), 1.0);
+        s.lab[lab(&c, "lab_time").index()] = true;
+        assert!((s.wait_factor(&c) - 0.7).abs() < 1e-12);
+        assert!((s.expedition_duration(&c, 1) - 0.7 * expedition).abs() < 1e-6);
+        assert!((s.convergence_duration(&c) - 0.7 * 24.0 * h).abs() < 1e-6);
+        assert!((s.awakening_duration(&c) - 0.7 * 36.0 * h).abs() < 1e-6);
+
+        let (_, mut s, _) = setup();
+        s.lab[lab(&c, "lab_time").index()] = true;
+        s.crunches = 10;
+        let prod1 = lab(&c, "lab_prod1");
+        s.start_research(&c, prod1, &mut ev);
+        let (_, left) = s.research.unwrap();
+        assert!((left - 0.7 * 3.0 * h).abs() < 1e-6, "recherche : {left}");
+        s.particles = 30;
+        s.big_bangs = 1;
+        s.build_attractor(&c, &mut ev);
+        assert!((s.attractor_build.unwrap() - 0.7 * 1.5 * h).abs() < 1e-6);
+    }
+
+    #[test]
+    fn waits_already_running_keep_their_length() {
+        let (c, mut s, mut ev) = setup();
+        s.particles = 30;
+        s.big_bangs = 1;
+        s.build_attractor(&c, &mut ev);
+        let left = s.attractor_build.unwrap();
+        s.lab[lab(&c, "lab_time").index()] = true;
+        s.tick(&c, 0.5, 0.5, &mut ev);
+        assert!((s.attractor_build.unwrap() - (left - 0.5)).abs() < 1e-6);
+    }
+
+    #[test]
     fn attractor_is_built_in_real_time_and_awakens() {
         let (c, mut s, mut ev) = setup();
         s.particles = 30;
@@ -3935,7 +4004,7 @@ mod tests {
         assert!(s.attractor_build.is_none(), "il faut un Big Bang");
         s.big_bangs = 1;
         s.build_attractor(&c, &mut ev);
-        assert_eq!(s.attractor_build, Some(3.0 * 3600.0));
+        assert_eq!(s.attractor_build, Some(1.5 * 3600.0));
         assert_eq!(s.particles_spendable(), 28);
         s.build_attractor(&c, &mut ev);
         assert_eq!(s.particles_spendable(), 28, "une étape à la fois");
@@ -4326,7 +4395,7 @@ mod tests {
         s.grid[40] = Some(StructureKind::Core);
         assert!(s.awakening_ready());
         let before = economy::permanent_multiplier(&c, &s);
-        s.start_awakening(&mut ev);
+        s.start_awakening(&c, &mut ev);
         s.demolish(0, &mut ev);
         assert!(s.grid[0].is_some(), "on ne démolit pas pendant l'Éveil");
         ev.clear();

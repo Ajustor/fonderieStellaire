@@ -8,7 +8,7 @@ pub const GRID_H: usize = 5;
 pub const CELLS: usize = GRID_W * GRID_H;
 /// Éveil du Cosmos : structures minimum, durée (temps réel), production ensuite.
 pub const AWAKENING_STRUCTURES: usize = 30;
-pub const AWAKENING_SECS: f64 = 72.0 * 3600.0;
+pub const AWAKENING_SECS: f64 = 36.0 * 3600.0;
 pub const AWAKENED_PRODUCTION: f64 = 100.0;
 /// Matière exotique produite d'office, par heure.
 pub const BASE_EXOTIC_PER_HOUR: f64 = 1.0;
