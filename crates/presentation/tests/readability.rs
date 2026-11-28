@@ -667,6 +667,14 @@ fn leaderboard_and_pseudo_entry_without_cutting_text() {
         app.set_time(t);
         app.enter_game_now();
         settle(&mut app, &mut t, w, h);
+        // Les succès débloqués au chargement s'annoncent puis s'en vont : les
+        // notifications passent par-dessus un onglet.
+        for _ in 0..30 {
+            t += 1.0;
+            app.set_time(t);
+            app.update(1.0);
+            let _ = render(&mut app, w, h);
+        }
         // Options › Classement.
         app.on_intent(Intent::Options);
         for _ in 0..presentation::widgets::options::LEADERBOARD_ITEM {

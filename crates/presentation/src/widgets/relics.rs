@@ -8,7 +8,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Clear, Widget};
+use ratatui::widgets::{Block, BorderType, Borders, Widget};
 
 use domain::relic::{effect_text, RARITY_NAMES};
 use domain::{RelicId, RelicOutcome, RelicSet};
@@ -16,7 +16,7 @@ use domain::{RelicId, RelicOutcome, RelicSet};
 use super::Ctx;
 use crate::draw;
 use crate::fx::color::gradient_cyclic;
-use crate::fx::easing::{ease_in_cubic, ease_out_back, ease_out_cubic};
+use crate::fx::easing::{ease_in_cubic, ease_out_back};
 use crate::fx::effects;
 use crate::fx::Rgb;
 use crate::layout::centered;
@@ -113,14 +113,10 @@ pub(crate) fn detail_lines(ctx: &Ctx, index: usize, width: usize) -> Vec<(String
 }
 
 pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, selected: usize) {
-    let s = ease_out_cubic(popup.scale(ctx.now));
-    if s <= 0.0 {
-        return;
-    }
     let snap = ctx.snap;
-    effects::fade(buf, area, 0.65 * s);
-    let width = area.width.saturating_sub(4).min(100);
-    let text_w = width.saturating_sub(4) as usize;
+    let width = ctx.frame.width(area, 100);
+    // Texte à une largeur de lecture raisonnable, même en onglet.
+    let text_w = width.min(100).saturating_sub(4) as usize;
     let count = ctx.catalog.relics.len();
     let selected = selected.min(count.saturating_sub(1));
 
@@ -163,10 +159,13 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, selected: 
     // bordures + en-tête + blanc + titres + 4 lignes + blanc + séparateur + détail + pied
     let height = (2 + head.len() as u16 + 1 + 1 + 4 + 1 + 1 + detail_h + 1)
         .min(area.height.saturating_sub(2));
-    let w = ((width as f64 * s).round() as u16).max(2);
-    let h = ((height as f64 * s).round() as u16).max(2);
-    let rect = centered(area, w, h);
-    Clear.render(rect, buf);
+    let height = ctx.frame.height(area, height);
+    let Some((rect, ready)) =
+        ctx.frame
+            .place_faded(buf, area, ctx.now, popup, (width, height), 0.65)
+    else {
+        return;
+    };
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
@@ -176,7 +175,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, selected: 
         .title(Line::from(Span::styled(" ◆ RELIQUES ◆ ", theme::bold(theme::GOLD))).centered());
     let inner = block.inner(rect);
     block.render(rect, buf);
-    if s < 0.95 || inner.height < 10 {
+    if !ready || inner.height < 10 {
         return;
     }
     let right = inner.right();

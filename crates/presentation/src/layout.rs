@@ -14,6 +14,8 @@ pub struct GameLayout {
     pub production: Rect,
     pub journal: Rect,
     pub help: Rect,
+    /// Entre l'en-tête et la barre d'aide, pleine largeur : contenu d'un onglet.
+    pub body: Rect,
 }
 
 impl GameLayout {
@@ -85,6 +87,7 @@ pub fn game_layout(area: Rect, expand: f64) -> GameLayout {
         production,
         journal,
         help,
+        body: Rect::new(area.x, mid_y, area.width, help.y.saturating_sub(mid_y)),
     }
 }
 

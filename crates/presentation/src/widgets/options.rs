@@ -5,15 +5,13 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Clear, Widget};
+use ratatui::widgets::{Block, BorderType, Borders, Widget};
 
 use super::Ctx;
 use crate::draw;
-use crate::fx::easing::ease_out_cubic;
 use crate::fx::effects;
 use crate::fx::rng::hash3;
 use crate::fx::Rgb;
-use crate::layout::centered;
 use crate::theme;
 use crate::ui::Popup;
 
@@ -52,14 +50,10 @@ pub fn render(
     armed: bool,
     info: &OptionsInfo,
 ) {
-    let s = ease_out_cubic(popup.scale(ctx.now));
-    if s <= 0.0 {
-        return;
-    }
     let snap = ctx.snap;
-    effects::fade(buf, area, 0.6 * s);
-    let width = area.width.saturating_sub(4).min(80);
-    let text_w = width.saturating_sub(4) as usize;
+    let width = ctx.frame.width(area, 80);
+    // Texte à une largeur de lecture raisonnable, même en onglet.
+    let text_w = width.min(80).saturating_sub(4) as usize;
 
     let fps = if snap.frame_rate == 0 {
         30
@@ -135,10 +129,13 @@ pub fn render(
     // bordures + réglages + blanc + séparateur + aide + blanc + infos + pied
     let height = (2 + ITEMS + 1 + 1 + detail_h + 1 + infos.len() + 1) as u16;
     let height = height.min(area.height.saturating_sub(2));
-    let w = ((width as f64 * s).round() as u16).max(2);
-    let h = ((height as f64 * s).round() as u16).max(2);
-    let rect = centered(area, w, h);
-    Clear.render(rect, buf);
+    let height = ctx.frame.height(area, height);
+    let Some((rect, ready)) =
+        ctx.frame
+            .place_faded(buf, area, ctx.now, popup, (width, height), 0.6)
+    else {
+        return;
+    };
     let border = if selected == RESET_ITEM && armed {
         theme::RED.lerp(EMBER, 0.5 + 0.5 * (ctx.now * 6.0).sin())
     } else {
@@ -151,7 +148,7 @@ pub fn render(
         .title(Line::from(Span::styled(" ⚙ OPTIONS ", theme::bold(theme::GOLD))).centered());
     let inner = block.inner(rect);
     block.render(rect, buf);
-    if s < 0.95 || inner.height < 6 {
+    if !ready || inner.height < 6 {
         return;
     }
     let right = inner.right();

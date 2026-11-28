@@ -5,14 +5,11 @@ use qrcode::{Color as QrColor, EcLevel, QrCode};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Clear, Widget};
+use ratatui::widgets::{Block, BorderType, Borders, Widget};
 
 use super::Ctx;
 use crate::draw;
-use crate::fx::easing::ease_out_cubic;
-use crate::fx::effects;
 use crate::fx::Rgb;
-use crate::layout::centered;
 use crate::theme;
 use crate::ui::Popup;
 
@@ -121,13 +118,9 @@ pub fn render(
     armed: bool,
     view: &SyncView,
 ) {
-    let s = ease_out_cubic(popup.scale(ctx.now));
-    if s <= 0.0 {
-        return;
-    }
-    effects::fade(buf, area, 0.6 * s);
-    let width = area.width.saturating_sub(4).min(76);
-    let text_w = width.saturating_sub(4) as usize;
+    let width = ctx.frame.width(area, 76);
+    // Texte à une largeur de lecture raisonnable, même en onglet.
+    let text_w = width.min(76).saturating_sub(4) as usize;
     let max_h = area.height.saturating_sub(2);
 
     let intro = match &view.code {
@@ -182,10 +175,13 @@ pub fn render(
         qr_rows = 0;
     }
     let height = need(intro.len() as u16, qr_rows, gap).min(max_h);
-    let w = ((width as f64 * s).round() as u16).max(2);
-    let h = ((height as f64 * s).round() as u16).max(2);
-    let rect = centered(area, w, h);
-    Clear.render(rect, buf);
+    let height = ctx.frame.height(area, height);
+    let Some((rect, ready)) =
+        ctx.frame
+            .place_faded(buf, area, ctx.now, popup, (width, height), 0.6)
+    else {
+        return;
+    };
     let border = if armed { theme::RED } else { theme::CYAN };
     let block = Block::default()
         .borders(Borders::ALL)
@@ -200,7 +196,7 @@ pub fn render(
         );
     let inner = block.inner(rect);
     block.render(rect, buf);
-    if s < 0.95 || inner.height < 3 {
+    if !ready || inner.height < 3 {
         return;
     }
     let right = inner.right();

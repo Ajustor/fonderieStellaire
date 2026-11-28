@@ -6,15 +6,12 @@ use application::{Board, Entry, Standings};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Clear, Widget};
+use ratatui::widgets::{Block, BorderType, Borders, Widget};
 
 use super::Ctx;
 use crate::draw;
 use crate::fmt;
-use crate::fx::easing::ease_out_cubic;
-use crate::fx::effects;
 use crate::fx::Rgb;
-use crate::layout::centered;
 use crate::theme;
 use crate::ui::Popup;
 
@@ -197,13 +194,9 @@ fn draw_entry(buf: &mut Buffer, inner: Rect, y: u16, e: &Entry, board: Board) {
 }
 
 pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, view: &LeaderboardView) {
-    let s = ease_out_cubic(popup.scale(ctx.now));
-    if s <= 0.0 {
-        return;
-    }
-    effects::fade(buf, area, 0.6 * s);
-    let width = area.width.saturating_sub(4).min(72);
-    let text_w = width.saturating_sub(4) as usize;
+    let width = ctx.frame.width(area, 72);
+    // Texte à une largeur de lecture raisonnable, même en onglet.
+    let text_w = width.min(72).saturating_sub(4) as usize;
     let max_h = area.height.saturating_sub(2);
 
     let join: Vec<String> = view
@@ -236,10 +229,13 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, view: &Lea
         top.len() + mine.map_or(0, |_| 2)
     };
     let height = ((fixed + list_h) as u16).min(max_h);
-    let w = ((width as f64 * s).round() as u16).max(2);
-    let h = ((height as f64 * s).round() as u16).max(2);
-    let rect = centered(area, w, h);
-    Clear.render(rect, buf);
+    let height = ctx.frame.height(area, height);
+    let Some((rect, ready)) =
+        ctx.frame
+            .place_faded(buf, area, ctx.now, popup, (width, height), 0.6)
+    else {
+        return;
+    };
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
@@ -247,7 +243,7 @@ pub fn render(buf: &mut Buffer, area: Rect, ctx: &Ctx, popup: &Popup, view: &Lea
         .title(Line::from(Span::styled(" ★ CLASSEMENT ", theme::bold(theme::GOLD))).centered());
     let inner = block.inner(rect);
     block.render(rect, buf);
-    if s < 0.95 || inner.height < 4 {
+    if !ready || inner.height < 4 {
         return;
     }
     let right = inner.right();

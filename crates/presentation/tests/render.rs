@@ -1705,3 +1705,290 @@ fn laboratory_opens_at_the_first_big_crunch_but_not_the_cosmogony() {
     assert!(text.contains("S'ouvre au 10e Big Crunch (1/10)"), "{text}");
     assert!(!text.contains("COSMOGONIE"), "{text}");
 }
+
+// ---------------------------------------------------------------------------
+// Onglets (ordinateur) : l'écran ouvert remplace les panneaux de la fonderie.
+// ---------------------------------------------------------------------------
+
+/// Prépare la sauvegarde qui débloque un écran.
+type Setup = fn(&mut SaveData);
+
+fn assert_tab(text: &str, title: &str) {
+    let lines: Vec<&str> = text.lines().collect();
+    // Terminal bas (< 30 lignes) : en-tête d'une ligne, sinon l'en-tête complet.
+    let compact = lines.len() < 30;
+    if compact {
+        assert!(
+            lines[0].contains("/s") && lines[0].contains('✦'),
+            "en-tête compact (poussière, production) :\n{text}"
+        );
+    } else {
+        assert!(text.contains("FONDERIE STELLAIRE"), "en-tête :\n{text}");
+    }
+    assert!(text.contains(title), "titre de l'onglet :\n{text}");
+    assert!(
+        !text.contains("╭ Générateurs"),
+        "panneaux de la fonderie masqués :\n{text}"
+    );
+    assert!(!text.contains("╭ Journal"), "journal masqué :\n{text}");
+    // Pleine largeur : le cadre commence au bord gauche, juste sous l'en-tête.
+    let first = lines
+        .get(if compact { 1 } else { 5 })
+        .copied()
+        .unwrap_or("");
+    assert!(
+        first.starts_with('╭') && first.ends_with('╮'),
+        "onglet pleine largeur sous l'en-tête :\n{text}"
+    );
+}
+
+/// Partie au premier Big Crunch, fonderie affichée.
+fn crunched_app() -> App {
+    let mut save = advanced_save();
+    save.crunches = 1;
+    let mut app = app_with(Some(save));
+    app.set_time(100.0);
+    app.enter_game_now();
+    app.update(0.033);
+    let _ = render(&mut app, 100, 30);
+    app
+}
+
+#[test]
+fn laboratory_is_a_tab_on_desktop() {
+    for (w, h) in [(100, 30), (160, 45)] {
+        let mut app = crunched_app();
+        app.on_intent(Intent::Lab);
+        app.set_time(101.0);
+        let text = render(&mut app, w, h);
+        assert_tab(&text, "LABORATOIRE DE MATIÈRE NOIRE");
+    }
+}
+
+#[test]
+fn escape_on_a_tab_brings_the_foundry_back_at_once() {
+    let mut app = crunched_app();
+    app.on_intent(Intent::Lab);
+    app.set_time(101.0);
+    let _ = render(&mut app, 100, 30);
+    app.on_intent(Intent::Escape);
+    app.set_time(101.01);
+    let text = render(&mut app, 100, 30);
+    assert!(text.contains("╭ Générateurs"), "{text}");
+    assert!(!text.contains("LABORATOIRE DE MATIÈRE NOIRE"), "{text}");
+}
+
+#[test]
+fn help_opens_over_a_tab() {
+    let mut app = crunched_app();
+    app.on_intent(Intent::Lab);
+    app.set_time(101.0);
+    let _ = render(&mut app, 100, 30);
+    app.on_intent(Intent::Help);
+    app.set_time(102.0);
+    let text = render(&mut app, 100, 30);
+    assert!(text.contains("AIDE"), "{text}");
+    assert!(!text.contains("╭ Générateurs"), "{text}");
+}
+
+#[test]
+fn laboratory_stays_a_window_on_android() {
+    let mut app = crunched_app();
+    app.set_mobile(true);
+    app.on_intent(Intent::Lab);
+    app.set_time(101.0);
+    let mut terminal = Terminal::new(TestBackend::new(88, 60)).expect("terminal");
+    terminal.draw(|f| app.render(f)).expect("draw");
+    let buf = terminal.backend().buffer();
+    let text = buffer_text(buf);
+    assert!(text.contains("LABORATOIRE DE MATIÈRE NOIRE"), "{text}");
+    let title_row = (0..buf.area.height)
+        .find(|&y| {
+            (0..buf.area.width)
+                .map(|x| buf[(x, y)].symbol())
+                .collect::<String>()
+                .contains("LABORATOIRE")
+        })
+        .expect("ligne du titre");
+    assert_ne!(
+        buf[(0, title_row)].symbol(),
+        "╭",
+        "fenêtre centrée, pas collée au bord :\n{text}"
+    );
+}
+
+#[test]
+fn every_bar_screen_is_a_tab_on_desktop() {
+    fn late(save: &mut SaveData) {
+        save.big_bangs = 1;
+        save.attractor = 7;
+        save.map_seed = 42;
+        save.converged = true;
+        save.exotic = 200.0;
+        save.relics = vec![("r_hammer".into(), 3), ("r_crucible".into(), 0)];
+    }
+    let screens: [(Setup, Intent, &str); 9] = [
+        (|_| {}, Intent::Shop, "ATELIER STELLAIRE"),
+        (
+            |s| {
+                s.supernovas = 5;
+                s.total_run = 5000.0;
+            },
+            Intent::Challenges,
+            "DÉFIS",
+        ),
+        (|s| s.crunches = 17, Intent::Cosmos, "COSMOGONIE"),
+        (|_| {}, Intent::Options, "OPTIONS"),
+        (late, Intent::Megastructures, "MÉGASTRUCTURES"),
+        (late, Intent::Relics, "RELIQUES"),
+        (late, Intent::Daily, "DÉFI DU JOUR"),
+        (|_| {}, Intent::Info, "INFOS"),
+        // Maj+Tab depuis la fonderie : le dernier onglet, le Classement.
+        (|s| s.supernovas = 1, Intent::PrevScreen, "CLASSEMENT"),
+    ];
+    for (setup, intent, title) in screens {
+        for (w, h) in [(80, 24), (100, 30), (160, 45)] {
+            let mut save = advanced_save();
+            setup(&mut save);
+            let mut app = app_with(Some(save));
+            app.set_time(100.0);
+            app.enter_game_now();
+            app.update(0.033);
+            let _ = render(&mut app, w, h);
+            app.on_intent(intent);
+            app.set_time(101.0);
+            let text = render(&mut app, w, h);
+            assert_tab(&text, title);
+        }
+    }
+}
+
+#[test]
+fn star_map_and_universes_are_tabs() {
+    let cases: [(Setup, Intent, &str); 2] = [
+        (
+            |s| {
+                s.big_bangs = 1;
+                s.attractor = 7;
+            },
+            Intent::StarMap,
+            "CARTE STELLAIRE",
+        ),
+        (
+            |s| {
+                s.crunches = 11;
+                s.universe = "gravity".into();
+            },
+            Intent::Universes,
+            "UNIVERS PARALLÈLES",
+        ),
+    ];
+    for (setup, intent, title) in cases {
+        for (w, h) in [(80, 24), (120, 36)] {
+            let mut save = advanced_save();
+            setup(&mut save);
+            let mut app = app_with(Some(save));
+            app.set_time(100.0);
+            app.enter_game_now();
+            app.update(0.033);
+            let _ = render(&mut app, w, h);
+            // Les notifications d'arrivée (Acte III…) ont le temps de partir.
+            app.set_time(160.0);
+            let _ = render(&mut app, w, h);
+            app.on_intent(intent);
+            app.set_time(162.0);
+            let text = render(&mut app, w, h);
+            let lines: Vec<&str> = text.lines().collect();
+            let body_top = if h < 30 { 1 } else { 5 };
+            let title_row = lines
+                .iter()
+                .position(|l| l.contains(title))
+                .unwrap_or_else(|| panic!("{title} absent :\n{text}"));
+            assert!(title_row >= body_top, "{title} sous l'en-tête :\n{text}");
+            assert!(
+                lines[0].contains("FONDERIE STELLAIRE") || lines[0].contains("/s"),
+                "en-tête conservé :\n{text}"
+            );
+            assert!(!text.contains("╭ Générateurs"), "{text}");
+            assert!(!text.contains("╭ Journal"), "{text}");
+        }
+    }
+}
+
+#[test]
+fn toasts_sit_at_the_top_of_a_tab() {
+    let mut app = crunched_app();
+    // Cosmogonie encore fermée : un toast l'explique ; puis on ouvre le Labo.
+    app.on_intent(Intent::Cosmos);
+    app.on_intent(Intent::Lab);
+    app.set_time(102.0);
+    let text = render(&mut app, 120, 36);
+    let row = text
+        .lines()
+        .position(|l| l.contains("S'ouvre au 10e Big Crunch"))
+        .unwrap_or_else(|| panic!("toast absent :\n{text}"));
+    assert!(
+        (5..=8).contains(&row),
+        "toast en haut de l'onglet (ligne {row}) :\n{text}"
+    );
+}
+
+#[test]
+fn another_tab_letter_switches_tabs() {
+    let mut app = crunched_app();
+    app.on_intent(Intent::Lab);
+    app.set_time(101.0);
+    app.on_intent(Intent::Shop);
+    app.set_time(102.0);
+    assert_eq!(app.current_screen(), presentation::nav::ScreenId::Shop);
+    assert_tab(&render(&mut app, 100, 30), "ATELIER STELLAIRE");
+    app.on_intent(Intent::Info);
+    app.set_time(103.0);
+    assert_eq!(app.current_screen(), presentation::nav::ScreenId::Info);
+}
+
+#[test]
+fn o_opens_the_options_and_never_validates_in_a_tab() {
+    let mut app = crunched_app();
+    app.on_intent(Intent::Shop);
+    app.set_time(101.0);
+    let fragments = app.snapshot().fragments_spendable;
+    // `O` (Intent::Yes) : Options, sans acheter l'élément sélectionné.
+    app.on_intent(Intent::Yes);
+    app.set_time(102.0);
+    assert_eq!(
+        app.snapshot().fragments_spendable,
+        fragments,
+        "rien d'acheté"
+    );
+    assert_eq!(app.current_screen(), presentation::nav::ScreenId::Options);
+    // Dans les Options, `O` les referme sans changer le réglage sélectionné.
+    let colors = app.snapshot().color_mode;
+    app.on_intent(Intent::Yes);
+    app.set_time(103.0);
+    assert_eq!(app.snapshot().color_mode, colors, "réglage inchangé");
+    assert_eq!(app.current_screen(), presentation::nav::ScreenId::Foundry);
+}
+
+#[test]
+fn d_still_demolishes_in_the_megastructures() {
+    let mut save = advanced_save();
+    save.big_bangs = 1;
+    save.attractor = 7;
+    save.map_seed = 42;
+    save.converged = true;
+    save.exotic = 200.0;
+    save.supernovas = 5;
+    let mut app = app_with(Some(save));
+    app.set_time(100.0);
+    app.enter_game_now();
+    app.update(0.033);
+    app.on_intent(Intent::Megastructures);
+    app.set_time(101.0);
+    app.on_intent(Intent::Challenges);
+    assert_eq!(
+        app.current_screen(),
+        presentation::nav::ScreenId::Mega,
+        "[D] démolit, il n'ouvre pas les Défis"
+    );
+}
